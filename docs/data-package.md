@@ -6,7 +6,8 @@ is for the maintainer: what the package holds, how it is built and published, th
 and what to do when something goes wrong. What an installation does with the package is in
 [configuration.md](configuration.md#the-data-package); the checks it makes are in
 [feed-trust.md](feed-trust.md). The decision is recorded in
-[ADR 0039](adr/0039-daily-data-package.md).
+[ADR 0039](adr/0039-daily-data-package.md); generated entries and release data are in
+[ADR 0040](adr/0040-generated-catalog-and-release-fixes.md).
 
 **State.** The trust root of the project is embedded (version 1, valid through 2028-11-12; see
 [the key ceremony](#the-key-ceremony)). The daily workflow runs once the repository variable
@@ -21,6 +22,8 @@ no package, says so under Settings › Data package and has no advisory data fro
 | `catalog` | The reviewed catalog entries of `catalog/apps`. |
 | `index` | The first-party index, `index/images.tsv` as `main` holds it (ADR 0038). |
 | `advisories/shard-NN` | The published repository security advisories of every GitHub repository a catalog app or an index row names. One request per repository; the result is stored under the derived ID (`gh-<owner>-<repo>`) and under every catalog app that names the repository. |
+| `generated` | Catalog entries the build generated for index images without a reviewed entry, after six machine checks. They rank below reviewed entries; at most 20000. |
+| `releases` | The package lists of the newest release of every catalog app with a confirmed tag rule, per platform (linux/amd64 and linux/arm64), deduplicated. At most 32 MiB compressed. |
 | `enrichment/kev` | The CISA KEV list. |
 | `enrichment/epss` | EPSS scores for the CVEs the package names, not the whole dataset. |
 
@@ -46,15 +49,28 @@ what they have. Adding a blob needs nothing: older installations skip it.
    otherwise the builder starts cold and asks everything again. When the rate limit is reached it waits for the reset (`-max-wait`, 5 hours)
    instead of building from half the repositories. The workflow token allows 1,000 requests an
    hour per repository, so the first build of about 1,700 repositories takes two of those hours.
-3. Fetches the KEV list and the EPSS scores of the CVEs it now knows, with every build. If CISA
+3. Before the advisories, generates catalog entries and reads release package lists (ADR 0040).
+   The generator checks at most 150 new candidates per build and starts no project after
+   `-generate-time` (90 minutes into the build); the release reads start no image after
+   `-releases-until` (150 minutes) and stop at 600 manifest requests (`-max-manifests`) or 20 GiB
+   of layer bytes. `-generate=false` and `-releases=false` leave either step out. The advisory
+   collection gets the remaining time, and `-max-wait` is shortened by what these steps used.
+   Optional secrets `VARDE_DOCKERHUB_USER` and `VARDE_DOCKERHUB_TOKEN` (a read-only Docker Hub
+   access token) in the environment `data-package` authenticate to Docker Hub. Without them the
+   release reads stop at 90 manifest requests, below the anonymous limit of 100 pulls in six
+   hours per address, and what does not fit waits for the next build. `GITHUB_TOKEN` also serves
+   the generator's GitHub requests.
+4. Fetches the KEV list and the EPSS scores of the CVEs it now knows, with every build. If CISA
    or FIRST cannot be reached the build fails and yesterday's package stays.
-4. Refuses to sign when more than 5 % of the repositories could not be read, or when advisories,
+5. Refuses to sign when more than 5 % of the repositories could not be read, or when advisories,
    KEV entries or index rows fell by more than 10 % against the package published before
-   (`-previous`). EPSS is not compared: scores come and go. The counts of the published package
+   (`-previous`), or when the generated entries or the release package lines fell by more than
+   30 %. It also refuses a `releases` blob above 32 MiB compressed. EPSS is not compared: scores
+   come and go. `-force` lifts the shrink checks, not the cap on the `releases` blob. The counts of the published package
    are trusted only when the feed key signed them (`stats.json.sig`).
-5. Refuses a trust root that is older than the published one, skips a version, changes a
+6. Refuses a trust root that is older than the published one, skips a version, changes a
    published version, or is a next version the published root does not endorse.
-6. Signs the package, the counts and the store, then installs the package with the same client
+7. Signs the package, the counts and the store, then installs the package with the same client
    an installation uses. Only a package that passes is moved to `-out`.
 
 The summary names every repository that could not be read, with the day it was last read: what
@@ -87,9 +103,13 @@ feed/v1/manifest.json, .sig          the signed manifest
 feed/v1/blobs/sha256/<hash>          the blobs
 feed/stats.json, .sig                counts of this package, the next build's baseline
 cache/builder.db.gz, builder.db.sig  the builder's store for the next build, compressed
+catalog/generated.json, generated.md the generated entries with their check results, and the
+                                     changes against the previous build (new, changed, dropped)
 ```
 
-The branch always has exactly one commit, so it does not grow. Installations read
+The branch always has exactly one commit, so it does not grow. The workflow also keeps `generated.json` and `generated.md` for 90 days as the artifact
+`generated-catalog` of the run, the history beyond the branch's one commit, and puts the list
+(cut at a size GitHub's step summary takes) into the job summary. Installations read
 `https://raw.githubusercontent.com/bifrost0x/varde/data/feed`; they never read `cache/` or
 `stats.json`.
 
@@ -101,6 +121,30 @@ else), uses the store and the counts only with a valid signature of the feed key
 only root files that parse and hold the version their name says. Someone who can write the
 branch can therefore make a build fail or make it start cold, but cannot put anything into a
 signed package.
+
+### The weekly catalog check
+
+`.github/workflows/catalog-check.yml` runs `cmd/catalogcheck` every Monday on the reviewed
+entries in `catalog/apps`. It repeats checks C1, C3, C4 and C5 of ADR 0040 against the live
+registries, GitHub and NVD and proposes only what a check proves: a corrected tag rule, or the
+note and `verified` date of an entry once every check passed. Corrections go into one pull
+request, `catalog: weekly check`, on the branch `catalog/weekly-check`, which is reset each week
+and never merged automatically. Without corrections nothing is opened; problems appear in the run
+summary and the artifact. An incomplete run (a source did not answer) leaves an open pull
+request as it is.
+
+The job that opens the pull request needs a token of the maintainer, so that CI runs on the
+pull request. One time:
+
+- Create a fine-grained personal access token of `bifrost0x`, for the repository
+  `bifrost0x/varde` only, with the permissions Contents (read and write) and Pull requests (read
+  and write), and a lifetime you will renew.
+- In the repository settings, create the environment `catalog-check`, limit it to the branch
+  `main` ("Deployment branches and tags": selected, `main`) and add the token as the secret
+  `CATALOG_CHECK_TOKEN`. The limit is a repository setting the workflow cannot make.
+
+While the secret is absent the job does nothing and says so in its log. The job that runs the
+checks holds no secret.
 
 The weekly index workflow is separate: it proposes a new `index/images.tsv` as a pull request.
 The data package publishes whatever table `main` holds.

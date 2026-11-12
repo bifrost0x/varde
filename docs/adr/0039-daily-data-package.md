@@ -65,3 +65,8 @@ on paying. The uplink service of ADR 0037 does not exist yet and must not be a p
   maintainer's duty (`docs/data-package.md`).
 - The first build takes about two hours because of GitHub's rate limit for workflow tokens
   (1,000 requests an hour per repository); later builds are mostly conditional requests.
+
+## Amendment (2026-11-12): two more blobs
+The package also carries generated catalog entries and the package lists of the newest releases
+(blobs `generated` and `releases`), and the builder refuses a build in which either fell by more
+than 30 % (ADR 0040). Older installations skip both blobs.

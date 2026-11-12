@@ -42,7 +42,8 @@ Varde runs as a small container in your homelab and answers one question:
    exposure.
 5. Stays silent unless something is relevant. Urgent findings are pushed immediately (ntfy,
    Gotify, Discord, Telegram, webhook, email), the rest goes into a digest. Every finding names the
-   concrete update: the release tag that fixes it and, for Compose services, the line to change.
+   concrete update: the release tag that fixes it and, for Compose services, the line to change. For a container's image packages it says which newest release fixes how many
+   of the flaws, from package lists the daily data package carries.
 6. Exports what it knows as OpenVEX.
 
 What it does not do: scan base-image OS packages for CVEs (use Trivy or Grype for that), change

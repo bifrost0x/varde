@@ -44,3 +44,4 @@ Superseded by NNNN. Records are not edited after acceptance except to change the
 | [0037](0037-feed-service.md) | The central feed service and the paid data subscription | Proposed |
 | [0038](0038-universal-recognition-and-uplink-switch.md) | Look up instead of guess, and one installation for free and paid use | Accepted |
 | [0039](0039-daily-data-package.md) | One signed data package a day, the same knowledge for everyone | Accepted |
+| [0040](0040-generated-catalog-and-release-fixes.md) | Generated catalog entries and release fixes | Accepted |

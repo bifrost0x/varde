@@ -87,6 +87,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Generated catalog entries (ADR 0040): the daily data build writes entries for index images
+  without a reviewed one, ships those that pass six checks (blob `generated`, ranked below
+  reviewed entries, coverage at most partial) and publishes the readable list as
+  `catalog/generated.md` and `.json` on the branch `data`.
+- Release fixes (ADR 0040): the data package carries the package lists of the newest release of
+  catalog apps (blob `releases`). A container's finding names the release that fixes how many of
+  its image-package flaws and which stay open; Varde makes no extra request for it.
+- A weekly check of the reviewed catalog (`cmd/catalogcheck`, workflow `catalog-check`) proposes
+  corrections in one pull request, `catalog: weekly check`, once the secret
+  `CATALOG_CHECK_TOKEN` exists.
 - Edge image: every push to `main` is built and pushed to GHCR as `ghcr.io/bifrost0x/varde:edge`,
   signed with cosign. Until the first release it is also tagged `latest` there; releases then
   own `latest` on Docker Hub and GHCR. The Compose examples run `ghcr.io/bifrost0x/varde:latest`
