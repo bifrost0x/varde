@@ -181,7 +181,9 @@ type ReleasePackageRow struct {
 
 // ReplaceReleasePackages replaces the whole table in one transaction, so a
 // reader sees either the old package's lists or the new one's, never a mix.
-func (s *Store) ReplaceReleasePackages(ctx context.Context, rows []ReleasePackageRow) error {
+// marker names what the rows were made from (ReleasePackagesMarker); it is
+// replaced with them.
+func (s *Store) ReplaceReleasePackages(ctx context.Context, marker string, rows []ReleasePackageRow) error {
 	return s.inTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM release_packages`); err != nil {
 			return fmt.Errorf("clear release packages: %w", err)
@@ -192,8 +194,26 @@ func (s *Store) ReplaceReleasePackages(ctx context.Context, rows []ReleasePackag
 				return fmt.Errorf("insert release package of %s: %w", r.AppID, err)
 			}
 		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO release_packages_marker (id, marker) VALUES (1, ?)
+			ON CONFLICT (id) DO UPDATE SET marker = excluded.marker`, marker); err != nil {
+			return fmt.Errorf("store release packages marker: %w", err)
+		}
 		return nil
 	})
+}
+
+// ReleasePackagesMarker returns the marker of the last ReplaceReleasePackages;
+// "" when the table was never written.
+func (s *Store) ReleasePackagesMarker(ctx context.Context) (string, error) {
+	var m string
+	err := s.db.QueryRowContext(ctx, `SELECT marker FROM release_packages_marker WHERE id = 1`).Scan(&m)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("query release packages marker: %w", err)
+	}
+	return m, nil
 }
 
 // ReleasePackagesFor returns the lines of an app's image, one per platform.

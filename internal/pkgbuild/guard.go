@@ -87,11 +87,9 @@ const (
 	// maxShrinkPercent is how much a count may fall against the last
 	// package.
 	maxShrinkPercent = 10
-	// maxGeneratedShrinkPercent is how much the generated entries may
-	// fall. They come and go with their checks, so the bound is wider than
-	// for advisories; a larger drop more likely means a source that broke
-	// the checks (a registry, GitHub) than projects that changed.
-	maxGeneratedShrinkPercent = 30
+	// maxLooseShrinkPercent is how much the generated entries and the
+	// release package lines may fall.
+	maxLooseShrinkPercent = 30
 	// MaxReleasesBytes caps the compressed releases blob. It keeps the
 	// package well inside the 128 MiB blob limit of installations as the
 	// number of apps grows.
@@ -128,9 +126,21 @@ func Guard(stats Stats, previous Counts, havePrevious bool, current Counts, forc
 			return fmt.Errorf("%w: %s fell from %d to %d (more than %d %%); check the reason, then build with -force", ErrRefused, c.name, c.was, c.now, maxShrinkPercent)
 		}
 	}
-	if current.Generated*100 < (100-maxGeneratedShrinkPercent)*previous.Generated {
-		return fmt.Errorf("%w: generated entries fell from %d to %d (more than %d %%); check catalog/generated.md, then build with -force",
-			ErrRefused, previous.Generated, current.Generated, maxGeneratedShrinkPercent)
+	// Generated entries and release lines come and go with their checks
+	// and reads, so their bound is wider. A larger fall more likely means
+	// a source that broke (a registry, GitHub) or a step left out; every
+	// installation would lose them with the package.
+	for _, c := range []struct {
+		name, hint string
+		was, now   int
+	}{
+		{"generated entries", "check catalog/generated.md", previous.Generated, current.Generated},
+		{"release package lines", "check the release reads in the build log", previous.Releases, current.Releases},
+	} {
+		if c.now*100 < (100-maxLooseShrinkPercent)*c.was {
+			return fmt.Errorf("%w: %s fell from %d to %d (more than %d %%); %s, then build with -force",
+				ErrRefused, c.name, c.was, c.now, maxLooseShrinkPercent, c.hint)
+		}
 	}
 	return nil
 }

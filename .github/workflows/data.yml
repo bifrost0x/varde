@@ -130,9 +130,17 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC2086 # FORCE is one flag or nothing
           go run ./cmd/packagebuilder -db work/cache/builder.db -previous published/feed -out work/feed ${FORCE} | tee -a "$GITHUB_STEP_SUMMARY"
-          # The step summary takes up to 1 MiB.
+          # GitHub takes a step summary of up to 1 MiB: the list of generated
+          # entries gets at most 600 KB of what the builder's output left.
           if [[ -f work/catalog/generated.md ]]; then
-            head -c 900000 work/catalog/generated.md >> "$GITHUB_STEP_SUMMARY"
+            room=$((900000 - $(stat -c %s "$GITHUB_STEP_SUMMARY")))
+            cap=$((room < 600000 ? room : 600000))
+            if [[ "$(stat -c %s work/catalog/generated.md)" -le "${cap}" ]]; then
+              cat work/catalog/generated.md >> "$GITHUB_STEP_SUMMARY"
+            elif [[ "${cap}" -gt 0 ]]; then
+              head -c "${cap}" work/catalog/generated.md >> "$GITHUB_STEP_SUMMARY"
+              printf '\n\n(Cut here. The whole list is catalog/generated.md on the branch data and in the artifact generated-catalog.)\n' >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
       - name: Publish
         shell: bash
@@ -149,5 +157,5 @@ jobs:
           path: |
             work/catalog/generated.json
             work/catalog/generated.md
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90

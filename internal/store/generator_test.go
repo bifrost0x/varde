@@ -95,10 +95,13 @@ func TestReleaseReads(t *testing.T) {
 func TestReplaceReleasePackagesIsAtomic(t *testing.T) {
 	s, _ := openTest(t)
 	ctx := t.Context()
+	if m, err := s.ReleasePackagesMarker(ctx); err != nil || m != "" {
+		t.Fatalf("marker of a new store = %q, %v", m, err)
+	}
 	row := func(app, plat string) ReleasePackageRow {
 		return ReleasePackageRow{AppID: app, Image: "img", Platform: plat, Tag: "1", Version: "1.0", Line: []byte(app + plat)}
 	}
-	if err := s.ReplaceReleasePackages(ctx, []ReleasePackageRow{row("a", "amd64"), row("a", "arm64"), row("b", "amd64")}); err != nil {
+	if err := s.ReplaceReleasePackages(ctx, "m1", []ReleasePackageRow{row("a", "amd64"), row("a", "arm64"), row("b", "amd64")}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.ReleasePackagesFor(ctx, "a", "img")
@@ -107,7 +110,7 @@ func TestReplaceReleasePackagesIsAtomic(t *testing.T) {
 	}
 
 	// A duplicate key fails the replacement; the old lists stay.
-	if err := s.ReplaceReleasePackages(ctx, []ReleasePackageRow{row("c", "amd64"), row("c", "amd64")}); err == nil {
+	if err := s.ReplaceReleasePackages(ctx, "m2", []ReleasePackageRow{row("c", "amd64"), row("c", "amd64")}); err == nil {
 		t.Fatal("duplicate key accepted")
 	}
 	if got, _ := s.ReleasePackagesFor(ctx, "a", "img"); len(got) != 2 {
@@ -116,18 +119,24 @@ func TestReplaceReleasePackagesIsAtomic(t *testing.T) {
 	if got, _ := s.ReleasePackagesFor(ctx, "c", "img"); len(got) != 0 {
 		t.Errorf("partial replacement visible: %q", got)
 	}
+	if m, err := s.ReleasePackagesMarker(ctx); err != nil || m != "m1" {
+		t.Errorf("marker after a failed replacement = %q, %v", m, err)
+	}
 
 	// A successful replacement drops what is not in the new set.
-	if err := s.ReplaceReleasePackages(ctx, []ReleasePackageRow{row("b", "amd64")}); err != nil {
+	if err := s.ReplaceReleasePackages(ctx, "m3", []ReleasePackageRow{row("b", "amd64")}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.ReleasePackagesFor(ctx, "a", "img"); len(got) != 0 {
 		t.Errorf("stale rows: %q", got)
 	}
-	if err := s.ReplaceReleasePackages(ctx, nil); err != nil {
+	if err := s.ReplaceReleasePackages(ctx, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.ReleasePackagesFor(ctx, "b", "img"); len(got) != 0 {
 		t.Errorf("not emptied: %q", got)
+	}
+	if m, err := s.ReleasePackagesMarker(ctx); err != nil || m != "" {
+		t.Errorf("marker after emptying = %q, %v", m, err)
 	}
 }

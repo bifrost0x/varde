@@ -33,7 +33,10 @@ type Store interface {
 	ClearFeed(ctx context.Context) error
 	// ReplaceReleasePackages keeps the release package lists of the
 	// active package, replacing those of the one before.
-	ReplaceReleasePackages(ctx context.Context, rows []store.ReleasePackageRow) error
+	// marker names the package's releases blob, so a start with the
+	// package already kept does not write the table again.
+	ReplaceReleasePackages(ctx context.Context, marker string, rows []store.ReleasePackageRow) error
+	ReleasePackagesMarker(ctx context.Context) (string, error)
 }
 
 // Channel is one place the feed can come from. Channels share the trust
@@ -193,7 +196,7 @@ func (c *Client) LoadActive(ctx context.Context) error {
 	}
 	c.Catalog.Set(cat)
 	c.index.Store(content.Index)
-	c.setReleases(ctx, content.Releases)
+	c.setReleases(ctx, content.Releases, releasesMarker(m))
 	if !c.now().Before(m.ExpiresAt) {
 		c.Log.Warn("installed feed has expired; using it until a fresh one verifies", "sequence", m.Sequence, "expired", m.ExpiresAt)
 	}
@@ -216,7 +219,7 @@ func (c *Client) Deactivate(ctx context.Context, base *catalog.Catalog) error {
 	}
 	c.etag = nil
 	c.index.Store(nil)
-	c.setReleases(ctx, nil)
+	c.setReleases(ctx, nil, "")
 	// The catalog first: even when the database refuses, analysis must not
 	// go on with the feed's catalog. The caller repeats a failed leave.
 	c.Catalog.Set(base)
@@ -253,12 +256,19 @@ func (c *Client) Releases() []ReleaseLine {
 // them in the store, where the pages read them per app image; a package
 // without them clears the table. Release lists only answer which release
 // fixes a finding: failing to keep them is logged and leaves the catalog
-// and the advisories of the package applied.
-func (c *Client) setReleases(ctx context.Context, lines []ReleaseLine) {
+// and the advisories of the package applied. marker is the digest of the
+// releases blob (releasesMarker): when the store already holds that blob's
+// lists, as on most starts, they are not written again.
+func (c *Client) setReleases(ctx context.Context, lines []ReleaseLine, marker string) {
 	if lines == nil {
 		c.releases.Store(nil)
 	} else {
 		c.releases.Store(&lines)
+	}
+	if kept, err := c.Store.ReleasePackagesMarker(ctx); err != nil {
+		c.Log.Warn("release package lists: stored marker not readable; writing them again", "err", err)
+	} else if kept == marker {
+		return
 	}
 	rows := make([]store.ReleasePackageRow, 0, len(lines))
 	for _, l := range lines {
@@ -270,9 +280,20 @@ func (c *Client) setReleases(ctx context.Context, lines []ReleaseLine) {
 		rows = append(rows, store.ReleasePackageRow{AppID: l.AppID, Image: l.Image, Platform: l.Platform.Key(),
 			Tag: l.Tag, Version: l.Version, Line: data})
 	}
-	if err := c.Store.ReplaceReleasePackages(ctx, rows); err != nil {
+	if err := c.Store.ReplaceReleasePackages(ctx, marker, rows); err != nil {
 		c.Log.Warn("release package lists of the package not kept; release fixes are not shown until the next package", "err", err)
 	}
+}
+
+// releasesMarker names the releases blob of m: its digest, or "" when the
+// package has none (the state of an empty table).
+func releasesMarker(m *Manifest) string {
+	for _, b := range m.Blobs {
+		if b.Name == "releases" {
+			return "sha256:" + b.SHA256
+		}
+	}
+	return ""
 }
 
 // buildCatalog makes the catalog of a package: the reviewed entries over
@@ -440,7 +461,7 @@ func (c *Client) updateFrom(ctx context.Context, channel string, f Fetcher) (Res
 	}
 	c.Catalog.Set(cat)
 	c.index.Store(content.Index)
-	c.setReleases(ctx, content.Releases)
+	c.setReleases(ctx, content.Releases, releasesMarker(m))
 	c.etag[f.String()] = newETag
 	c.gc(m)
 	c.Log.Info("feed applied", "channel", channel, "sequence", m.Sequence, "catalog", m.CatalogVersion, "advisories", len(content.Advisories), "mirror", f.String())

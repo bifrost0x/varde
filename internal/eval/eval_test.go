@@ -5,6 +5,7 @@ package eval
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -219,7 +220,7 @@ func TestContainerCasesBuiltIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) == 0 || len(got) != len(c.Containers) {
-		t.Fatalf("built-in cases = %d, corpus = %d", len(got), len(c.Containers))
+	if len(got) == 0 || !reflect.DeepEqual(got, c.Containers) {
+		t.Fatalf("built-in cases (%d) differ from the corpus (%d)", len(got), len(c.Containers))
 	}
 }

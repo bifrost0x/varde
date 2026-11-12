@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -648,5 +649,19 @@ func TestBuildWritesGeneratedFiles(t *testing.T) {
 	s, md = readGenerated(t, work)
 	if len(s.Entries) != 0 || !strings.Contains(md, "## Dropped\n\n- docker.io/other/tool\n") || !strings.Contains(md, "| Dropped | 1 |") {
 		t.Fatalf("after the drop: %+v\n%s", s.Entries, md)
+	}
+
+	// Without the generator no list is left to be published as this
+	// build's.
+	h.cfg.generate = false
+	h.cfg.previous, h.cfg.out = h.cfg.out, filepath.Join(work, "fourth")
+	h.now = h.now.Add(24 * time.Hour)
+	if _, err := h.run(h.keyPEM); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"generated.json", "generated.md"} {
+		if _, err := os.Stat(filepath.Join(work, "catalog", f)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s left from an earlier build: %v", f, err)
+		}
 	}
 }

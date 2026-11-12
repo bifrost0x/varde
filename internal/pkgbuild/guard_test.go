@@ -47,3 +47,32 @@ func TestGuardGeneratedDrop(t *testing.T) {
 		}
 	}
 }
+
+// Release lines leaving the package leave every installation: a build
+// without the release reads, or one that lost its stored reads, is
+// refused unless forced.
+func TestGuardReleasesDrop(t *testing.T) {
+	prev := Counts{Sequence: 100, Advisories: 100, KEV: 1000, Index: 200, Releases: 1000}
+	with := func(n int) Counts {
+		return Counts{Sequence: 200, Advisories: 100, KEV: 1000, Index: 200, Releases: n}
+	}
+	for _, tc := range []struct {
+		name    string
+		prev    Counts
+		cur     Counts
+		force   bool
+		refused bool
+	}{
+		{"unchanged", prev, with(1000), false, false},
+		{"to 700 (30 %)", prev, with(700), false, false},
+		{"to 699", prev, with(699), false, true},
+		{"no release reads", prev, with(0), false, true},
+		{"no release reads, forced", prev, with(0), true, false},
+		{"no earlier count", Counts{Sequence: 100, Advisories: 100, KEV: 1000, Index: 200}, with(0), false, false},
+	} {
+		err := Guard(Stats{Repos: 100}, tc.prev, true, tc.cur, tc.force)
+		if (err != nil) != tc.refused || (err != nil && !errors.Is(err, ErrRefused)) {
+			t.Errorf("%s: err = %v, want refused = %v", tc.name, err, tc.refused)
+		}
+	}
+}

@@ -316,8 +316,13 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		lines = append([]feed.ReleaseLine{}, lines...)
 	}
 
-	// The waits for GitHub's rate limit share the time left.
-	wait := max(c.maxWait-c.now().Sub(now), time.Minute)
+	// The waits for GitHub's rate limit share the time left. None left
+	// (or -max-wait 0) means no wait at all; Collect would read a zero as
+	// its default, so the least positive bound stands for it.
+	wait := c.maxWait - c.now().Sub(now)
+	if wait <= 0 {
+		wait = time.Nanosecond
+	}
 	stats, err := pkgbuild.Collect(ctx, repos, pkgbuild.Options{Store: st, HTTP: hc, Token: env("GITHUB_TOKEN"),
 		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: wait, Log: logger})
 	if err != nil {
@@ -389,6 +394,15 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		return err
 	}
 	var diff genDiff
+	if !c.generate {
+		// A list left from an earlier build in the same directory would be
+		// published as this build's.
+		for _, f := range []string{generatedJSON, generatedMD} {
+			if err := os.Remove(filepath.Join(parent, generatedDir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
 	if c.generate {
 		cur := generatedState(candidates, rep, now, counts.Sequence)
 		diff = diffGenerated(prevGenerated, cur, rep)

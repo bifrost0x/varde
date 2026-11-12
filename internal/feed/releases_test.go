@@ -275,15 +275,20 @@ func testOSV(now time.Time, id string) advisory.Vulnerability {
 	return advisory.Vulnerability{SchemaVersion: "1.6.0", ID: id, Modified: now}
 }
 
-// failingReleases is a store that cannot keep release package lists.
-type failingReleases struct {
+// countingReleases counts the writes of release package lists; with fail
+// set it cannot keep them.
+type countingReleases struct {
 	*store.Store
+	fail  bool
 	calls int
 }
 
-func (s *failingReleases) ReplaceReleasePackages(context.Context, []store.ReleasePackageRow) error {
+func (s *countingReleases) ReplaceReleasePackages(ctx context.Context, marker string, rows []store.ReleasePackageRow) error {
 	s.calls++
-	return errors.New("disk full")
+	if s.fail {
+		return errors.New("disk full")
+	}
+	return s.Store.ReplaceReleasePackages(ctx, marker, rows)
 }
 
 // The installation keeps the release package lists of the applied package
@@ -308,16 +313,24 @@ func TestClientStoresReleases(t *testing.T) {
 
 	// Startup writes the table from the installed package again: a store
 	// restored from a backup or an older Varde gets the lists back.
-	if err := f.st.ReplaceReleasePackages(ctx, nil); err != nil {
+	if err := f.st.ReplaceReleasePackages(ctx, "", nil); err != nil {
 		t.Fatal(err)
 	}
-	again := &Client{Mirrors: f.client.Mirrors, Dir: f.client.Dir, Store: f.st, Catalog: catalog.NewLive(nil),
+	counting := &countingReleases{Store: f.st}
+	again := &Client{Mirrors: f.client.Mirrors, Dir: f.client.Dir, Store: counting, Catalog: catalog.NewLive(nil),
 		Log: f.client.Log, Now: f.client.Now, AllowDevelopment: true}
 	if err := again.LoadActive(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if lines, err := f.st.ReleasePackagesFor(ctx, "immich", "ghcr.io/immich-app/immich-server"); err != nil || len(lines) != 2 {
 		t.Fatalf("after startup: %d lines, %v", len(lines), err)
+	}
+	// The next start finds them kept and does not write them again.
+	if err := again.LoadActive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if counting.calls != 1 {
+		t.Fatalf("writes on two starts = %d, want 1", counting.calls)
 	}
 
 	// A package without the blob clears them.
@@ -332,7 +345,7 @@ func TestClientStoresReleases(t *testing.T) {
 	// A store that refuses them: the package still applies, the failure
 	// is logged.
 	var logged bytes.Buffer
-	bad := &failingReleases{Store: f.st}
+	bad := &countingReleases{Store: f.st, fail: true}
 	f.client.Store = bad
 	f.client.Log = slog.New(slog.NewTextHandler(&logged, nil))
 	f.publishLayered(7, nil, []ReleaseLine{testRelease("immich", "amd64")})
