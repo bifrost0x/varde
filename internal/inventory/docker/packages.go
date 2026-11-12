@@ -171,17 +171,22 @@ func (r *PackageReader) log() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-// ReadImagePackages reads os-release, the package databases, the app
+// ReadImagePackages reads the packages of one container.
+func ReadImagePackages(ctx context.Context, client *Client, containerID string, cfg ImageConfig) (inventory.ImagePackages, error) {
+	return ReadPackages(ctx, ContainerSource(client, containerID), cfg)
+}
+
+// ReadPackages reads os-release, the package databases, the app
 // manifest and npm lock file in the image's working directory or its
 // parent, and the Go build information of the program the image runs.
 // Missing files are normal (distroless and scratch images have none); the
 // result is then empty.
-func ReadImagePackages(ctx context.Context, client *Client, containerID string, cfg ImageConfig) (inventory.ImagePackages, error) {
+func ReadPackages(ctx context.Context, src FileSource, cfg ImageConfig) (inventory.ImagePackages, error) {
 	workDir := cfg.WorkingDir
 	var out inventory.ImagePackages
 	var p pkgdb.Parser
 	for _, f := range PackageFiles {
-		b, err := client.ReadFile(ctx, containerID, f)
+		b, err := src.ReadFile(ctx, f)
 		if errors.Is(err, ErrNoFile) {
 			continue
 		}
@@ -207,7 +212,7 @@ func ReadImagePackages(ctx context.Context, client *Client, containerID string, 
 	if known && manager == "dpkg" && !hasManager(out.Packages, "dpkg") {
 		// Distroless images keep one file per package in status.d, without
 		// a Status field: everything listed there is installed.
-		files, err := client.ReadStatusDir(ctx, containerID)
+		files, err := src.ReadStatusDir(ctx)
 		if err != nil && !errors.Is(err, ErrNoFile) {
 			return inventory.ImagePackages{}, err
 		}
@@ -230,7 +235,7 @@ func ReadImagePackages(ctx context.Context, client *Client, containerID string, 
 		missing = fmt.Errorf("%w: %s (%s) has no %s database Varde reads", ErrNoPackageDatabase, out.OS, eco, manager)
 	}
 	for _, f := range manifestPaths(workDir) {
-		b, err := client.ReadFile(ctx, containerID, f)
+		b, err := src.ReadFile(ctx, f)
 		if errors.Is(err, ErrNoFile) {
 			continue
 		}
@@ -244,7 +249,7 @@ func ReadImagePackages(ctx context.Context, client *Client, containerID string, 
 		}
 		// The dependencies the app was installed with.
 		lock := path.Join(path.Dir(f), pkgdb.LockFile)
-		lb, err := client.ReadFile(ctx, containerID, lock)
+		lb, err := src.ReadFile(ctx, lock)
 		switch {
 		case errors.Is(err, ErrNoFile):
 		case err != nil:
@@ -258,7 +263,7 @@ func ReadImagePackages(ctx context.Context, client *Client, containerID string, 
 	}
 	done := map[string]bool{}
 	for _, f := range binaryPaths(cfg) {
-		bi, err := client.ReadGoBuildInfo(ctx, containerID, f)
+		bi, err := src.ReadGoBuildInfo(ctx, f)
 		if errors.Is(err, ErrNoFile) || errors.Is(err, pkgdb.ErrNotGo) {
 			continue
 		}
@@ -278,7 +283,7 @@ func ReadImagePackages(ctx context.Context, client *Client, containerID string, 
 		break
 	}
 	// The other Go programs the image adds, such as gosu.
-	progs, err := client.ReadGoPrograms(ctx, containerID)
+	progs, err := src.ReadGoPrograms(ctx)
 	switch {
 	case err == nil:
 		for _, p := range progs {
@@ -294,7 +299,7 @@ func ReadImagePackages(ctx context.Context, client *Client, containerID string, 
 		return inventory.ImagePackages{}, ctx.Err()
 	}
 	// Python, PHP, Ruby, .NET and Java packages the image's apps install.
-	lang, err := client.ReadLanguagePackages(ctx, containerID, workDir)
+	lang, err := src.ReadLanguagePackages(ctx, workDir)
 	switch {
 	case err == nil:
 		out.Packages = append(out.Packages, lang.Packages...)

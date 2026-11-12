@@ -129,3 +129,23 @@ func TestReadLanguageTreeSkipsLarge(t *testing.T) {
 		t.Errorf("skipped %v, packages %v", limit.skipped, got)
 	}
 }
+
+// LanguageFromTar walks a root's archive like the container read does, and
+// marks the result partial when the byte budget ends the walk.
+func TestLanguageFromTar(t *testing.T) {
+	meta := []byte("Metadata-Version: 2.1\nName: requests\nVersion: 2.31.0\n\nbody")
+	files := map[string][]byte{
+		"python3.12/site-packages/requests-2.31.0.dist-info/METADATA": meta,
+	}
+	got, err := LanguageFromTar(tarOf(t, files), "/usr/local/lib", 1<<20)
+	if err != nil || got.Partial || len(got.Packages) != 1 || got.Packages[0].Name != "requests" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	if want := "/usr/local/python3.12/site-packages/requests-2.31.0.dist-info/METADATA"; got.Packages[0].Path != want {
+		t.Errorf("path = %q, want %q", got.Packages[0].Path, want)
+	}
+	got, err = LanguageFromTar(tarOf(t, files), "/usr/local/lib", 100)
+	if err != nil || !got.Partial || len(got.Packages) != 0 {
+		t.Fatalf("over budget: got %+v, %v", got, err)
+	}
+}
