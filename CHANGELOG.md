@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Existing findings stay active when an image's package inventory is incomplete or unavailable;
+  only sufficient evidence resolves them, preserving acknowledgements and notification history.
+- Update targets no longer count advisories with incomparable or missing alias version data as
+  confirmed fixed, including apps with package filters.
+- Weekly digests obey their configured hour as well as weekday, including after downtime.
+- Grouped advisories keep the highest urgency across workloads and remain new while any copy
+  is open; the advisory link points to a real finding awaiting acknowledgement.
+- Agents retain pending image-package reads when the server requests a full snapshot, so a
+  restored server database receives the packages with the recovered container inventory.
 - A page failed with "internal error" when the database was too busy to record the visit, for
   example while a large inventory was being stored. The visit is recorded by a later request.
 - New catalog entries reached installations only with the next daily data package, since an

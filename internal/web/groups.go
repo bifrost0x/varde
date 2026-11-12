@@ -51,7 +51,7 @@ var priorityRank = map[string]int{"P1": 0, "P2": 1, "P3": 2, "": 3}
 func (a *app) groupFindings(s *snapshot, fs []store.Finding) []findingGroup {
 	index := map[string]int{}
 	var groups []findingGroup
-	seenAdv := map[string]map[string]bool{}
+	seenAdv := map[string]map[string]int{}
 	seenWl := map[string]map[string]bool{}
 	for _, f := range fs {
 		var m match.Finding
@@ -62,7 +62,7 @@ func (a *app) groupFindings(s *snapshot, fs []store.Finding) []findingGroup {
 			i = len(groups)
 			index[key] = i
 			groups = append(groups, findingGroup{AppID: f.AppID, AppName: a.appName(f.AppID), Package: imagePackageName(f.AppID), Version: m.Evidence.Version, Exposure: f.Exposure})
-			seenAdv[key], seenWl[key] = map[string]bool{}, map[string]bool{}
+			seenAdv[key], seenWl[key] = map[string]int{}, map[string]bool{}
 		}
 		g := &groups[i]
 		if name := s.byID[f.WorkloadID].Name; !seenWl[key][f.WorkloadID] {
@@ -76,22 +76,15 @@ func (a *app) groupFindings(s *snapshot, fs []store.Finding) []findingGroup {
 			g.Target = m.Target
 		}
 		g.Image = g.Image || m.Image
-		if seenAdv[key][f.AdvisoryID] {
-			continue
-		}
-		seenAdv[key][f.AdvisoryID] = true
 		row := a.row(s, f)
-		g.Rows = append(g.Rows, row)
-		switch {
-		case f.MatchState == string(match.Unverified):
-			g.Unverified++
-		case g.Priority == "" || priorityRank[f.Priority] < priorityRank[g.Priority]:
+		if f.MatchState != string(match.Unverified) && (g.Priority == "" || priorityRank[f.Priority] < priorityRank[g.Priority]) {
 			g.Priority = f.Priority
 		}
-		if f.State == store.StateOpen {
-			g.New++
-		} else if active(f.State) {
-			g.Acknowledged++
+		if j, seen := seenAdv[key][f.AdvisoryID]; seen {
+			g.Rows[j] = mergeFindingRows(g.Rows[j], row)
+		} else {
+			seenAdv[key][f.AdvisoryID] = len(g.Rows)
+			g.Rows = append(g.Rows, row)
 		}
 		g.KEV = g.KEV || row.KEV
 		if f.MatchState != string(match.Unverified) && (g.PathClass == "" || pathRank[f.PathClass] < pathRank[g.PathClass]) {
@@ -102,6 +95,18 @@ func (a *app) groupFindings(s *snapshot, fs []store.Finding) []findingGroup {
 		}
 	}
 	for i := range groups {
+		// Count advisories once, but keep every copy's urgency and whether
+		// any workload still needs acknowledgement.
+		for _, row := range groups[i].Rows {
+			if row.MatchState == string(match.Unverified) {
+				groups[i].Unverified++
+			}
+			if row.State == store.StateOpen {
+				groups[i].New++
+			} else if active(row.State) {
+				groups[i].Acknowledged++
+			}
+		}
 		sortRows(groups[i].Rows)
 		sort.Strings(groups[i].Workloads)
 		if groups[i].Target == nil {
@@ -125,6 +130,31 @@ func (a *app) groupFindings(s *snapshot, fs []store.Finding) []findingGroup {
 		return a.Version < b.Version
 	})
 	return groups
+}
+
+// mergeFindingRows links to a copy that still needs acknowledgement,
+// preferring the most urgent confirmed one among copies in the same state.
+// Keep the selected finding's actual state consistent with its ID.
+func mergeFindingRows(a, b findingRow) findingRow {
+	if (a.State == store.StateOpen) != (b.State == store.StateOpen) {
+		if b.State == store.StateOpen {
+			return b
+		}
+		return a
+	}
+	if active(a.State) != active(b.State) {
+		if active(b.State) {
+			return b
+		}
+		return a
+	}
+	confirmedA, confirmedB := a.MatchState == string(match.Affected), b.MatchState == string(match.Affected)
+	if (confirmedB && !confirmedA) || (confirmedA == confirmedB &&
+		(priorityRank[b.Priority] < priorityRank[a.Priority] ||
+			(b.Priority == a.Priority && exposureRank[b.Exposure] < exposureRank[a.Exposure]))) {
+		return b
+	}
+	return a
 }
 
 // ecosystemOf is the distribution ecosystem of a group's package: from a

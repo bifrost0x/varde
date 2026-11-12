@@ -133,8 +133,16 @@ func TestFindingHistoryUnknownAndUninstalled(t *testing.T) {
 	if _, err := s.ApplySnapshot(ctx, inventory.LocalHostID, inventory.KindPackage, nil, t1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SyncFindingsSeen(ctx, nil, map[string]string{SeenKey(wa, SeenApps): ""}, t1); err != nil {
+	ch, err := s.SyncFindingsSeen(ctx, nil, map[string]string{SeenKey(wa, SeenApps): ""}, t1)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(ch.Resolved) != 1 || ch.Resolved[0] != host.ID() {
+		t.Fatalf("only the uninstalled host package may resolve: %+v", ch)
+	}
+	f, err := s.GetFinding(ctx, unread.ID())
+	if err != nil || f.State != StateOpen || f.ResolvedAt != nil {
+		t.Fatalf("unread image finding must stay open: %+v (%v)", f, err)
 	}
 	evs, err := s.FindingEvents(ctx, HistoryFilter{})
 	if err != nil {
@@ -142,8 +150,8 @@ func TestFindingHistoryUnknownAndUninstalled(t *testing.T) {
 	}
 	for _, e := range evs {
 		switch {
-		case e.Kind == "resolved" && e.AdvisoryID == unread.AdvisoryID && e.Cause != "":
-			t.Errorf("package of an unread image resolved as %q, want unknown", e.Cause)
+		case e.Kind == "resolved" && e.AdvisoryID == unread.AdvisoryID:
+			t.Error("package of an unread image must not have a resolution event")
 		case e.Kind == "resolved" && e.AdvisoryID == host.AdvisoryID && e.Cause != CauseUninstalled:
 			t.Errorf("uninstalled host package resolved as %q, want %q", e.Cause, CauseUninstalled)
 		case e.Kind == "opened" && e.AdvisoryID == unread.AdvisoryID && e.Priority != "P1":

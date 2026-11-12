@@ -116,7 +116,8 @@ const (
 // analysed, whether affected or not. It tells why a finding was resolved
 // (an update, the workload or package gone, or the advisory no longer
 // applying), which the history records with every opened, reopened and
-// resolved finding.
+// resolved finding. When seen is non-nil, findings with insufficient
+// inventory evidence to establish a resolution are kept unchanged.
 func (s *Store) SyncFindingsSeen(ctx context.Context, current []FindingInput, seen map[string]string, now time.Time) (FindingChanges, error) {
 	var ch FindingChanges
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
@@ -226,12 +227,17 @@ func (s *Store) SyncFindingsSeen(ctx context.Context, current []FindingInput, se
 			if present[id] || prev.state == "resolved" {
 				continue
 			}
+			cause, to := resolution(prev.gone, prev.packageGone, prev.version, seen, prev.workloadID, prev.appID)
+			if seen != nil && cause == "" {
+				// Missing evidence is not a fix: a partial or unavailable
+				// inventory must keep the finding and its notification state.
+				continue
+			}
 			ch.Resolved = append(ch.Resolved, id)
 			if _, err := tx.ExecContext(ctx, `UPDATE findings SET state = 'resolved', resolved_at = ?, last_changed = ?, digest_pending = '' WHERE id = ?`,
 				millis(now), millis(now), id); err != nil {
 				return fmt.Errorf("resolve finding: %w", err)
 			}
-			cause, to := resolution(prev.gone, prev.packageGone, prev.version, seen, prev.workloadID, prev.appID)
 			if err := recordFindingEvent(ctx, tx, id, "resolved", cause, to, now); err != nil {
 				return err
 			}

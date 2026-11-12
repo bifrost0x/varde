@@ -428,18 +428,17 @@ func (s *Service) RunDigests(ctx context.Context) bool {
 	return success
 }
 
-// weeklyDue reports whether the weekly digest is due: on its weekday, or
-// once its last slot has passed since it last went out.
+// weeklyDue reports whether the weekly digest's last scheduled slot has
+// passed since it last went out. A first digest starts on its weekday,
+// after the configured hour; it does not catch up an earlier week.
 func (s *Service) weeklyDue(now time.Time, weekday time.Weekday, last time.Time) bool {
-	if now.In(s.cfg.Location).Weekday() == weekday {
-		return true
-	}
-	if last.IsZero() {
-		return false
-	}
 	slot := s.lastSlot(now)
 	for slot.Weekday() != weekday {
 		slot = slot.AddDate(0, 0, -1)
+	}
+	if last.IsZero() {
+		local := now.In(s.cfg.Location)
+		return slot.Year() == local.Year() && slot.YearDay() == local.YearDay()
 	}
 	return last.Before(slot)
 }

@@ -342,7 +342,9 @@ func (a *Agent) report(ctx context.Context, ws []inventory.Workload, inv *string
 	}
 	var resp wire.ReportResponse
 	err := a.post(ctx, wire.ReportPath, rep, &resp)
-	if err == nil {
+	// A heartbeat requesting a snapshot may have ignored images whose
+	// containers are not stored yet. Keep them for the full-snapshot retry.
+	if err == nil && !resp.NeedSnapshot {
 		a.images.delivered(rep.Images)
 	}
 	return resp, err
