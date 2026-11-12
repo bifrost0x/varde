@@ -111,8 +111,14 @@ func TestPathPriority(t *testing.T) {
 		{policy.P3, paths.OnPathLAN, match.Finding{CVSS: 5}, policy.P2},
 		{policy.P1, paths.OnPathLAN, match.Finding{KEV: true}, policy.P1},
 		{policy.P2, paths.Noise, match.Finding{CVSS: 9.8}, policy.P3},
-		{policy.P1, paths.Noise, match.Finding{KEV: true}, policy.P1},
+		// Known exploited stays in the noise only for physical access.
+		{policy.P1, paths.Noise, match.Finding{KEV: true}, policy.P2},
 		{policy.P2, paths.Unclear, match.Finding{CVSS: 8}, policy.P2},
+		// A package of the image, nothing says it is exploited, no path:
+		// the next regular update, unless the container is public.
+		{policy.P2, paths.Unclear, match.Finding{CVSS: 8, Image: true}, policy.P3},
+		{policy.P2, paths.Unclear, match.Finding{CVSS: 8, Image: true, EPSS: 0.2}, policy.P2},
+		{policy.P1, paths.Unclear, match.Finding{CVSS: 9, Image: true, KEV: true}, policy.P1},
 		{policy.None, paths.OnPathInternet, match.Finding{CVSS: 9}, policy.None},
 	} {
 		if got, _ := pathPriority(c.prio, "r", paths.Placement{Class: c.class, Reason: "x"}, c.m); got != c.want {
@@ -176,5 +182,12 @@ func TestContainerExposuresSharedNetwork(t *testing.T) {
 		proxyRole(&inventory.Container{ImageRef: "cloudflare/cloudflared:2024.10.0"}) != "tunnel" ||
 		proxyRole(&inventory.Container{ImageRef: "postgres:16"}) != "" {
 		t.Fatal("proxy roles")
+	}
+}
+
+func TestPathPriorityKeepsPublicImagePackages(t *testing.T) {
+	m := match.Finding{CVSS: 9.8, Image: true}
+	if got, _ := pathPriority(policy.P1, "critical severity and publicly exposed", paths.Placement{Class: paths.Unclear, Reason: "x"}, m); got != policy.P1 {
+		t.Errorf("public container: got %s, want P1", got)
 	}
 }

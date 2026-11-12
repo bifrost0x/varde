@@ -54,6 +54,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The overview counts updates, not findings: one container or system to bring up to date is
+  one, whatever number of advisories it fixes. A small homelab showed over 1,000 findings for a
+  few dozen updates. The findings stay complete under Findings and in the API; the digests and
+  the urgent message name the updates too ("2 updates (8 findings)").
+- A known exploited flaw is never background noise: Varde cannot see firewalls, port forwards or
+  every service, so "no way in" is a guess. It is listed as unclear and keeps its priority. Only
+  a flaw that needs physical access stays in the noise.
+- A flaw in a package of a container's image that nothing says is exploited (not in CISA KEV,
+  EPSS below 0.10) and that no attack path uses is P3: it goes into the weekly digest and is fixed
+  with the image's next regular update. On a container reachable from the internet the priority
+  stays as before.
 - Attack paths: a flaw in a library of an image or of a service opens a path only when it is
   known or likely to be exploited (CISA KEV, or EPSS from 0.10) and its attack vector is known.
   Before, any such flaw with a remote or unknown vector did, which put a path on nearly every

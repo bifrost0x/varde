@@ -53,7 +53,7 @@ func TestOverviewNotClearWithNewFindings(t *testing.T) {
 	if strings.Contains(body, "All clear") || strings.Contains(body, "No known vulnerability") || strings.Contains(body, "hero--alert") {
 		t.Fatalf("overview claims all clear with a new P2 finding:\n%s", body)
 	}
-	if !strings.Contains(body, "1 new finding, none urgent") || !strings.Contains(body, "daily digest") {
+	if !strings.Contains(body, "1 update to do, none urgent") || !strings.Contains(body, "daily digest") {
 		t.Error("new non-urgent finding not named in the status")
 	}
 	// Acknowledging it leaves "Nothing new" with correct grammar.

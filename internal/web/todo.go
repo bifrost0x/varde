@@ -172,3 +172,55 @@ func upgradeCommand(ecosystem string) string {
 	}
 	return ""
 }
+
+// updateCounts are the overview's numbers: things to do, not findings. A
+// container with 60 flawed packages is one update, a package flaw in ten
+// containers is ten.
+type updateCounts struct {
+	// P1, P2 and P3 count the updates by the highest priority of their new
+	// confirmed findings.
+	P1, P2, P3 int
+	// NoFix counts updates whose findings have no fixed version published
+	// yet: there is nothing to install.
+	NoFix int
+	// Unconfirmed counts the containers and systems with findings Varde
+	// cannot confirm, because it does not know the version that runs.
+	Unconfirmed int
+	// Findings is the number of open findings behind them, for the link
+	// to the full list.
+	Findings int
+}
+
+func countUpdates(groups []todoGroup) updateCounts {
+	var c updateCounts
+	for _, g := range groups {
+		c.Findings += g.Count
+		fixable, unverified := false, false
+		for _, fg := range g.Groups {
+			unverified = unverified || fg.Unverified > 0
+			for _, r := range fg.Rows {
+				fixable = fixable || (r.FixedIn != "" && r.MatchState != string(match.Unverified))
+			}
+		}
+		if unverified {
+			c.Unconfirmed++
+		}
+		if g.New == 0 {
+			continue
+		}
+		switch g.NewPriority {
+		case "P1":
+			c.P1++
+		case "P2":
+			c.P2++
+		case "P3":
+			c.P3++
+		default:
+			continue
+		}
+		if !fixable {
+			c.NoFix++
+		}
+	}
+	return c
+}

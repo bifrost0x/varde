@@ -103,7 +103,8 @@ func TestRendering(t *testing.T) {
 	golden(t, "immediate_single.txt", m.Title+"\n\n"+m.Body)
 
 	two := Immediate([]Item{item("1", policy.P1), item("2", policy.P1)})
-	if two.Title != "[varde] P1: 2 urgent findings" {
+	// Both are findings of one container: one update to install.
+	if two.Title != "[varde] P1: 1 urgent update (2 findings)" {
 		t.Errorf("multi title %q", two.Title)
 	}
 
