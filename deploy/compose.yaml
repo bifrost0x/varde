@@ -1,19 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Varde server with a read-only Docker socket proxy.
+# Varde: the server and a read-only Docker socket proxy.
 #
-#   docker compose up -d
-#   docker compose logs varde | grep setup_token   # first login
+# START (nothing in this file has to be changed for it)
 #
-# The image comes from GHCR. Without further settings it is "latest": the
-# newest release, and the state of the branch main while no release exists
-# (docs/releasing.md). To stay on one version, pin it in a .env next to this
-# file; pinning the digest is better still:
+#   1. Save this file as compose.yaml in an empty folder.
+#   2. docker compose up -d
+#   3. Open http://<address of this machine>:8080 in a browser, from this
+#      machine or any other in your network.
+#   4. Varde asks for a one-time setup token. It is in the log:
+#        docker compose logs varde | grep setup_token
 #
-#   echo VARDE_VERSION=X.Y.Z > .env
+# LATER, IF YOU WANT
 #
-# VARDE_IMAGE names another registry, for example docker.io/bifrost0x/varde
-# (releases only).
+#   - HTTPS through a reverse proxy: the block "Behind a reverse proxy" below.
+#   - Stay on one version instead of "latest": put it in a file .env next to
+#     this one, for example   VARDE_VERSION=0.1.0
+#     ("latest" is the newest release, and the state of the branch main while
+#     no release exists; docs/releasing.md.)
+#   - Everything else: docs/configuration.md
 name: varde
 
 services:
@@ -44,20 +49,44 @@ services:
     command: ["server"]
     environment:
       VARDE_DOCKER_HOST: tcp://socket-proxy:2375
-      # Domain suffixes reachable from the internet (Traefik routes).
-      # VARDE_PUBLIC_DOMAINS: example.com
-      # VARDE_BASE_URL: https://varde.example.com
-      # This machine's address in your network: ties it to what the network
-      # scan finds and is the address agents are told to use.
-      # VARDE_HOST_ADDRESS: 192.168.1.10
-      # Digests run at this local time (default UTC).
+
+      # Your time zone: digests are sent at this local time (default UTC).
       # TZ: Europe/Berlin
-      # Notifications: see docs/configuration.md (ntfy, Gotify, webhook, SMTP).
+
+      # This machine's address in your network. Optional: it ties "this host"
+      # to what the network scan finds and is the address agents are told to
+      # use.
+      # VARDE_HOST_ADDRESS: 192.168.1.10
+
+      # --- Behind a reverse proxy with HTTPS (Traefik, Caddy, Nginx Proxy
+      # Manager, ...) ---
+      # Point the proxy at http://<address of this machine>:8080, then remove
+      # the "#" in front of the next two lines and set your address.
+      # From then on Varde works through the https address only: opened over
+      # http://...:8080 it refuses the sign-in and says why.
+      # VARDE_BASE_URL: https://varde.example.com
+      # VARDE_BEHIND_TLS_PROXY: "true"
+      # Optional, for correct client addresses in the audit log. The value is
+      # the proxy's address as Varde sees it; Varde's setup page and its
+      # overview show the exact line to put here.
+      # VARDE_TRUSTED_PROXIES: 192.168.1.2
+
+      # Domain suffixes that are reachable from the internet through your
+      # proxy. Containers served under them count as publicly exposed. Leave
+      # it out for names that only resolve inside your network.
+      # VARDE_PUBLIC_DOMAINS: example.com
+
+      # Notifications (ntfy, Gotify, webhook, SMTP): docs/configuration.md
     volumes:
       - varde-data:/data
     ports:
-      - "127.0.0.1:8080:8080" # UI and API; put a TLS reverse proxy in front for other machines
-      - "8443:8443"           # agent listener (mTLS, client certificates only); remove when no agents are used
+      # The web interface, plain http, for every machine in your network.
+      # On a machine that is reachable from the internet, write
+      # "127.0.0.1:8080:8080" instead and put a reverse proxy in front.
+      - "8080:8080"
+      # Agents connect here (mTLS, client certificates only). Remove the line
+      # when you use no agents.
+      - "8443:8443"
     networks: [varde-internal, default]
     read_only: true
     cap_drop: [ALL]

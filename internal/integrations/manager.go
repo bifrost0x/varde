@@ -766,6 +766,14 @@ type ScanState struct {
 	Trigger string
 }
 
+// progress records how far the scan is. The scanner tries silent probes
+// again, so its total grows after the first pass: the total follows it,
+// and what is done never exceeds it.
+func (s *ScanState) progress(done, total int) {
+	s.Total = max(s.Total, total, done)
+	s.Done = done
+}
+
 // ErrScanRunning is returned when a scan is already in progress.
 var ErrScanRunning = errors.New("a scan is already running")
 
@@ -807,9 +815,9 @@ func (m *Manager) startScan(trigger string) error {
 	m.scan = ScanState{Running: true, Total: len(addrs) * len(sc.Ports), Started: time.Now(), Trigger: trigger}
 	ctx := m.ctx
 	m.wg.Go(func() {
-		res, err := sc.Scan(ctx, addrs, func(done, _ int) {
+		res, err := sc.Scan(ctx, addrs, func(done, total int) {
 			m.mu.Lock()
-			m.scan.Done = done
+			m.scan.progress(done, total)
 			m.mu.Unlock()
 		})
 		devs := res.Devices
