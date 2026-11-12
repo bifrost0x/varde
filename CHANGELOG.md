@@ -28,8 +28,9 @@ All notable changes to this project are documented here. The format follows
 
 - Edge image: every push to `main` is built and pushed to GHCR as `ghcr.io/bifrost0x/varde:edge`,
   signed with cosign. Until the first release it is also tagged `latest` there; releases then
-  own `latest` on Docker Hub and GHCR. The Compose examples take the image from `VARDE_IMAGE`
-  (default `bifrost0x/varde`).
+  own `latest` on Docker Hub and GHCR. The Compose examples run `ghcr.io/bifrost0x/varde:latest`
+  without further settings; `VARDE_VERSION` pins a version and `VARDE_IMAGE` names another
+  registry.
 - Data package (ADR 0039): with a trust root, an installation reads its advisories, the KEV list,
   EPSS scores and the recognition table from one signed package the project builds once a day,
   and asks no other source about its apps. Settings › Data package shows what is in use and
