@@ -3,11 +3,7 @@
 package docker
 
 import (
-	"archive/tar"
 	"context"
-	"errors"
-	"io"
-	"path"
 
 	"github.com/bifrost0x/varde/internal/pkgdb"
 )
@@ -54,27 +50,4 @@ func (s containerSource) ReadGoPrograms(ctx context.Context) ([]GoProgram, error
 
 func (s containerSource) ReadLanguagePackages(ctx context.Context, workDir string) (LanguageRead, error) {
 	return s.c.ReadLanguagePackages(ctx, s.id, workDir)
-}
-
-// LanguageFromTar reads the language packages from the archive of one
-// root directory, in the form Docker's archive endpoint streams it: names
-// relative to the root's parent, the root itself first. budget bounds the
-// bytes walked; a tar that exceeds it, ends early, or holds more metadata
-// files than the reader keeps yields what was read, marked Partial. It is
-// the tar-walking part of Client.ReadLanguagePackages, for sources that
-// build such a stream themselves.
-func LanguageFromTar(tr *tar.Reader, root string, budget int64) (LanguageRead, error) {
-	var out LanguageRead
-	counter := &countingLimit{left: budget}
-	files := 0
-	err := readLanguageTree(tr, path.Dir(root), counter, &files, &out.Packages)
-	out.Partial = counter.skipped
-	switch {
-	case err == nil:
-	case errors.Is(err, errLanguageBound), errors.Is(err, io.ErrUnexpectedEOF):
-		out.Partial = true
-	default:
-		return out, err
-	}
-	return out, nil
 }
