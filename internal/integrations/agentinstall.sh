@@ -128,8 +128,13 @@ else
 	# The installed binary and bin are agent-writable for self-updates.
 	# Stage the trusted upload in the root-owned home instead: root never
 	# executes agent-writable code, and a noexec /tmp remains supported.
-	check=$(mktemp "$home/.varde-check.XXXXXX")
-	install -m 0700 -o root -g root "$src/varde" "$check"
-	(set -a; . /etc/varde-agent.env; set +a; "$check" check-server) || true
+	# The agent is installed and running by now: a diagnostic that cannot
+	# be staged is skipped, it never fails the installation.
+	if check=$(mktemp "$home/.varde-check.XXXXXX") &&
+		install -m 0700 -o root -g root "$src/varde" "$check"; then
+		(set -a; . /etc/varde-agent.env; set +a; "$check" check-server) || true
+	else
+		echo "varde: connectivity check skipped, it could not be staged" >&2
+	fi
 fi
 echo "varde: agent installed"

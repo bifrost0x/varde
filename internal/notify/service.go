@@ -255,16 +255,38 @@ func (s *Service) digestsDue(ctx context.Context) {
 	case st.LastSuccess.IsZero():
 	case !st.LastSuccess.Before(slot):
 		return
+	case now.Before(st.NextRun):
+		// A failed digest waits for its retry time.
+		return
 	default:
 		success = s.RunDigests(ctx)
 	}
-	st.LastAttempt = now
 	if success {
-		st.LastSuccess = now
+		st.LastSuccess, st.NextRun = now, time.Time{}
+	} else {
+		st.NextRun = now.Add(retryDelay(st))
 	}
+	st.LastAttempt = now
 	if err := s.cfg.Store.PutSourceState(ctx, st); err != nil {
 		s.cfg.Log.Error("digest: writing state failed", "err", err)
 	}
+}
+
+// Retries of a failed digest start a minute apart and double up to an
+// hour, so a channel that stays down is not called every minute all day.
+const (
+	digestRetryMin = time.Minute
+	digestRetryMax = time.Hour
+)
+
+// retryDelay is the wait after a failed digest: twice the wait that
+// preceded this attempt, a minute after a first failure. st is the state
+// before this attempt is recorded.
+func retryDelay(st store.SourceState) time.Duration {
+	if st.NextRun.IsZero() || !st.NextRun.After(st.LastAttempt) {
+		return digestRetryMin
+	}
+	return min(max(2*st.NextRun.Sub(st.LastAttempt), digestRetryMin), digestRetryMax)
 }
 
 // lastSlot is the most recent digest hour at or before now, in the

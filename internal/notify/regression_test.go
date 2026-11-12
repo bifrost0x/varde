@@ -141,3 +141,47 @@ func TestDeliveredDigestIsNotRepeatedWhenRecordingFails(t *testing.T) {
 		t.Error("the unrecorded finding left the queue; it must stay for the next digest")
 	}
 }
+
+// A channel that stays down is retried a minute later, then at doubling
+// intervals up to an hour, and the digest goes out once it recovers.
+func TestFailedDigestRetriesBackOff(t *testing.T) {
+	ms := newMemStore()
+	ch := &fakeChannel{fails: 1 << 30}
+	start := time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)
+	now := start
+	ms.states["notifydaily"] = store.SourceState{Source: "notify", Key: "daily", LastSuccess: now.Add(-24 * time.Hour)}
+	base := []Candidate{{Item: item("daily", policy.P2), State: store.StateOpen}}
+	svc := NewService(Config{Channels: []Channel{ch}, Store: ms, Log: slog.New(slog.DiscardHandler),
+		DigestHour: 8, DigestWeekday: time.Sunday, Location: time.UTC, Now: func() time.Time { return now },
+		Candidates: candidates(ms, base)})
+	ms.queued["daily"] = "P2"
+	var attempts []time.Duration
+	for ; now.Before(start.Add(4 * time.Hour)); now = now.Add(time.Minute) {
+		before, _ := ms.SourceState(t.Context(), "notify", "daily")
+		svc.digestsDue(t.Context())
+		after, _ := ms.SourceState(t.Context(), "notify", "daily")
+		if !after.LastAttempt.Equal(before.LastAttempt) {
+			attempts = append(attempts, now.Sub(start))
+		}
+	}
+	want := []time.Duration{0, 1, 3, 7, 15, 31, 63, 123, 183}
+	if len(attempts) != len(want) {
+		t.Fatalf("attempts at %v, want minutes %v", attempts, want)
+	}
+	for i, m := range want {
+		if attempts[i] != m*time.Minute {
+			t.Fatalf("attempts at %v, want minutes %v", attempts, want)
+		}
+	}
+	ch.mu.Lock()
+	ch.fails = 0
+	ch.mu.Unlock()
+	now = start.Add(243 * time.Minute)
+	svc.digestsDue(t.Context())
+	if ch.count() != 1 || ms.notified["daily"] != "P2" {
+		t.Fatalf("digest not delivered after the channel recovered: sent=%d notified=%v", ch.count(), ms.notified)
+	}
+	if st, _ := ms.SourceState(t.Context(), "notify", "daily"); !st.NextRun.IsZero() || !st.LastSuccess.Equal(now) {
+		t.Errorf("state after recovery: %+v", st)
+	}
+}
