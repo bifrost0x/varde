@@ -735,8 +735,13 @@ func TestOverviewCountsUpdates(t *testing.T) {
 	}
 	_, body := h.do(t, "GET", "/", nil, nil)
 	body = html.UnescapeString(body)
-	stats := body[strings.Index(body, `class="stats"`):]
-	stats = stats[:strings.Index(stats, "</div>")]
+	_, stats, ok := strings.Cut(body, `class="stats"`)
+	if ok {
+		stats, _, ok = strings.Cut(stats, "</div>")
+	}
+	if !ok {
+		t.Fatal("overview has no tiles")
+	}
 	if !strings.Contains(stats, `P2</span> updates</span><span class="stat__value">1<`) || !strings.Contains(stats, `P3</span> updates</span><span class="stat__value">1<`) {
 		t.Errorf("tiles do not count updates:\n%s", stats)
 	}
