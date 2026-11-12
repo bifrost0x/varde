@@ -44,6 +44,10 @@ type AgentInstall struct {
 	Token     string
 	// Binary returns the agent binary for a platform ("linux/amd64").
 	Binary func(platform string) (path string, ok bool)
+	// KnownAgents are the host IDs of the agents this server knows and has
+	// not revoked. An agent found on the host with another identity is
+	// enrolled again instead of being kept. Nil keeps any identity.
+	KnownAgents []string
 }
 
 // AgentInstallResult is what the installation found and did.
@@ -61,6 +65,9 @@ type AgentInstallResult struct {
 	// port when it was tested right after the installation; empty when it
 	// could or was not tested.
 	Unreachable string
+	// Reenrolled is set when the host had an agent whose enrollment this
+	// server does not know: it was set aside and the agent enrolls anew.
+	Reenrolled bool
 }
 
 // ErrInstallAuth is returned when the host rejects the credentials.
@@ -136,14 +143,21 @@ func InstallAgent(ctx context.Context, req AgentInstall, dial func(ctx context.C
 			_, _ = runSession(c, "rm -rf '"+dir+"'", nil, 512)
 		}
 	}()
-	for _, f := range []struct {
+	files := []struct {
 		name string
 		data io.Reader
 	}{
 		{"varde", binary},
 		{"agent.env", strings.NewReader(agentEnv(req, res.Docker))},
 		{"install.sh", bytes.NewReader(agentInstallScript)},
-	} {
+	}
+	if req.KnownAgents != nil {
+		files = append(files, struct {
+			name string
+			data io.Reader
+		}{"known-agents", strings.NewReader(knownAgents(req.KnownAgents))})
+	}
+	for _, f := range files {
 		if _, err := runSession(c, "cat > '"+dir+"/"+f.name+"'", f.data, 512); err != nil {
 			return res, fmt.Errorf("upload %s: %w", f.name, err)
 		}
@@ -168,6 +182,7 @@ func InstallAgent(ctx context.Context, req AgentInstall, dial func(ctx context.C
 	}
 	done = true // the script removed the directory
 	res.KeptEnrollment = strings.Contains(out, "varde: kept the existing enrollment")
+	res.Reenrolled = strings.Contains(out, "varde: the earlier enrollment is not one of this server")
 	res.Unreachable = unreachable(out)
 	return res, nil
 }
@@ -287,6 +302,21 @@ func agentEnv(req AgentInstall, docker bool) string {
 		fmt.Fprintf(&b, "%sDOCKER_HOST=unix:///var/run/docker.sock\n%sALLOW_DIRECT_SOCKET=true\n", p, p)
 	} else {
 		fmt.Fprintf(&b, "%sDOCKER_HOST=off\n", p)
+	}
+	return b.String()
+}
+
+// knownAgents is the upload the install script compares an existing
+// identity with: one host ID a line. IDs that are not plain tokens are left
+// out; the script matches whole lines.
+func knownAgents(ids []string) string {
+	var b strings.Builder
+	for _, id := range ids {
+		if id == "" || strings.ContainsAny(id, " \t\r\n\"'\\") {
+			continue
+		}
+		b.WriteString(id)
+		b.WriteByte('\n')
 	}
 	return b.String()
 }

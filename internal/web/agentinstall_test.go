@@ -104,6 +104,14 @@ func TestAgentURL(t *testing.T) {
 	if got := a.defaultAgentURL(r); got != "https://[fd00::5]:9443" {
 		t.Errorf("default URL %q", got)
 	}
+	// Behind a reverse proxy the browser's name is the proxy's, which does
+	// not forward the agent port: the configured address of this machine
+	// comes first.
+	a = &app{d: Deps{AgentListenAddr: ":8443", HostAddresses: []string{"10.10.1.12"}}}
+	r.Host = "varde.home.example"
+	if got := a.defaultAgentURL(r); got != "https://10.10.1.12:8443" {
+		t.Errorf("default URL behind a proxy %q", got)
+	}
 }
 
 func TestLoopbackURL(t *testing.T) {

@@ -46,6 +46,21 @@ for d in "$home/bin" "$home/data"; do
 		exit 1
 	fi
 done
+# An earlier enrollment only counts when this server issued it and still
+# knows it. One from another Varde server, from a data volume that is gone,
+# or one that was revoked would keep the agent silent for good: it is set
+# aside and the agent enrolls again with the new token. The list of the
+# host IDs this server knows comes with the upload; without it (an older
+# server) the enrollment is kept as before.
+if [ -n "$enrolled" ] && [ -f "$src/known-agents" ]; then
+	host_id=$(tr -d ' \n\r\t' <"$home/data/agent.json" | sed -n 's/.*"host_id":"\([^"]*\)".*/\1/p')
+	if [ -z "$host_id" ] || ! grep -qxF -- "$host_id" "$src/known-agents"; then
+		rm -rf "$home/data.stale"
+		mv "$home/data" "$home/data.stale"
+		enrolled=
+		echo "varde: the earlier enrollment is not one of this server; enrolling again"
+	fi
+fi
 install -d -m 0750 -o "$user" -g "$group" "$home/bin" "$home/data"
 # The new binary is written where only root can, then renamed into bin: a
 # rename replaces a link the agent may have put there, it does not follow it.
