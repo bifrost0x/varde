@@ -21,7 +21,7 @@ func TestAdvisoriesForFollowsOrigin(t *testing.T) {
 	}
 	ids := func(app *catalog.App) string {
 		out := ""
-		for _, a := range advisoriesFor(app, recs, nil) {
+		for _, a := range AdvisoriesFor(app, recs, nil) {
 			out += a.Vuln.ID + " "
 		}
 		return out
@@ -49,7 +49,7 @@ func TestAdvisoriesForSupersededHook(t *testing.T) {
 	}
 	githubOnly := func(_ *catalog.App, source string) bool { return len(source) >= 7 && source[:7] == "github:" }
 	out := ""
-	for _, a := range advisoriesFor(&catalog.App{ID: "immich", Origin: catalog.OriginFeed}, recs, githubOnly) {
+	for _, a := range AdvisoriesFor(&catalog.App{ID: "immich", Origin: catalog.OriginFeed}, recs, githubOnly) {
 		out += a.Vuln.ID + " "
 	}
 	if out != "GHSA-feed CVE-nvd " {

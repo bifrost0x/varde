@@ -108,6 +108,10 @@ func TestReplaceReleasePackagesIsAtomic(t *testing.T) {
 	if err != nil || len(got) != 2 || string(got[0]) != "aamd64" {
 		t.Fatalf("for a: %q %v", got, err)
 	}
+	of, err := s.ReleasePackagesOf(ctx, []ReleaseImage{{"a", "img"}, {"b", "img"}, {"a", "other"}})
+	if err != nil || len(of) != 2 || len(of[ReleaseImage{"a", "img"}]) != 2 || string(of[ReleaseImage{"b", "img"}][0]) != "bamd64" {
+		t.Fatalf("of a and b: %q %v", of, err)
+	}
 
 	// A duplicate key fails the replacement; the old lists stay.
 	if err := s.ReplaceReleasePackages(ctx, "m2", []ReleasePackageRow{row("c", "amd64"), row("c", "amd64")}); err == nil {

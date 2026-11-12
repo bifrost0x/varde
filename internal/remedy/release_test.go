@@ -95,13 +95,16 @@ func ids(fs []Flaw) []string {
 
 func amd64() registry.Platform { return registry.Platform{OS: "linux", Arch: "amd64"} }
 
+// run is a container on tag of the CyberChef image.
+func run(tag string) Running { return Running{Repository: "ghcr.io/gchq/cyberchef", Tag: tag} }
+
 func TestReleaseFixCounts(t *testing.T) {
 	findings := containerFindings(t, running)
 	// The release fixes openssl, keeps the flawed zlib, no longer ships
 	// libxml2 and brings a fixed lodash.
 	rel := line("amd64", "", false,
 		deb("openssl", "3.0.15-1~deb12u1"), deb("zlib", "1:1.2.13.dfsg-1"), lodash("4.17.21"))
-	fix, ok := ReleaseFixFor(cyberchef, "10.19.0", amd64(), findings, []feed.ReleaseLine{rel}, advsOf)
+	fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{rel}, advsOf)
 	if !ok {
 		t.Fatalf("no release fix: %+v", fix)
 	}
@@ -117,11 +120,11 @@ func TestReleaseFixCounts(t *testing.T) {
 	// Findings that are not of the image are no business of a release
 	// of it.
 	app := match.Finding{AdvisoryID: "GHSA-app", State: match.Affected, Evidence: match.Evidence{Package: "cyberchef"}}
-	if fix2, _ := ReleaseFixFor(cyberchef, "10.19.0", amd64(), append(findings, app), []feed.ReleaseLine{rel}, advsOf); fix2.Total() != 4 {
+	if fix2, _ := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), append(findings, app), []feed.ReleaseLine{rel}, advsOf); fix2.Total() != 4 {
 		t.Errorf("app finding counted: %+v", fix2)
 	}
 	// No findings of the image: nothing to say.
-	if _, ok := ReleaseFixFor(cyberchef, "10.19.0", amd64(), []match.Finding{app}, []feed.ReleaseLine{rel}, advsOf); ok {
+	if _, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), []match.Finding{app}, []feed.ReleaseLine{rel}, advsOf); ok {
 		t.Error("release fix without image findings")
 	}
 }
@@ -133,16 +136,20 @@ func TestReleaseNotNewer(t *testing.T) {
 		name, running string
 		newest        bool
 	}{
-		{"equal", "10.20.0", true},
+		{"equal", "v10.20.0", true},
 		// A re-tagged stream or a downgrade: the newest release is older
 		// than what runs, so it fixes nothing the container could get.
-		{"older", "10.21.0", true},
+		{"older", "v10.21.0", true},
+		// The same release in another variant is that release, not an
+		// older one (semver puts "10.20.0-alpine" below "10.20.0").
+		{"same release, other variant", "v10.20.0-alpine", true},
 		{"unknown", "", false},
+		{"floating", "latest", false},
 		{"unparseable", "not-a-version", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			fix, ok := ReleaseFixFor(cyberchef, tc.running, amd64(), findings, []feed.ReleaseLine{rel}, advsOf)
-			if ok || len(fix.Fixed) > 0 || len(fix.Open) > 0 {
+			fix, ok := ReleaseFixFor(cyberchef, run(tc.running), amd64(), findings, []feed.ReleaseLine{rel}, advsOf)
+			if ok || fix.Total() > 0 {
 				t.Fatalf("claims a fix: %+v", fix)
 			}
 			if fix.Newest != tc.newest || fix.Tag != "v10.20.0" {
@@ -156,28 +163,86 @@ func TestAbsentPackagePartialRelease(t *testing.T) {
 	findings := containerFindings(t, running)
 	pkgs := []inventory.Package{deb("openssl", "3.0.15-1~deb12u1"), deb("zlib", "1:1.2.13.dfsg-2")}
 	// A complete read: libxml2 and lodash are not in the release.
-	fix, ok := ReleaseFixFor(cyberchef, "10.19.0", amd64(), findings, []feed.ReleaseLine{line("amd64", "", false, pkgs...)}, advsOf)
+	fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{line("amd64", "", false, pkgs...)}, advsOf)
 	if !ok || len(fix.Open) != 0 || len(fix.Fixed) != 4 {
 		t.Fatalf("complete read: %+v", fix)
 	}
-	// A read that stopped at a bound: the missing packages may be there.
-	fix, ok = ReleaseFixFor(cyberchef, "10.19.0", amd64(), findings, []feed.ReleaseLine{line("amd64", "", true, pkgs...)}, advsOf)
+	// A read that stopped at a bound: the missing packages may be there,
+	// so Varde cannot tell; they are not "still affected".
+	fix, ok = ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{line("amd64", "", true, pkgs...)}, advsOf)
 	if !ok {
 		t.Fatal("no release fix")
 	}
-	if got := ids(fix.Open); !slices.Equal(got, []string{"DEBIAN-CVE-2026-3", "GHSA-lodash"}) {
-		t.Errorf("partial read, open = %v", got)
+	if got := ids(fix.Unknown); !slices.Equal(got, []string{"DEBIAN-CVE-2026-3", "GHSA-lodash"}) {
+		t.Errorf("partial read, unknown = %v", got)
 	}
-	if got := ids(fix.Fixed); !slices.Equal(got, []string{"DEBIAN-CVE-2026-1", "DEBIAN-CVE-2026-2"}) {
-		t.Errorf("partial read, fixed = %v", got)
+	if got := ids(fix.Fixed); !slices.Equal(got, []string{"DEBIAN-CVE-2026-1", "DEBIAN-CVE-2026-2"}) || len(fix.Open) != 0 {
+		t.Errorf("partial read: %+v", fix)
 	}
-	// A release on another distribution: a Debian package it lacks is
-	// not known to be fixed, its packages are compared with other records.
+}
+
+// A release of another image variant or distribution says nothing about
+// the container's packages.
+func TestReleaseOtherVariant(t *testing.T) {
+	findings := containerFindings(t, running)
+	fixedAll := []inventory.Package{deb("openssl", "3.0.15-1~deb12u1"), deb("zlib", "1:1.2.13.dfsg-2")}
+	tagged := func(tag string, pkgs ...inventory.Package) []feed.ReleaseLine {
+		l := line("amd64", "", false, pkgs...)
+		l.Tag = tag
+		return []feed.ReleaseLine{l}
+	}
+	for _, tc := range []struct {
+		name, running, release string
+		claim                  bool
+	}{
+		{"alpine container, plain release", "v10.19.0-alpine", "v10.20.0", false},
+		{"plain container, alpine release", "v10.19.0", "v10.20.0-alpine", false},
+		// Both Debian 12: the slim image lacks packages the full one has.
+		{"slim container, bookworm release", "v10.19.0-slim", "v10.20.0-bookworm", false},
+		{"slim container, plain release", "v10.19.0-slim", "v10.20.0", false},
+		{"same variant", "v10.19.0-slim", "v10.20.0-slim", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fix, ok := ReleaseFixFor(cyberchef, run(tc.running), amd64(), findings, tagged(tc.release, fixedAll...), advsOf)
+			if ok != tc.claim || (!ok && fix.Total() > 0) || fix.Newest {
+				t.Errorf("claim %v, want %v: %+v", ok, tc.claim, fix)
+			}
+		})
+	}
+	// A release on another distribution: no claim at all, also not for
+	// the language packages it could compare.
 	alpine := line("amd64", "", false, lodash("4.17.21"))
 	alpine.Distro = "alpine-3.20"
-	fix, ok = ReleaseFixFor(cyberchef, "10.19.0", amd64(), findings, []feed.ReleaseLine{alpine}, advsOf)
-	if !ok || !slices.Equal(ids(fix.Fixed), []string{"GHSA-lodash"}) || len(fix.Open) != 3 {
+	if fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{alpine}, advsOf); ok || fix.Total() > 0 {
 		t.Errorf("other distribution: %+v", fix)
+	}
+	// Without a known distribution either.
+	none := line("amd64", "", false, lodash("4.17.21"))
+	none.Distro = ""
+	if _, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{none}, advsOf); ok {
+		t.Error("release without a distribution compared with Debian findings")
+	}
+}
+
+// Every copy of a language package counts: one vulnerable copy keeps the
+// finding open, in whichever order the list names them.
+func TestReleaseSeveralCopies(t *testing.T) {
+	findings := containerFindings(t, []inventory.Package{lodash("4.17.20")})
+	other := lodash("4.17.20")
+	other.Path = "/app/vendor/package-lock.json"
+	fixed := lodash("4.17.21")
+	for name, pkgs := range map[string][]inventory.Package{"vulnerable last": {fixed, other}, "vulnerable first": {other, fixed}} {
+		t.Run(name, func(t *testing.T) {
+			fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{line("amd64", "", false, pkgs...)}, advsOf)
+			if !ok || !slices.Equal(ids(fix.Open), []string{"GHSA-lodash"}) || len(fix.Fixed) != 0 {
+				t.Errorf("fix = %+v", fix)
+			}
+		})
+	}
+	both := fixed
+	both.Path = "/app/vendor/package-lock.json"
+	if fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{line("amd64", "", false, fixed, both)}, advsOf); !ok || len(fix.Fixed) != 1 {
+		t.Errorf("all copies fixed: %+v", fix)
 	}
 }
 
@@ -189,7 +254,7 @@ func TestPlatformChoice(t *testing.T) {
 	arm7 := line("arm", "v7", false, deb("openssl", "3.0.11-1~deb12u2"), deb("zlib", "1:1.2.13.dfsg-1"), deb("libxml2", "2.9.14+dfsg-1.4"), lodash("4.17.21"))
 	lines := []feed.ReleaseLine{x86, arm, arm7}
 	open := func(p registry.Platform, lines []feed.ReleaseLine) ([]string, bool) {
-		fix, ok := ReleaseFixFor(cyberchef, "10.19.0", p, findings, lines, advsOf)
+		fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), p, findings, lines, advsOf)
 		return ids(fix.Open), ok
 	}
 	if got, ok := open(HostPlatform("aarch64"), lines); !ok || !slices.Equal(got, []string{"DEBIAN-CVE-2026-1"}) {

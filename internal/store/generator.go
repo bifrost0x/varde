@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -219,6 +220,41 @@ func (s *Store) ReleasePackagesMarker(ctx context.Context) (string, error) {
 // ReleasePackagesFor returns the lines of an app's image, one per platform.
 func (s *Store) ReleasePackagesFor(ctx context.Context, appID, image string) ([][]byte, error) {
 	return s.lines(ctx, `SELECT line FROM release_packages WHERE app_id = ? AND image = ? ORDER BY platform`, appID, image)
+}
+
+// ReleaseImage names the release lines of one app's image.
+type ReleaseImage struct{ AppID, Image string }
+
+// ReleasePackagesOf returns the lines of several apps' images in one read,
+// for a page that shows many containers.
+func (s *Store) ReleasePackagesOf(ctx context.Context, images []ReleaseImage) (map[ReleaseImage][][]byte, error) {
+	out := map[ReleaseImage][][]byte{}
+	if len(images) == 0 {
+		return out, nil
+	}
+	keys := make([]string, len(images))
+	for i, im := range images {
+		keys[i] = im.AppID + "\x00" + im.Image
+	}
+	arg, err := json.Marshal(keys)
+	if err != nil {
+		return nil, fmt.Errorf("encode release images: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT app_id, image, line FROM release_packages
+		WHERE app_id || char(0) || image IN (SELECT value FROM json_each(?)) ORDER BY app_id, image, platform`, string(arg))
+	if err != nil {
+		return nil, fmt.Errorf("query release packages: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var im ReleaseImage
+		var l []byte
+		if err := rows.Scan(&im.AppID, &im.Image, &l); err != nil {
+			return nil, fmt.Errorf("scan release package: %w", err)
+		}
+		out[im] = append(out[im], l)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) lines(ctx context.Context, query string, args ...any) ([][]byte, error) {

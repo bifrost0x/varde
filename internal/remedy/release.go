@@ -22,9 +22,11 @@ import (
 type ReleaseFix struct {
 	// Tag and Version name the newest release.
 	Tag, Version string
-	// Fixed are the findings the release no longer has, Open those it
-	// still has or cannot be shown to be rid of.
-	Fixed, Open []Flaw
+	// Fixed are the findings the release no longer has; Open those it
+	// still has: no release fixes them yet. Unknown are those Varde cannot
+	// tell about: the package is missing from a list that was not read
+	// completely, or the release's package is not comparable.
+	Fixed, Open, Unknown []Flaw
 	// Newest is set when the container already runs that release or a
 	// later one: no release fixes anything yet.
 	Newest bool
@@ -40,21 +42,29 @@ type Flaw struct {
 }
 
 // Total is the number of findings compared.
-func (f ReleaseFix) Total() int { return len(f.Fixed) + len(f.Open) }
+func (f ReleaseFix) Total() int { return len(f.Fixed) + len(f.Open) + len(f.Unknown) }
+
+// Running is the image a container runs.
+type Running struct {
+	// Repository is the normalised image repository; Tag the version tag
+	// the container runs (for a floating tag the one the registry gives
+	// its image), empty when unknown or not trusted.
+	Repository, Tag string
+}
 
 // ReleaseFixFor compares a container's image findings with the newest
-// release of app, read for the container's host platform (the zero
-// Platform when unknown: amd64). running is the canonical version the
-// container runs; advs returns the advisories a package was matched
-// against, so a package of the release is judged by the same records.
+// release of app (as identify.AppForImage reads the container's image),
+// read for the container's host platform (the zero Platform when unknown:
+// amd64). advs returns the advisories a package was matched against, so a
+// package of the release is judged by the same records.
 //
-// ok is set when the release is newer than running and there are image
-// findings to compare: only then does the result say what the release
-// fixes. Otherwise Tag, Version and Read still name the release when a
-// line for the platform exists, and Newest says that the container runs
-// it already (or a later version); with an unknown running version nothing
-// is claimed.
-func ReleaseFixFor(app *catalog.App, running string, platform registry.Platform, findings []match.Finding, lines []feed.ReleaseLine, advs func(pkg distro.Package) []match.Advisory) (ReleaseFix, bool) {
+// ok is set when the release is newer than the running one, of the same
+// image variant and distribution, and there are image findings to compare:
+// only then does the result say what the release fixes. Otherwise Tag,
+// Version and Read still name the release when a line for the platform
+// exists, and Newest says that the container runs it already (or a later
+// version); nothing else is claimed.
+func ReleaseFixFor(app *catalog.App, run Running, platform registry.Platform, findings []match.Finding, lines []feed.ReleaseLine, advs func(pkg distro.Package) []match.Advisory) (ReleaseFix, bool) {
 	if app == nil {
 		return ReleaseFix{}, false
 	}
@@ -63,15 +73,14 @@ func ReleaseFixFor(app *catalog.App, running string, platform registry.Platform,
 		return ReleaseFix{}, false
 	}
 	fix := ReleaseFix{Tag: rel.Tag, Version: rel.Version, Read: rel.Read}
-	if running == "" {
+	// Both tags are read the same way, without their variant suffix
+	// ("1.2.0-alpine" is release 1.2.0), as update suggestions read them.
+	have, haveSuffix, ok := tagRelease(app, run.Repository, run.Tag)
+	if !ok {
 		return fix, false
 	}
-	have, err := version.Parse(app.Version.Scheme, running)
-	if err != nil {
-		return fix, false
-	}
-	newest, err := version.Parse(app.Version.Scheme, rel.Version)
-	if err != nil {
+	newest, newestSuffix, ok := tagRelease(app, run.Repository, rel.Tag)
+	if !ok {
 		return fix, false
 	}
 	c, ok := newest.Compare(have)
@@ -84,57 +93,115 @@ func ReleaseFixFor(app *catalog.App, running string, platform registry.Platform,
 		fix.Newest = true
 		return fix, false
 	}
+	// Another variant of the image ("-alpine", "-slim", "-bookworm") has
+	// other packages: its list says nothing about the container's.
+	if suffixClass(haveSuffix) != suffixClass(newestSuffix) {
+		return fix, false
+	}
+	// Nor does an image on another distribution release: its packages are
+	// judged by other records than the container's findings were.
+	releaseEco, _, _ := distro.Ecosystem(rel.Distro)
+	for _, f := range findings {
+		if eco, _, ok := strings.Cut(f.Evidence.Package, "/"); f.Image && ok && !distro.Language(eco) && eco != releaseEco {
+			return fix, false
+		}
+	}
 
 	img := &inventory.Container{Distro: rel.Distro, Packages: rel.Packages}
 	system, langs := identify.ImageSystemPackages(img), identify.ImageLanguagePackages(img)
-	byKey := make(map[string]distro.Package, len(system)+len(langs))
+	// An image can carry several copies of a language package; each one
+	// counts.
+	byKey := make(map[string][]distro.Package, len(system)+len(langs))
 	for _, p := range append(system, langs...) {
-		byKey[p.Ecosystem+"/"+p.Name] = p
+		k := p.Ecosystem + "/" + p.Name
+		byKey[k] = append(byKey[k], p)
 	}
 	// A package missing from the release counts as gone only when the
 	// list is complete: the read did not stop at a bound, and neither did
 	// the checked list.
 	complete := !rel.Partial && len(system) < identify.MaxImagePackages && len(langs) < identify.MaxImagePackages
-	releaseEco, _, _ := distro.Ecosystem(rel.Distro)
 
 	for _, f := range findings {
 		if !f.Image {
 			continue
 		}
 		flaw := Flaw{AdvisoryID: f.AdvisoryID, Package: f.Evidence.Package}
-		if fixedIn(f, byKey, complete, releaseEco, advs) {
+		switch inRelease(f, byKey, complete, advs) {
+		case gone:
 			fix.Fixed = append(fix.Fixed, flaw)
-		} else {
+		case still:
 			fix.Open = append(fix.Open, flaw)
+		default:
+			fix.Unknown = append(fix.Unknown, flaw)
 		}
 	}
 	return fix, fix.Total() > 0
 }
 
-// fixedIn reports whether the release no longer has finding f.
-func fixedIn(f match.Finding, byKey map[string]distro.Package, complete bool, releaseEco string, advs func(distro.Package) []match.Advisory) bool {
+// tagRelease is the release a tag names for app, and the variant suffix
+// around it ("-alpine"); ok is false for floating and unrelated tags.
+func tagRelease(app *catalog.App, repository, tag string) (version.Version, string, bool) {
+	if tag == "" {
+		return version.Version{}, "", false
+	}
+	canon, ok := identify.TagRelease(app, repository, tag)
+	if !ok {
+		return version.Version{}, "", false
+	}
+	_, suffix, ok := template(tag, canon)
+	if !ok {
+		return version.Version{}, "", false
+	}
+	v, err := version.Parse(app.Version.Scheme, canon)
+	if err != nil {
+		return version.Version{}, "", false
+	}
+	return v, suffix, true
+}
+
+// presence is what a release says about a finding.
+type presence int
+
+const (
+	unknown presence = iota
+	gone             // the release does not have it
+	still            // the release has it too
+)
+
+// inRelease tells whether the release still has finding f.
+func inRelease(f match.Finding, byKey map[string][]distro.Package, complete bool, advs func(distro.Package) []match.Advisory) presence {
 	eco, name, ok := strings.Cut(f.Evidence.Package, "/")
 	if !ok || eco == "" || name == "" {
-		return false
+		return unknown
 	}
-	p, ok := byKey[eco+"/"+name]
-	if !ok {
-		// Not in the release. A language package is gone; a
-		// distribution's package only when the release is on the same
-		// distribution release: on another, its packages are judged by
-		// other records, which this finding was not matched with.
-		return complete && (distro.Language(eco) || eco == releaseEco)
+	copies := byKey[eco+"/"+name]
+	if len(copies) == 0 {
+		// Not in the release; on the same distribution release (checked
+		// by the caller), or a language package.
+		if complete {
+			return gone
+		}
+		return unknown
 	}
 	// The same matcher and records as the analysis, so the answer agrees
-	// with the findings page; an unverified result is no fix either.
-	pkg := p
-	in := match.Input{App: &catalog.App{ID: distro.SystemAppID(eco, name), Name: name}, Distro: &pkg}
-	for _, r := range match.Match(in, advs(distro.Package{Ecosystem: eco, Name: name, Version: f.Evidence.Version}), match.Enrichment{}) {
-		if sameAdvisory(r, f) {
-			return false
+	// with the findings page. One affected copy keeps the finding; an
+	// unverified result is no answer either way.
+	recs := advs(distro.Package{Ecosystem: eco, Name: name, Version: f.Evidence.Version})
+	out := gone
+	for _, p := range copies {
+		pkg := p
+		in := match.Input{App: &catalog.App{ID: distro.SystemAppID(eco, name), Name: name}, Distro: &pkg}
+		for _, r := range match.Match(in, recs, match.Enrichment{}) {
+			if !sameAdvisory(r, f) {
+				continue
+			}
+			if r.State == match.Affected {
+				return still
+			}
+			out = unknown
 		}
 	}
-	return true
+	return out
 }
 
 // sameAdvisory reports whether two findings name the same advisory.

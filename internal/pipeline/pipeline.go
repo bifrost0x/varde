@@ -458,7 +458,7 @@ func (p *Pipeline) match(ctx context.Context, in matchInput) ([]store.FindingInp
 		if err != nil {
 			return nil, nil, err
 		}
-		advisories[id] = advisoriesFor(apps[id], recs, p.Superseded)
+		advisories[id] = AdvisoriesFor(apps[id], recs, p.Superseded)
 	}
 
 	var out []store.FindingInput
@@ -633,10 +633,16 @@ func withoutForeignCPEs(stored []match.Advisory, app *catalog.App) []match.Advis
 	return out
 }
 
-// advisoriesFor are the stored advisories that count for app: all but
+// Advisories are the stored advisories recs that count for app in the
+// analysis, so a page that matches again agrees with its findings.
+func (p *Pipeline) Advisories(app *catalog.App, recs []store.AdvisoryRecord) []match.Advisory {
+	return AdvisoriesFor(app, recs, p.Superseded)
+}
+
+// AdvisoriesFor are the stored advisories that count for app: all but
 // those of a source that superseded says is no longer refreshed for it.
 // The records stay stored and count again when that changes.
-func advisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded func(*catalog.App, string) bool) []match.Advisory {
+func AdvisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded func(*catalog.App, string) bool) []match.Advisory {
 	if superseded == nil {
 		superseded = feedAlone
 	}

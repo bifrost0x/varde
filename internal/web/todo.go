@@ -9,6 +9,7 @@ import (
 
 	"github.com/bifrost0x/varde/internal/distro"
 	"github.com/bifrost0x/varde/internal/identify"
+	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/store"
 )
@@ -131,30 +132,31 @@ func (a *app) todoGroups(s *snapshot, fs []store.Finding) []todoGroup {
 	return out
 }
 
-// withReleases sets the release of each container group: one read of the
-// release lists and one of the advisories per container that has a newer
-// release, none per finding.
-func (a *app) withReleases(ctx context.Context, s *snapshot, groups []todoGroup, fs []store.Finding) {
-	arch := map[string]string{}
-	for _, h := range s.hosts {
-		arch[h.ID] = h.Arch
+// withReleases sets the release of each container group. It counts all
+// active image findings of the container, as the finding page does, not
+// only those the page's filters show; the reads are shared by all groups.
+func (a *app) withReleases(ctx context.Context, s *snapshot, groups []todoGroup) {
+	hosts := map[string]*inventory.Host{}
+	for i := range s.hosts {
+		hosts[s.hosts[i].ID] = &s.hosts[i]
 	}
 	byWorkload := map[string][]store.Finding{}
-	for _, f := range fs {
+	for _, f := range s.findings {
 		byWorkload[f.WorkloadID] = append(byWorkload[f.WorkloadID], f)
 	}
+	var ins []releaseInput
+	var at []int
 	for i := range groups {
-		g := &groups[i]
-		id, ok := strings.CutPrefix(g.Key, "w:")
-		if g.Kind != "image" || !ok {
-			continue
-		}
-		image := imageFindings(byWorkload[id])
-		if len(image) == 0 {
+		id, ok := strings.CutPrefix(groups[i].Key, "w:")
+		if groups[i].Kind != "image" || !ok {
 			continue
 		}
 		wl := s.byID[id]
-		g.Release = a.containerRelease(ctx, wl, s.ids[wl.ID], arch[wl.HostID], image)
+		ins = append(ins, releaseInput{wl: wl, id: s.ids[wl.ID], host: hosts[wl.HostID], findings: imageFindings(byWorkload[id])})
+		at = append(at, i)
+	}
+	for i, v := range a.containerReleases(ctx, ins) {
+		groups[at[i]].Release = v
 	}
 }
 

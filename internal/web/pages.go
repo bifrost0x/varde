@@ -452,7 +452,7 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		groups = a.groupFindings(s, selected)
 	default:
 		todo = a.todoGroups(s, selected)
-		a.withReleases(r.Context(), s, todo, selected)
+		a.withReleases(r.Context(), s, todo)
 	}
 	sort.Slice(apps, func(i, j int) bool { return apps[i].Name < apps[j].Name })
 	filtered := f != (findingsFilter{})
@@ -556,26 +556,22 @@ func (a *app) imageFinding(ctx context.Context, m match.Finding, wl inventory.Wo
 }
 
 // findingRelease compares the container's active image findings with the
-// newest release of its app and tells whether it fixes finding m.
+// newest release of its app and tells what it does for finding m.
 func (a *app) findingRelease(ctx context.Context, m match.Finding, wl inventory.Workload, id identify.Result) *releaseView {
 	fs, err := a.d.Store.Findings(ctx, store.FindingFilter{WorkloadID: wl.ID})
 	if err != nil {
 		return nil
 	}
-	image := imageFindings(fs)
-	if len(image) == 0 {
-		return nil
-	}
-	arch := ""
+	in := releaseInput{wl: wl, id: id, findings: imageFindings(fs)}
 	if h, err := a.d.Store.Host(ctx, wl.HostID); err == nil {
-		arch = h.Arch
+		in.host = &h
 	}
-	v := a.containerRelease(ctx, wl, id, arch, image)
+	v := a.containerReleases(ctx, []releaseInput{in})[0]
 	if v == nil || !v.Fixes {
 		return v
 	}
 	this := remedy.Flaw{AdvisoryID: m.AdvisoryID, Package: m.Evidence.Package}
-	v.This, v.ThisOpen = slices.Contains(v.Fixed, this), slices.Contains(v.Open, this)
+	v.This, v.ThisOpen, v.ThisUnknown = slices.Contains(v.Fixed, this), slices.Contains(v.Open, this), slices.Contains(v.Unknown, this)
 	return v
 }
 
