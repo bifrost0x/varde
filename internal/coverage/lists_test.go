@@ -62,7 +62,7 @@ verified: 2026-11-08
 		cw("two-lists", "mealie/mealie:v2", nil),
 		cw("catalog-wins", "ghcr.io/immich-app/immich-server:v3", nil),
 		cw("reviewed-repo", "altran1502/immich-proxy:v3", nil),
-		cw("db", "postgres:16", nil),
+		cw("db", "pgvector/pgvector:pg16", nil),
 		cw("namesake", "registry.lan/vabene1111/recipes:1.5", nil),
 		cw("same-repo-a", "paperless/ngx:2", nil),
 		cw("same-repo-b", "paperless/ngx-worker:2", nil),

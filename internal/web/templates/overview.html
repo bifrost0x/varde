@@ -107,7 +107,7 @@
       {{if $d.Coverage.Weak}}<li><a href="/systems/gaps#weak">{{plural (len $d.Coverage.Weak) "probable match"}} to confirm</a></li>{{end}}
       {{if $d.Coverage.PublicRoutes}}<li><a href="/systems/gaps#routes">{{plural (len $d.Coverage.PublicRoutes) "public route"}} Varde cannot check</a></li>{{end}}
       {{if and (not $d.Coverage.BlindSpots) (not $d.Empty)}}<li>No blind spots found.</li>{{end}}
-      {{if $d.Coverage.NotApps}}<li><a href="/systems/gaps#not-apps">{{plural (len $d.Coverage.NotApps) "helper container"}} not counted</a></li>{{end}}
+      {{if $d.Coverage.NotApps}}<li><a href="/systems/gaps#not-apps">{{plural (len $d.Coverage.NotApps) "supporting container"}}</a>, packages checked</li>{{end}}
     </ul>
   </section>
   <section class="panel" aria-labelledby="sources-title">

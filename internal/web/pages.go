@@ -667,6 +667,10 @@ type gap struct {
 	// "not an app" mark; Marked is set when the user made that mark.
 	Repository string
 	Marked     bool
+	// Pending is set for an unknown version Varde is still finding out by
+	// itself (the registry has not been asked yet); RegistryOff when it
+	// could, but asking the registry is switched off.
+	Pending, RegistryOff bool
 }
 
 type coverageView struct {
@@ -718,8 +722,16 @@ func (a *app) coverageData(s *snapshot) coverageView {
 		unidentified[ug.Repository] = len(c.Unidentified)
 		c.Unidentified = append(c.Unidentified, ug)
 	}
+	registry := a.d.Settings.Get().RegistryTags
+	asked, _ := a.d.Store.RepositoryTags(context.Background())
 	for _, g := range c.Summary.VersionUnknown {
-		c.VersionUnknown = append(c.VersionUnknown, a.toGap(g))
+		vg := a.toGap(g)
+		if remedy.Floating(g.Workload.Container) {
+			// A moving tag: the registry tells which version it points to.
+			_, done := asked[vg.Repository]
+			vg.RegistryOff, vg.Pending = !registry, registry && !done
+		}
+		c.VersionUnknown = append(c.VersionUnknown, vg)
 	}
 	for _, g := range c.Summary.Weak {
 		c.Weak = append(c.Weak, a.toGap(g))

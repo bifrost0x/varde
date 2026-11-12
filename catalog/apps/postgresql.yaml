@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+id: postgresql
+name: PostgreSQL
+homepage: https://www.postgresql.org
+tags: [database]
+images:
+  - match: library/postgres
+    note: Docker official image
+version:
+  scheme: semver
+  sources:
+    - tag: '^(?P<v>\d+\.\d+)(?:-[a-z][a-z0-9.]*)*$'
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:a:postgresql:postgresql
+  notes: >-
+    PostgreSQL publishes its security fixes with affected and fixed versions at
+    https://www.postgresql.org/support/security/; it has no GitHub repository advisories. CVEs are
+    matched via the NVD CPE. Versions have two numbers from 10 on (16.4). Tags: 16.4, 16.4-alpine,
+    16.4-bookworm are pinned; 16, 16-alpine and latest are floating and are resolved through the
+    registry or stay unknown. Images that build on it (pgvector, pgvecto.rs, the Immich database
+    image) carry their own tags and are not listed. Written on 2026-11-12 from the project's public
+    facts without a fresh look at the live sources; the CPE, the advisory repository and the tag
+    forms are to be confirmed on the next review of this entry.
+exposure_hints:
+  default_ports: [5432]
+  typical: internal
+eol: postgresql
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-12

@@ -21,18 +21,13 @@ const (
 	KindUser     = "marked as not an app"
 )
 
-// helpers are well-known images that support apps rather than being one.
-// They have no catalog entry on purpose: their advisories concern the app
-// stack they serve, and listing them as "not in the catalog" buries the gaps
-// that matter. Keys are normalised repositories.
+// helpers are well-known images that support apps rather than being one
+// and have no catalog entry: listing them as "not in the catalog" buries
+// the gaps that matter. The packages of their images are checked like those
+// of every container. The databases with advisories of their own
+// (PostgreSQL, Redis, Valkey, MariaDB, MySQL, MongoDB, Memcached) are
+// catalog entries and count as apps. Keys are normalised repositories.
 var helpers = map[string]string{
-	"docker.io/library/postgres":              KindDatabase,
-	"docker.io/library/mariadb":               KindDatabase,
-	"docker.io/library/mysql":                 KindDatabase,
-	"docker.io/library/mongo":                 KindDatabase,
-	"docker.io/library/redis":                 KindDatabase,
-	"docker.io/library/memcached":             KindDatabase,
-	"docker.io/valkey/valkey":                 KindDatabase,
 	"docker.io/bitnami/postgresql":            KindDatabase,
 	"docker.io/bitnami/redis":                 KindDatabase,
 	"docker.io/bitnami/mariadb":               KindDatabase,
