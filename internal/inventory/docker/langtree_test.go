@@ -174,7 +174,7 @@ func TestWalkLanguageRoots(t *testing.T) {
 
 	// The byte budget is handed on reduced by what earlier roots used.
 	var budgets []int64
-	got, err = WalkLanguageRoots(ctx, "", func(root string, budget int64, read func(*tar.Reader) error) error {
+	got, err = WalkLanguageRoots(ctx, "", func(_ string, budget int64, read func(*tar.Reader) error) error {
 		budgets = append(budgets, budget)
 		if len(budgets) == 1 {
 			return read(tarOf(t, one))
