@@ -373,3 +373,73 @@ func TestGoProgramsOnView(t *testing.T) {
 		t.Fatal("a script read as a Go program")
 	}
 }
+
+// A program candidate that is a symlink is not read, as in a container,
+// and leaves the view complete: Debian's /usr/bin/python3 -> python3.11.
+func TestSymlinkedProgramCandidate(t *testing.T) {
+	img := newImage(t, gzipType, []entry{
+		file("etc/os-release", "ID=debian\nVERSION_ID=\"12\"\n"),
+		file("var/lib/dpkg/status", statusFile),
+		symlink("usr/bin/python3", "python3.11"),
+		file("usr/bin/python3.11", strings.Repeat("\x7fELF", 512)),
+	})
+	cfg := docker.ImageConfig{Cmd: []string{"python3", "app.py"}}
+	v := build(t, img, cfg, Limits{})
+	if _, err := v.Source().ReadGoBuildInfo(t.Context(), "/usr/bin/python3"); !errors.Is(err, docker.ErrNoFile) {
+		t.Fatalf("symlinked candidate: err %v, want ErrNoFile", err)
+	}
+	got, err := docker.ReadPackages(t.Context(), v.Source(), cfg)
+	if err != nil || got.Distro != "debian-12" || got.Partial {
+		t.Fatalf("read = %+v, %v", got, err)
+	}
+	if v.Partial() {
+		t.Fatal("a symlinked program candidate marked the view partial")
+	}
+}
+
+// Entries below a kept directory symlink land where the link leads.
+func TestEntryBelowSymlinkedDir(t *testing.T) {
+	img := newImage(t, gzipType,
+		[]entry{symlink("lib", "usr/lib"), file("usr/lib/apk/db/installed", "P:old\n")},
+		[]entry{file("lib/apk/db/installed", "P:musl\n")},
+	)
+	v := build(t, img, docker.ImageConfig{}, Limits{})
+	for _, f := range []string{"/lib/apk/db/installed"} {
+		if got, err := readFile(t, v, f); err != nil || got != "P:musl\n" {
+			t.Fatalf("%s = %q, %v", f, got, err)
+		}
+	}
+	img = newImage(t, gzipType,
+		[]entry{symlink("lib", "usr/lib"), file("usr/lib/apk/db/installed", "P:old\n")},
+		[]entry{file("lib/apk/.wh.db", "")},
+	)
+	v = build(t, img, docker.ImageConfig{}, Limits{})
+	if _, err := readFile(t, v, "/lib/apk/db/installed"); !errors.Is(err, docker.ErrNoFile) {
+		t.Fatalf("whiteout through a symlinked parent: err %v", err)
+	}
+	if v.Partial() {
+		t.Fatal("view marked partial")
+	}
+}
+
+// A file replacing a lower version counts only its own bytes.
+func TestReplacedFileFreesKeptBytes(t *testing.T) {
+	body := strings.Repeat("x", 600)
+	img := newImage(t, tarType,
+		[]entry{file("var/lib/dpkg/status", body)},
+		[]entry{file("var/lib/dpkg/status", body+"y")},
+	)
+	v := build(t, img, docker.ImageConfig{}, Limits{KeptBytes: 1000})
+	if got, err := readFile(t, v, "/var/lib/dpkg/status"); err != nil || got != body+"y" || v.Partial() {
+		t.Fatalf("replaced status = %d bytes, %v, partial %v", len(got), err, v.Partial())
+	}
+}
+
+func TestBuildStopsOnCancel(t *testing.T) {
+	img := newImage(t, gzipType, []entry{file("etc/os-release", "ID=debian\n")})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := Build(ctx, img.layers, img.open, docker.ImageConfig{}, Limits{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled build: err %v", err)
+	}
+}

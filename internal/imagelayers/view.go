@@ -175,6 +175,20 @@ func (b *boundedReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// ctxReader ends a layer stream, the drain at its end included, once ctx
+// is done.
+type ctxReader struct {
+	ctx context.Context
+	io.ReadCloser
+}
+
+func (c ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.ReadCloser.Read(p)
+}
+
 // trackReader remembers the error of the stream under a parser, which may
 // turn a read error into a verdict about the content.
 type trackReader struct {
@@ -198,6 +212,7 @@ func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, lef
 		return 0, fmt.Errorf("imagelayers: layer %s: %w", l.Digest, err)
 	}
 	defer func() { _ = rc.Close() }()
+	rc = ctxReader{ctx: ctx, ReadCloser: rc}
 	dec, err := decompress(l.MediaType, rc)
 	if err != nil {
 		return 0, fmt.Errorf("imagelayers: layer %s: %w", l.Digest, err)
@@ -300,6 +315,18 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 	// Names are rooted at the image's root: "../" cannot climb above it.
 	p := path.Clean("/" + hdr.Name)
 	base, parent := path.Base(p), path.Dir(p)
+	// A directory above the entry may be a kept symlink (lib -> usr/lib):
+	// the entry belongs where the link leads, as when the layer is
+	// unpacked.
+	dir, crossed, ok := v.resolveDir(parent)
+	if !ok {
+		// A link loop above the entry: where it belongs is unknown.
+		v.partial.Store(true)
+		return nil
+	}
+	if crossed {
+		parent, p = dir, path.Join(dir, base)
+	}
 	switch {
 	case base == ".wh..wh..opq":
 		if v.below[parent] > 0 {
@@ -379,7 +406,7 @@ func (v *View) addFile(p string, size int64, use docker.FileUse, limit int64, r 
 		if tr.err != nil {
 			return tr.err
 		}
-	case v.kept+size > v.lim.KeptBytes:
+	case v.kept-v.keptAt(p)+size > v.lim.KeptBytes:
 		v.remove(p)
 		v.partial.Store(true)
 		return nil
@@ -395,6 +422,14 @@ func (v *View) addFile(p string, size int64, use docker.FileUse, limit int64, r 
 	}
 	v.put(p, n)
 	return nil
+}
+
+// keptAt returns the bytes held at p, which a new file at p replaces.
+func (v *View) keptAt(p string) int64 {
+	if n := v.files[p]; n != nil {
+		return int64(len(n.data))
+	}
+	return 0
 }
 
 // put stores n at p for the current layer, within Files.
@@ -493,9 +528,31 @@ func (v *View) resolve(p string) (real string, crossed bool, err error) {
 	return cur, crossed, nil
 }
 
+// resolveDir is resolve for the directory of an archive entry; ok is
+// false for a link loop.
+func (v *View) resolveDir(dir string) (real string, crossed, ok bool) {
+	real, crossed, err := v.resolve(dir)
+	return real, crossed, err == nil
+}
+
 // lookup returns the node a read of file for want reaches through links.
 func (v *View) lookup(file string, want docker.FileUse) (*node, error) {
-	real, crossed, err := v.resolve(file)
+	var real string
+	var crossed bool
+	var err error
+	if want == docker.Program {
+		// As in a container: links in the directories above a program
+		// are followed (a merged /usr), a link at the program itself is
+		// not read. /usr/bin/python3 -> python3.11 is no program read.
+		var dir string
+		dir, crossed, err = v.resolve(path.Dir(file))
+		real = path.Join(dir, path.Base(file))
+		if n := v.files[real]; err == nil && n != nil && n.isLink {
+			return nil, docker.ErrNoFile
+		}
+	} else {
+		real, crossed, err = v.resolve(file)
+	}
 	if err != nil {
 		return nil, err
 	}
