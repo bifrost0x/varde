@@ -102,6 +102,28 @@
   </ol>
 </section>{{end}}
 
+{{/* What is left to set up, on one line: it reminds without taking the page, opens on a click and can be hidden. */}}
+{{define "setup"}}{{$d := .Data}}{{$g := $d.Guide}}{{if or (ge $g.Next 0) $d.Steps}}
+{{if $d.SetupHidden}}
+<form class="setup-hidden small muted" method="post" action="/setup-guide/show">{{template "csrf" .CSRF}}{{if ge $g.Next 0}}{{plural $d.SetupLeft "setup step"}} left, hidden.{{else}}Suggestions for further connections are hidden.{{end}} <button class="btn btn--ghost" type="submit">Show</button></form>
+{{else}}
+<details class="panel setup" id="get-started">
+  <summary><span class="setup__title"><strong>{{if ge $g.Next 0}}Setup: {{plural $d.SetupLeft "step"}} left{{else}}More to connect{{end}}</strong>{{if ge $g.Next 0}}{{with index $g.Steps $g.Next}} <span class="muted">Next: {{.Title}}</span>{{end}}{{end}}</span><span class="setup__open small">Show the steps</span></summary>
+  {{if ge $g.Next 0}}
+  <ul class="notice-list">{{range $i, $s := $g.Steps}}{{if not $s.Done}}<li><strong>{{$s.Title}}</strong><span class="cell-sub">{{$s.Text}}</span>{{if $s.Link}}{{if eq $i $g.Next}}<a class="btn btn--primary" href="{{$s.Link}}">{{$s.Action}}</a>{{else}}<a class="small" href="{{$s.Link}}">{{$s.Action}}</a>{{end}}{{end}}</li>{{end}}{{end}}</ul>
+  {{end}}
+  {{if $d.Steps}}
+  <h3 class="small">Connections that show you more</h3>
+  <p class="small">Ranked by what they show you. Each one says what Varde may do afterwards; every connection is read-only and can be switched off or removed under <a href="/connections">Connections</a>.</p>
+  <ol class="steps">{{range $d.Steps}}
+    <li><a href="{{.Link}}"><strong>{{.Title}}</strong></a><span class="cell-sub">{{.Gain}}</span><span class="cell-sub"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#lock"></use></svg> {{.Grant}}</span></li>
+  {{end}}</ol>
+  {{end}}
+  <form method="post" action="/setup-guide/hide" class="actions">{{template "csrf" .CSRF}}<button class="btn btn--ghost" type="submit">Hide this</button><span class="small muted">It stays one click away at the same place.</span></form>
+</details>
+{{end}}
+{{end}}{{end}}
+
 {{define "guiderest"}}{{if ge .Next 0}}<section class="panel" id="get-started" aria-labelledby="rest-title">
   <h2 id="rest-title">Left to set up</h2>
   <ul class="notice-list">{{range .Steps}}{{if not .Done}}<li>{{if .Link}}<a href="{{.Link}}"><strong>{{.Title}}</strong></a>{{else}}<strong>{{.Title}}</strong>{{end}}<span class="cell-sub">{{.Text}}</span></li>{{end}}{{end}}</ul>

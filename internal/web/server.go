@@ -51,6 +51,10 @@ type Deps struct {
 	Channels []string
 	// LastScan returns the time of the last successful inventory sync.
 	LastScan func() time.Time
+	// CatchingUp reports that advisory data is still being fetched: no run
+	// through the sources has finished yet, or one is under way. limited
+	// is set when a source put requests off for later. Nil when unknown.
+	CatchingUp func() (catchingUp, limited bool)
 	// LocalDocker is set when the local Docker collector runs.
 	LocalDocker bool
 	// Mode is the advisory mode (direct, feed or hybrid); empty means direct.
@@ -128,6 +132,7 @@ func New(d Deps) (http.Handler, error) {
 
 	mux.Handle("GET /{$}", a.user(a.overview))
 	mux.Handle("POST /scan", a.user(a.scan))
+	mux.Handle("POST /setup-guide/{action}", a.user(a.setupGuide))
 	mux.Handle("GET /findings", a.user(a.findings))
 	mux.Handle("GET /findings/paths", a.user(a.attackPaths))
 	mux.Handle("GET /findings/noise", a.user(a.noise))
@@ -312,6 +317,15 @@ func (a *app) page(w http.ResponseWriter, r *http.Request, cur *auth.Current, st
 	}
 	if !a.d.Sessions.Secure(r) && !v.OwnSecurityNote {
 		v.Banners = append(v.Banners, Banner{"warn", "lock", insecureText(a.d.Sessions.UntrustedTLSProxy(r))})
+	}
+	if a.d.CatchingUp != nil {
+		// What the pages show is not final while the sources are still
+		// being read: say so, or early results look like all there is.
+		if busy, limited := a.d.CatchingUp(); limited {
+			v.Banners = append(v.Banners, Banner{"info", "refresh", "Varde is still fetching advisory data: a source limits how many requests it accepts per hour, so the rest follows by itself over the next hours. Findings and versions keep arriving until then; what is shown is not yet everything."})
+		} else if busy {
+			v.Banners = append(v.Banners, Banner{"info", "refresh", "Varde is fetching advisory data for what it found. Findings and versions keep arriving until the first round through every source is done; what is shown is not yet everything. This notice goes away by itself."})
+		}
 	}
 	if msg, ok := notices[r.URL.Query().Get("ok")]; ok {
 		v.Notice = msg

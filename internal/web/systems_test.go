@@ -373,3 +373,60 @@ func TestRestartNeeded(t *testing.T) {
 		t.Error("overview without the restart panel")
 	}
 }
+
+// Once Varde has something to show, the setup guide is one line under the
+// numbers, not a block above them, and the user can hide it.
+func TestSetupReminderCompactAndHideable(t *testing.T) {
+	h := newHarness(t, withNetwork(t), withAgentBinaries(t))
+	csrf := h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "immich", Container: &inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.120.0"}},
+	}, now)
+	_, body := h.do(t, "GET", "/", nil, nil)
+	if strings.Contains(body, "Finish getting started") || strings.Contains(body, `class="panel guide"`) {
+		t.Error("the full guide is shown although Varde has something to show")
+	}
+	setup, stats := strings.Index(body, `<details class="panel setup"`), strings.Index(body, `class="stats"`)
+	if setup < 0 || stats < 0 || setup < stats {
+		t.Fatalf("the setup reminder is missing or above the numbers (setup %d, stats %d)", setup, stats)
+	}
+	if !strings.Contains(body, "Setup: ") || !strings.Contains(body, "Next: Allow your networks") || !strings.Contains(body, `action="/setup-guide/hide"`) {
+		t.Error("the reminder does not name what is left or cannot be hidden")
+	}
+	if resp, _ := h.do(t, "POST", "/setup-guide/hide", url.Values{"csrf": {csrf}}, nil); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("hide: %d", resp.StatusCode)
+	}
+	_, body = h.do(t, "GET", "/", nil, nil)
+	if strings.Contains(body, `<details class="panel setup"`) || !strings.Contains(body, `action="/setup-guide/show"`) || !strings.Contains(body, "left, hidden") {
+		t.Error("hidden reminder still shown, or no way to bring it back")
+	}
+	if resp, _ := h.do(t, "POST", "/setup-guide/show", url.Values{"csrf": {csrf}}, nil); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("show: %d", resp.StatusCode)
+	}
+	if _, body = h.do(t, "GET", "/", nil, nil); !strings.Contains(body, `<details class="panel setup"`) {
+		t.Error("reminder not back after show")
+	}
+}
+
+// While advisory data is still being fetched, every page says that what it
+// shows is not yet everything.
+func TestCatchingUpNotice(t *testing.T) {
+	busy, limited := true, false
+	h := newHarness(t, func(d *Deps) { d.CatchingUp = func() (bool, bool) { return busy, limited } })
+	h.signIn(t)
+	for _, path := range []string{"/", "/findings", "/systems/gaps"} {
+		if _, body := h.do(t, "GET", path, nil, nil); !strings.Contains(body, "Findings and versions keep arriving") || !strings.Contains(body, "goes away by itself") {
+			t.Errorf("%s does not say that data is still arriving", path)
+		}
+	}
+	limited = true
+	if _, body := h.do(t, "GET", "/", nil, nil); !strings.Contains(body, "limits how many requests") {
+		t.Error("a rate limit is not named")
+	}
+	busy, limited = false, false
+	if _, body := h.do(t, "GET", "/", nil, nil); strings.Contains(body, "keep arriving") {
+		t.Error("the notice stays after the data is complete")
+	}
+}

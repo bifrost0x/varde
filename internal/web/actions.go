@@ -215,3 +215,20 @@ func (a *app) unmarkNotAnApp(w http.ResponseWriter, r *http.Request, cur *auth.C
 	a.d.Analyze(ctx)
 	http.Redirect(w, r, "/systems/gaps?ok=is-an-app#unidentified", http.StatusSeeOther)
 }
+
+// setupCookie remembers that the user hid the setup reminder on the
+// overview. It holds no data about the installation and is kept per
+// browser: hiding is a matter of the person looking, not of Varde.
+const setupCookie = "varde_setup"
+
+// setupGuide hides or shows the setup reminder of the overview.
+func (a *app) setupGuide(w http.ResponseWriter, r *http.Request, _ *auth.Current) {
+	c := &http.Cookie{Name: setupCookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: a.d.Sessions.Secure(r)} //nolint:gosec // Secure follows the session cookie, see Sessions.Secure
+	if r.PathValue("action") == "hide" {
+		c.Value, c.MaxAge = "hidden", 365*24*3600
+	} else {
+		c.MaxAge = -1
+	}
+	http.SetCookie(w, c)
+	http.Redirect(w, r, "/#get-started", http.StatusSeeOther)
+}
