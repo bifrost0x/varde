@@ -721,3 +721,19 @@ func TestPriority(t *testing.T) {
 		t.Fatalf("jobs %v", ids)
 	}
 }
+
+// A stored line that does not decode is not shipped and is counted.
+func TestUndecodableRowCounted(t *testing.T) {
+	f := newRegistry(t)
+	f.push(t, "org/app", "1.0.0", false, debian("amd64", "", "bash=5.2"))
+	cat := newCatalog(t, []catalog.Entry{reviewedEntry("app", regHost+"/org/app")}, nil)
+	r, s := newReader(t, f)
+	if err := s.PutReleaseRead(t.Context(), "app", regHost+"/org/app", "linux/amd64", "1.0.0", digestOf([]byte("i")), []byte("not json"), now0); err != nil {
+		t.Fatal(err)
+	}
+	r.MaxManifests = 1 // nothing is read
+	lines, st := run(t, r, cat)
+	if len(lines) != 0 || st.Invalid != 1 || !st.BudgetSpent {
+		t.Fatalf("stats %+v lines %+v", st, lines)
+	}
+}

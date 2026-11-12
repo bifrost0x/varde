@@ -651,6 +651,12 @@ func (r *Reader) shipped(ctx context.Context, jobs []job, cur map[job]readID, st
 		if err != nil {
 			return nil, err
 		}
+		for _, s := range prev {
+			if s.digest == "" {
+				// A stored line that does not decode.
+				st.Invalid++
+			}
+		}
 		id, known := cur[j]
 		for _, s := range latest(prev, id, known) {
 			if err := s.line.Validate(); err != nil || s.line.AppID != j.app.ID || s.line.Image != j.image {
@@ -687,8 +693,10 @@ type layerCache struct {
 // missing returns the most bytes building the view of layers with cfg
 // fetches: the layers whose record is missing or not known to hold the
 // content cfg reads, up to the layer at which the build reaches
-// LayerBytes (a layer's compressed size stands in for its unpacked size,
-// which is not smaller). A store failure is a *storeError.
+// LayerBytes. The unpacked size of a layer not read yet is unknown; it is
+// taken as the least its compressed size allows (minUnpacked), so the
+// count goes on at least as far as the build does. A store failure is a
+// *storeError.
 func (c *layerCache) missing(ctx context.Context, layers []registry.Layer, cfg docker.ImageConfig, lim imagelayers.Limits) (int64, error) {
 	keys, err := imagelayers.LayerKeys(layers, lim)
 	if err != nil {
@@ -715,10 +723,17 @@ func (c *layerCache) missing(ctx context.Context, layers []registry.Layer, cfg d
 			unpacked += rec.Used
 		default:
 			need += layers[i].Size
-			unpacked += layers[i].Size
+			unpacked += minUnpacked(layers[i].Size)
 		}
 	}
 	return need, nil
+}
+
+// minUnpacked is a lower bound of the unpacked size of a compressed layer
+// of size bytes: gzip and zstd add at most a few bytes per block (stored
+// blocks of incompressible content) plus headers, a plain tar nothing.
+func minUnpacked(size int64) int64 {
+	return max(size-size/1024-1024, 0)
 }
 
 func (c *layerCache) Layer(ctx context.Context, key string) (*imagelayers.LayerRecord, error) {

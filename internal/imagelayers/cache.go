@@ -24,7 +24,7 @@ import (
 // recordFormat is the version of LayerRecord. Raise it when add, addFile
 // or the meaning of a record changes: every older record is then missed
 // and its layer read again.
-const recordFormat = 2
+const recordFormat = 3
 
 // Cache keeps layer records between builds. Layer returns nil for a key it
 // does not hold.
@@ -47,8 +47,64 @@ type LayerRecord struct {
 	// Used is the uncompressed size of the layer, counted against
 	// Limits.LayerBytes as when the layer is read.
 	Used int64 `json:"u"`
-	// Configs are the ConfigKeys the record holds all content for.
+	// Configs are the ConfigKeys the record holds all content for, the
+	// latest maxRecordConfigs.
 	Configs []string `json:"c,omitempty"`
+
+	// size is the estimated encoded size of Entries; over says the layer
+	// had more members or content than a record holds, which is then
+	// neither kept nor stored.
+	size int64
+	over bool
+}
+
+// The bounds of one record. A layer beyond them is read every time, like a
+// layer cut at LayerBytes: a hostile layer of millions of empty files must
+// not become a huge record in memory or in the store.
+const (
+	// recordMembersPerFile times Limits.Files is the most archive members.
+	recordMembersPerFile = 4
+	// MaxRecordBytes bounds the estimated encoded size of a record.
+	MaxRecordBytes = 128 << 20
+	// maxRecordConfigs bounds Configs; older config keys are dropped,
+	// which costs at most a conservative byte estimate.
+	maxRecordConfigs = 16
+)
+
+// add appends e unless the record is over its bounds.
+func (rec *LayerRecord) add(e RecordEntry, maxMembers int) {
+	if rec.over {
+		return
+	}
+	rec.size += e.size()
+	if len(rec.Entries) >= maxMembers || rec.size > MaxRecordBytes {
+		rec.over, rec.Entries = true, nil
+		return
+	}
+	rec.Entries = append(rec.Entries, e)
+}
+
+// size estimates the encoded size of e: base64 grows bytes by a third,
+// and every member carries field names and punctuation.
+func (e *RecordEntry) size() int64 {
+	n := int64(len(e.Name)+len(e.Link)+len(e.Data)+len(e.ProgramErr))*4/3 + 48
+	if e.Program != nil {
+		n += int64(len(e.Program.Info.GoVersion)) + 16
+		for _, p := range append(e.Program.Info.Packages, e.Program.Crates...) {
+			n += int64(len(p.Manager)+len(p.Name)+len(p.Version)+len(p.Distro)+len(p.Source)+len(p.SourceVersion)+len(p.Path)) + 96
+		}
+	}
+	return n
+}
+
+// addConfig records cfgKey as covered, keeping the latest
+// maxRecordConfigs keys.
+func (rec *LayerRecord) addConfig(cfgKey string) {
+	rec.Configs = slices.DeleteFunc(rec.Configs, func(c string) bool { return c == cfgKey })
+	rec.Configs = append(rec.Configs, cfgKey)
+	if n := len(rec.Configs); n > maxRecordConfigs {
+		rec.Configs = rec.Configs[n-maxRecordConfigs:]
+	}
 }
 
 // Covers reports whether the record holds all content a view of an image
@@ -57,11 +113,12 @@ func (rec *LayerRecord) Covers(cfg docker.ImageConfig) bool {
 	return slices.Contains(rec.Configs, ConfigKey(cfg))
 }
 
-// RecordEntry is one archive member of a LayerRecord.
+// RecordEntry is one archive member of a LayerRecord. Name and Link are
+// bytes, so names that are not UTF-8 replay exactly.
 type RecordEntry struct {
-	Name string `json:"n"`
+	Name []byte `json:"n"`
 	Type byte   `json:"t"`
-	Link string `json:"l,omitempty"`
+	Link []byte `json:"l,omitempty"`
 	Size int64  `json:"s,omitempty"`
 	// HasData says that Data is the member's content.
 	HasData bool   `json:"h,omitempty"`
@@ -77,7 +134,7 @@ type RecordEntry struct {
 var errNoContent = errors.New("imagelayers: layer record lacks content")
 
 func recordOf(hdr *tar.Header, made *node) RecordEntry {
-	e := RecordEntry{Name: hdr.Name, Type: hdr.Typeflag, Link: hdr.Linkname, Size: hdr.Size}
+	e := RecordEntry{Name: []byte(hdr.Name), Type: hdr.Typeflag, Link: []byte(hdr.Linkname), Size: hdr.Size}
 	switch {
 	case made == nil || made.tooLarge:
 	case made.use != docker.Program:
@@ -111,32 +168,40 @@ func (e *RecordEntry) program(n *node) bool {
 	return true
 }
 
-// merge adds the content old holds and rec lacks; both must record the
-// same members.
-func (rec *LayerRecord) merge(old *LayerRecord) {
+// merged returns rec with the content old holds and rec lacks; rec itself
+// when both do not record the same members or the merge would not fit a
+// record.
+func (rec *LayerRecord) merged(old *LayerRecord) *LayerRecord {
 	if len(old.Entries) != len(rec.Entries) || old.Used != rec.Used {
-		return
+		return rec
 	}
 	for i := range rec.Entries {
 		n, o := &rec.Entries[i], &old.Entries[i]
-		if n.Name != o.Name || n.Type != o.Type || n.Size != o.Size || n.Link != o.Link {
-			return
+		if !bytes.Equal(n.Name, o.Name) || n.Type != o.Type || n.Size != o.Size || !bytes.Equal(n.Link, o.Link) {
+			return rec
 		}
 	}
-	for i := range rec.Entries {
-		n, o := &rec.Entries[i], &old.Entries[i]
+	out := &LayerRecord{Entries: slices.Clone(rec.Entries), Used: rec.Used}
+	for i := range out.Entries {
+		n, o := &out.Entries[i], &old.Entries[i]
 		if !n.HasData && o.HasData && int64(len(o.Data)) == n.Size {
 			n.HasData, n.Data = true, o.Data
 		}
 		if !n.hasProgram() && o.hasProgram() {
 			n.Program, n.NotGo, n.ProgramErr = o.Program, o.NotGo, o.ProgramErr
 		}
+		out.size += n.size()
+	}
+	if out.size > MaxRecordBytes {
+		return rec
 	}
 	for _, c := range old.Configs {
-		if !slices.Contains(rec.Configs, c) {
-			rec.Configs = append(rec.Configs, c)
-		}
+		out.addConfig(c)
 	}
+	for _, c := range rec.Configs {
+		out.addConfig(c)
+	}
+	return out
 }
 
 // ConfigKey identifies what a view of an image with cfg reads:
@@ -220,7 +285,7 @@ func (v *View) cachedLayer(ctx context.Context, l registry.Layer, open Opener, l
 			return used, err
 		default:
 			if !slices.Contains(old.Configs, cfgKey) {
-				old.Configs = append(old.Configs, cfgKey)
+				old.addConfig(cfgKey)
 				if err := cache.PutLayer(ctx, key, old); err != nil {
 					return used, fmt.Errorf("imagelayers: layer %s: cache: %w", l.Digest, err)
 				}
@@ -235,8 +300,12 @@ func (v *View) cachedLayer(ctx context.Context, l registry.Layer, open Opener, l
 		// read it in full.
 		return used, err
 	}
+	if rec.over {
+		// Too large to record: read again by every build.
+		return used, nil
+	}
 	if old != nil {
-		rec.merge(old)
+		rec = rec.merged(old)
 	}
 	if err := cache.PutLayer(ctx, key, rec); err != nil {
 		return used, fmt.Errorf("imagelayers: layer %s: cache: %w", l.Digest, err)
@@ -258,12 +327,12 @@ func (v *View) replayLayer(ctx context.Context, rec *LayerRecord, left int64) (i
 		}
 		e := &rec.Entries[i]
 		v.replay = e
-		hdr := &tar.Header{Name: e.Name, Typeflag: e.Type, Linkname: e.Link, Size: e.Size}
+		hdr := &tar.Header{Name: string(e.Name), Typeflag: e.Type, Linkname: string(e.Link), Size: e.Size}
 		if err := v.add(hdr, bytes.NewReader(e.Data)); err != nil {
 			if errors.Is(err, errNoContent) {
 				return 0, err
 			}
-			return 0, fmt.Errorf("imagelayers: replaying %s: %w", e.Name, err)
+			return 0, fmt.Errorf("imagelayers: replaying %q: %w", e.Name, err)
 		}
 	}
 	return rec.Used, nil

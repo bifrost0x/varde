@@ -99,6 +99,10 @@ func TestCacheReplaysLayers(t *testing.T) {
 		"kept bytes": {lim: Limits{KeptBytes: 100}, layers: [][]entry{
 			{file("var/lib/dpkg/status", statusFile), file("etc/os-release", strings.Repeat("y", 90))},
 		}},
+		"names that are not UTF-8": {layers: [][]entry{
+			{file("var/lib/dpkg/status.d/\xff\xfe", statusFile), symlink("etc/os-release", "../usr/lib/os-\xffrelease"), file("usr/lib/os-\xffrelease", "ID=debian\n")},
+			{file("var/lib/dpkg/status.d/.wh.\xff\xfe", "")},
+		}},
 		"files": {lim: Limits{Files: 2}, layers: [][]entry{
 			{file("var/lib/dpkg/status", statusFile), file("etc/os-release", "ID=debian\n"), file("lib/apk/db/installed", "P:musl\n")},
 		}},
@@ -280,5 +284,64 @@ func TestLayerKeys(t *testing.T) {
 		[]string{d("a"), gzipType + "\x01" + d("b") + "\x00" + gzipType}})
 	if crafted == base[1] || crafted == base[0] {
 		t.Fatal("crafted media type reproduced a chain key")
+	}
+}
+
+// A layer with more members than a record holds is read correctly and
+// not recorded, and its members are not kept while it is read.
+func TestCacheMemberCap(t *testing.T) {
+	var many []entry
+	for i := range 40 {
+		many = append(many, file(fmt.Sprintf("usr/share/doc/f%d", i), ""))
+	}
+	many = append(many, file("var/lib/dpkg/status", statusFile))
+	img := newImage(t, gzipType, []entry{file("etc/os-release", "ID=debian\n")}, many)
+	lim := Limits{Files: 2} // records hold at most 8 members
+	cache := &memCache{recs: map[string][]byte{}}
+	v, err := BuildCached(t.Context(), img.layers, img.open, docker.ImageConfig{}, lim, cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := snapshot(v), snapshot(build(t, img, docker.ImageConfig{}, lim)); got != want {
+		t.Fatalf("view:\n%s\nwant\n%s", got, want)
+	}
+	keys, err := LayerKeys(img.layers, lim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cache.recs[keys[0]]; !ok || cache.puts != 1 {
+		t.Fatalf("small layer recorded %v, %d records", ok, cache.puts)
+	}
+	if _, ok := cache.recs[keys[1]]; ok {
+		t.Fatal("layer over the member cap recorded")
+	}
+	rec := &LayerRecord{}
+	w := &View{cfg: docker.ImageConfig{}, lim: lim.withDefaults(), files: map[string]*node{}, below: map[string]int{}}
+	if _, err := w.readLayer(t.Context(), img.layers[1], img.open, 1<<30, rec); err != nil {
+		t.Fatal(err)
+	}
+	if !rec.over || rec.Entries != nil {
+		t.Fatalf("over %v with %d members kept", rec.over, len(rec.Entries))
+	}
+	// A second build reads the layer again.
+	var opened int
+	open := func(ctx context.Context, l registry.Layer) (io.ReadCloser, error) {
+		opened++
+		return img.open(ctx, l)
+	}
+	if _, err := BuildCached(t.Context(), img.layers, open, docker.ImageConfig{}, lim, cache); err != nil || opened != 1 {
+		t.Fatalf("second build opened %d layers, %v", opened, err)
+	}
+}
+
+// A record keeps the latest config keys only.
+func TestRecordConfigsBounded(t *testing.T) {
+	rec := &LayerRecord{}
+	for i := range maxRecordConfigs + 5 {
+		rec.addConfig(fmt.Sprint(i))
+	}
+	rec.addConfig("7")
+	if len(rec.Configs) != maxRecordConfigs || rec.Configs[len(rec.Configs)-1] != "7" || rec.Configs[0] != "5" {
+		t.Fatalf("configs %v", rec.Configs)
 	}
 }

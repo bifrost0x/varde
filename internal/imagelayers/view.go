@@ -268,7 +268,7 @@ func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, lef
 			return fail(err)
 		}
 		if rec != nil {
-			rec.Entries = append(rec.Entries, recordOf(hdr, v.made))
+			rec.add(recordOf(hdr, v.made), recordMembersPerFile*v.lim.Files)
 		}
 	}
 	// The rest of the layer (tar padding, the compressed stream's end) is
