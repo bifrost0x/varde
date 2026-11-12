@@ -15,8 +15,8 @@ import (
 // (catalog/apps/cyberchef.yaml) so generated rules read tags the same way.
 const variantTail = `(?:-(?:alpine|bookworm|bullseye|trixie|noble|jammy|focal|oraclelinux|oracle|debian|slim|ubi|nanoserver|windowsservercore)[a-z0-9.]*)*$`
 
-// minReleaseTags is how many tags of a rule must name a GitHub release
-// before the rule is taken to read the project's release stream.
+// minReleaseTags is how many distinct GitHub release versions the tags of a
+// rule must name before the rule is taken to read the release stream.
 const minReleaseTags = 3
 
 // Template is one of the fixed tag rules a generated entry may carry. A
@@ -91,7 +91,8 @@ func Floating(tag string) bool {
 type stream struct {
 	// matched are the tags the rule reads a version from.
 	matched []string
-	// released counts matched tags whose version is a GitHub release.
+	// released counts the distinct GitHub release versions among the
+	// matched tags; variants of one release count once.
 	released int
 	// floating are matched tags that float.
 	floating []string
@@ -129,6 +130,7 @@ func stripV(tag string) string {
 // evaluate applies a tag rule to a tag list.
 func evaluate(rules []*regexp.Regexp, scheme version.Scheme, tags []string, releases map[string]bool) stream {
 	var s stream
+	seen := map[string]bool{}
 	sorted := append([]string(nil), tags...)
 	sort.Strings(sorted)
 	for _, tag := range sorted {
@@ -137,7 +139,8 @@ func evaluate(rules []*regexp.Regexp, scheme version.Scheme, tags []string, rele
 			continue
 		}
 		s.matched = append(s.matched, tag)
-		if releases[stripV(v)] {
+		if rv := stripV(v); releases[rv] && !seen[rv] {
+			seen[rv] = true
 			s.released++
 		}
 		if Floating(tag) {

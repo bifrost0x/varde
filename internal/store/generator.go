@@ -10,12 +10,11 @@ import (
 	"time"
 )
 
-// recheckAfter is how long a shipped candidate is trusted before the
-// builder checks it again.
-const recheckAfter = 30 * 24 * time.Hour
+// RecheckAfter is how long the catalog generator trusts a check result of a
+// candidate before it checks the candidate again.
+const RecheckAfter = 30 * 24 * time.Hour
 
-// CandidateShipped is the status of a candidate whose entry was shipped; only
-// such candidates are checked again after recheckAfter.
+// CandidateShipped is the status of a candidate whose entry was shipped.
 const CandidateShipped = "shipped"
 
 // Candidate is an image the catalog generator considers. CheckedAt and
@@ -58,29 +57,6 @@ func (s *Store) UpsertCandidate(ctx context.Context, c Candidate) error {
 		return fmt.Errorf("upsert candidate: %w", err)
 	}
 	return nil
-}
-
-// Candidates returns up to limit candidates to work on: first those never
-// checked, heaviest first, then shipped ones last checked more than
-// recheckAfter before now, oldest first.
-func (s *Store) Candidates(ctx context.Context, limit int, now time.Time) ([]Candidate, error) {
-	if limit <= 0 {
-		return nil, nil
-	}
-	const cols = `SELECT image, repo, weight, status, failed_check, entry_yaml, inputs_hash, checked_at, shipped_at FROM gen_candidates `
-	out, err := s.queryCandidates(ctx, cols+`WHERE checked_at IS NULL ORDER BY weight DESC, image LIMIT ?`, limit)
-	if err != nil {
-		return nil, err
-	}
-	if len(out) >= limit {
-		return out, nil
-	}
-	due, err := s.queryCandidates(ctx, cols+`WHERE status = ? AND checked_at < ? ORDER BY checked_at, image LIMIT ?`,
-		CandidateShipped, millis(now.Add(-recheckAfter)), limit-len(out))
-	if err != nil {
-		return nil, err
-	}
-	return append(out, due...), nil
 }
 
 // AllCandidates returns every candidate ordered by image. The generator

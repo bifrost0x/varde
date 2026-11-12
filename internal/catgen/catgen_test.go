@@ -5,6 +5,7 @@ package catgen
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/bifrost0x/varde/internal/applists"
 	"github.com/bifrost0x/varde/internal/catalog"
+	"github.com/bifrost0x/varde/internal/httpx"
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/version"
 )
@@ -23,16 +25,17 @@ import (
 type fakeRegistry struct {
 	tags    map[string][]string
 	digests map[string]string // image + ":" + tag
+	cut     map[string]bool   // tag lists the registry cut at its page cap
 	calls   []string
 }
 
-func (f *fakeRegistry) Tags(_ context.Context, repository string) ([]string, error) {
+func (f *fakeRegistry) AllTags(_ context.Context, repository string) ([]string, bool, error) {
 	f.calls = append(f.calls, "tags "+repository)
 	t, ok := f.tags[repository]
 	if !ok {
-		return nil, fmt.Errorf("tags of %s: %w", repository, ErrNotFound)
+		return nil, false, fmt.Errorf("tags of %s: %w", repository, ErrNotFound)
 	}
-	return t, nil
+	return t, !f.cut[repository], nil
 }
 
 func (f *fakeRegistry) Digest(_ context.Context, repository, tag string) (string, error) {
@@ -64,21 +67,36 @@ func (f *fakeGitHub) Releases(_ context.Context, repo, etag string) ([]Release, 
 }
 
 type fakeNVD struct {
-	search map[string][]CPEProduct
-	byCPE  map[string][]CPEProduct
+	search    map[string][]CPEProduct
+	byCPE     map[string][]CPEProduct
+	truncated bool
+	calls     int
 }
 
 func (f *fakeNVD) SearchProducts(_ context.Context, keyword string) ([]CPEProduct, error) {
+	f.calls++
+	if f.truncated {
+		return f.search[keyword], fmt.Errorf("search %s: %w", keyword, ErrTruncated)
+	}
 	return f.search[keyword], nil
 }
 
 func (f *fakeNVD) Products(_ context.Context, cpe string) ([]CPEProduct, error) {
+	f.calls++
 	return f.byCPE[cpe], nil
 }
 
-type fakeHub struct{ pulls map[string]int64 }
+type fakeHub struct {
+	pulls map[string]int64
+	err   error
+	calls int
+}
 
 func (f *fakeHub) PullCount(_ context.Context, repository string) (int64, error) {
+	f.calls++
+	if f.err != nil {
+		return 0, f.err
+	}
 	n, ok := f.pulls[repository]
 	if !ok {
 		return 0, ErrNotFound
@@ -107,7 +125,7 @@ func newEnv(t *testing.T) *env {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	e := &env{st: st, now: day0,
-		reg: &fakeRegistry{tags: map[string][]string{}, digests: map[string]string{}},
+		reg: &fakeRegistry{tags: map[string][]string{}, digests: map[string]string{}, cut: map[string]bool{}},
 		gh:  &fakeGitHub{releases: map[string][]Release{}},
 		nvd: &fakeNVD{search: map[string][]CPEProduct{}, byCPE: map[string][]CPEProduct{}},
 		hub: &fakeHub{pulls: map[string]int64{}},
@@ -504,12 +522,26 @@ func TestFailedRecheckDrops(t *testing.T) {
 	if r := e.run(t, nil); len(r.Shipped) != 1 || len(r.Dropped) != 0 || len(r.Skipped) != 1 {
 		t.Fatalf("report %+v", r)
 	}
+	// But not for ever: an entry no check could confirm for twice
+	// RecheckAfter stops shipping.
+	e.now = day0.Add(59 * 24 * time.Hour)
+	if r := e.run(t, nil); len(r.Shipped) != 1 {
+		t.Fatalf("expired within the grace period: %+v", r)
+	}
+	e.now = day0.Add(61 * 24 * time.Hour)
+	r = e.run(t, nil)
+	if len(r.Shipped) != 0 || len(r.Dropped) != 1 || r.Failed["ghcr.io/acme/widget"] != CheckStale {
+		t.Fatalf("stale entry still ships: %+v", r)
+	}
+	if r = e.run(t, nil); len(r.Shipped) != 0 || len(r.Dropped) != 0 {
+		t.Fatalf("stale entry dropped twice: %+v", r)
+	}
 }
 
 type errRegistry struct{}
 
-func (errRegistry) Tags(context.Context, string) ([]string, error) {
-	return nil, fmt.Errorf("connection reset")
+func (errRegistry) AllTags(context.Context, string) ([]string, bool, error) {
+	return nil, false, fmt.Errorf("connection reset")
 }
 
 func (errRegistry) Digest(context.Context, string, string) (string, error) {
@@ -547,5 +579,149 @@ func TestCoverageNeverFull(t *testing.T) {
 	}
 	if !regexp.MustCompile(`(?m)^  coverage: partial$`).MatchString(r.Shipped[0].Data) {
 		t.Errorf("entry text:\n%s", r.Shipped[0].Data)
+	}
+}
+
+func TestNewImageHoldsEntryBack(t *testing.T) {
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	if r := e.run(t, nil); len(r.Shipped) != 1 {
+		t.Fatalf("report %+v", r)
+	}
+	// The project gains an image whose weight cannot be read: the old
+	// entry, which lacks the image, does not ship meanwhile (it would take
+	// the derived entry the new image gets).
+	e.now = day0.Add(24 * time.Hour)
+	e.app("docker.io/acme/widget", "acme/widget", "hub,readme")
+	e.hub.err = fmt.Errorf("connection reset")
+	if r := e.run(t, nil); len(r.Shipped) != 0 || r.Skipped["docker.io/acme/widget"] == "" {
+		t.Fatalf("old entry shipped without the new image: %+v", r)
+	}
+	// Once the image is a candidate the project is checked again, outside
+	// the budget of new candidates, which a heavier project uses up.
+	e.hub.err = nil
+	e.hub.pulls["acme/widget"] = 1
+	e.app("docker.io/acme/heavy", "acme/heavy", "hub,readme")
+	e.hub.pulls["acme/heavy"] = 1000
+	e.g.Budget = 1
+	r := e.run(t, nil)
+	apps := parseShipped(t, r)
+	if len(apps) != 2 || apps[1].ID != "gh-acme-widget" || len(apps[1].Images) != 2 {
+		t.Fatalf("shipped %+v", r)
+	}
+}
+
+type refusingRegistry struct{ calls int }
+
+func (l *refusingRegistry) AllTags(context.Context, string) ([]string, bool, error) {
+	l.calls++
+	return nil, false, &httpx.StatusError{Status: http.StatusTooManyRequests}
+}
+
+func (l *refusingRegistry) Digest(context.Context, string, string) (string, error) {
+	l.calls++
+	return "", &httpx.StatusError{Status: http.StatusTooManyRequests}
+}
+
+func TestRateLimitStopsSource(t *testing.T) {
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	e.app("ghcr.io/acme/gizmo", "acme/gizmo", "ghcr,readme")
+	lr := &refusingRegistry{}
+	e.g.Registry = lr
+	r := e.run(t, nil)
+	if lr.calls != 1 || len(r.Stopped) != 1 || r.Stopped[0] != "registry" || len(r.Skipped) != 2 || len(r.Failed) != 0 {
+		t.Fatalf("calls %d, report %+v", lr.calls, r)
+	}
+	// Docker Hub: one rate-limited answer, no further lookups; the images
+	// wait for the next build.
+	e = newEnv(t)
+	e.app("docker.io/acme/widget", "acme/widget", "hub,readme")
+	e.app("docker.io/acme/gizmo", "acme/gizmo", "hub,readme")
+	e.hub.err = &httpx.StatusError{Status: http.StatusTooManyRequests}
+	r = e.run(t, nil)
+	if e.hub.calls != 1 || len(r.Stopped) != 1 || r.Stopped[0] != "hub" || len(r.Shipped) != 0 {
+		t.Fatalf("calls %d, report %+v", e.hub.calls, r)
+	}
+}
+
+func TestDeadlineAndNVDCache(t *testing.T) {
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	widget := CPEProduct{Name: "cpe:2.3:a:acme:widget:1.0.0:*:*:*:*:*:*:*", Refs: []string{"https://github.com/acme/widget"}}
+	e.nvd.search["widget"] = []CPEProduct{widget}
+	e.nvd.byCPE["cpe:2.3:a:acme:widget"] = []CPEProduct{widget}
+	if r := e.run(t, nil); len(r.Shipped) != 1 || e.nvd.calls != 2 {
+		t.Fatalf("nvd calls %d, report %+v", e.nvd.calls, r)
+	}
+	// A new release two days later: checked again, NVD's answer reused.
+	e.now = day0.Add(2 * 24 * time.Hour)
+	e.gh.releases["acme/widget"] = append([]Release{{Tag: "v1.2.1"}}, e.gh.releases["acme/widget"]...)
+	r := e.run(t, nil)
+	if apps := parseShipped(t, r); len(apps) != 1 || len(apps[0].Advisories.CPE) != 1 || e.nvd.calls != 2 || len(e.reg.calls) == 0 {
+		t.Fatalf("nvd calls %d, report %+v", e.nvd.calls, r)
+	}
+	// Past the deadline no group starts; what shipped before still ships.
+	e.app("ghcr.io/acme/gizmo", "acme/gizmo", "ghcr,readme")
+	e.g.Deadline = e.now.Add(-time.Minute)
+	e.reg.calls = nil
+	r = e.run(t, nil)
+	if len(r.Shipped) != 1 || len(e.reg.calls) != 0 || len(r.Stopped) != 1 || r.Stopped[0] != "deadline" {
+		t.Fatalf("calls %v, report %+v", e.reg.calls, r)
+	}
+	e.g.Deadline = time.Time{}
+	if r = e.run(t, nil); len(r.Shipped) != 2 {
+		t.Fatalf("report %+v", r)
+	}
+}
+
+func TestReleaseVersionsCountOnce(t *testing.T) {
+	rels := releaseSet([]Release{{Tag: "v1.0.0"}, {Tag: "v1.1.0"}})
+	// Three tags, but only two release versions.
+	if _, _, ok := pickTemplate([][]string{{"v1.0.0", "v1.0.0-alpine", "v1.0.0-slim", "v1.1.0"}}, rels); ok {
+		t.Error("variants of one release counted as several releases")
+	}
+}
+
+func TestCutListsFailClosed(t *testing.T) {
+	// A tag list cut at the registry's page cap fails C3.
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	e.reg.cut["ghcr.io/acme/widget"] = true
+	if r := e.run(t, nil); len(r.Shipped) != 0 || r.Failed["ghcr.io/acme/widget"] != CheckTags {
+		t.Fatalf("report %+v", r)
+	}
+	// A cut NVD search gives no CPE.
+	e = newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	widget := CPEProduct{Name: "cpe:2.3:a:acme:widget:1.0.0:*:*:*:*:*:*:*", Refs: []string{"https://github.com/acme/widget"}}
+	e.nvd.search["widget"] = []CPEProduct{widget}
+	e.nvd.byCPE["cpe:2.3:a:acme:widget"] = []CPEProduct{widget}
+	e.nvd.truncated = true
+	if apps := parseShipped(t, e.run(t, nil)); len(apps) != 1 || len(apps[0].Advisories.CPE) != 0 {
+		t.Fatalf("cpe from a cut list: %+v", apps)
+	}
+}
+
+func TestClaimsCheckedEveryBuild(t *testing.T) {
+	e := newEnv(t)
+	e.g.Budget = 1
+	e.app("docker.io/acme/heavy", "acme/heavy", "hub,readme")
+	e.hub.pulls["acme/heavy"] = 1000
+	e.app("ghcr.io/acme/weak", "acme/weak", "readme")
+	// Two repositories that derive one ID: neither may ship.
+	e.app("ghcr.io/a-b/c", "a-b/c", "ghcr,readme")
+	e.app("ghcr.io/a/b-c", "a/b-c", "ghcr,readme")
+	r := e.run(t, nil)
+	if len(r.Shipped) != 1 || r.Failed["ghcr.io/acme/weak"] != CheckEvidence ||
+		r.Failed["ghcr.io/a-b/c"] != CheckSchema || r.Failed["ghcr.io/a/b-c"] != CheckSchema {
+		t.Fatalf("report %+v", r)
+	}
+	// When the evidence becomes enough, the image is a candidate again.
+	e.index = e.index[:0]
+	e.app("docker.io/acme/heavy", "acme/heavy", "hub,readme")
+	e.app("ghcr.io/acme/weak", "acme/weak", "ghcr,readme")
+	if r = e.run(t, nil); len(r.Shipped) != 2 {
+		t.Fatalf("report %+v", r)
 	}
 }

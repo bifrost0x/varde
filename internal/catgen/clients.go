@@ -15,6 +15,20 @@ import (
 // the candidate could not be checked this time.
 var ErrNotFound = errors.New("catgen: not found")
 
+// ErrTruncated marks an answer cut short (more results than one request
+// returns). A check never draws a conclusion from a cut list.
+var ErrTruncated = errors.New("catgen: answer cut short")
+
+// ErrRateLimited marks a source that refused because of its rate limit, or
+// that the generator stopped asking for the rest of the build.
+var ErrRateLimited = errors.New("catgen: rate limited")
+
+// rateLimited reports a refusal because of a rate limit.
+func rateLimited(err error) bool {
+	var se *httpx.StatusError
+	return errors.Is(err, ErrRateLimited) || (errors.As(err, &se) && se.RateLimited())
+}
+
 // notFound reports ErrNotFound or a 404 from a server.
 func notFound(err error) bool {
 	var se *httpx.StatusError
@@ -24,7 +38,8 @@ func notFound(err error) bool {
 // RegistryAPI is what the generator asks a container registry;
 // registry.Client implements it.
 type RegistryAPI interface {
-	Tags(ctx context.Context, repository string) ([]string, error)
+	// AllTags lists the tags; complete is false when the list was cut.
+	AllTags(ctx context.Context, repository string) (tags []string, complete bool, err error)
 	Digest(ctx context.Context, repository, tag string) (string, error)
 }
 
@@ -53,7 +68,8 @@ type CPEProduct struct {
 
 // NVDAPI asks NVD's CPE dictionary.
 type NVDAPI interface {
-	// SearchProducts finds products by a keyword.
+	// SearchProducts finds products by a keyword. Both methods fail with
+	// ErrTruncated when NVD has more results than it returned.
 	SearchProducts(ctx context.Context, keyword string) ([]CPEProduct, error)
 	// Products lists the products a CPE prefix ("cpe:2.3:a:vendor:product")
 	// matches.

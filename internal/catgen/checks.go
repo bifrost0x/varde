@@ -33,6 +33,9 @@ const (
 	// CheckCPE (C5): the CPE exists in NVD and NVD ties it to the
 	// repository.
 	CheckCPE = "C5"
+	// CheckStale marks a shipped entry that no check could confirm for
+	// twice RecheckAfter (its sources kept failing): it stops shipping.
+	CheckStale = "stale"
 	// CheckUnchecked marks a Problem that is no verdict: a source could
 	// not be asked, so the entry is to be checked again.
 	CheckUnchecked = "unchecked"
@@ -73,6 +76,22 @@ func checkEvidence(rows []applists.Entry) error {
 		}
 	}
 	return nil
+}
+
+// precheck is C1's claims and C2, which need no network: they run on every
+// project each build, whatever the budget. ids counts the repositories per
+// derived ID; two repositories that derive one ID both fail, as nothing
+// could tell their findings apart.
+func precheck(reviewed *catalog.Catalog, gr *group, ids map[string]int) error {
+	owner, name, _ := strings.Cut(gr.repo, "/")
+	id := catalog.DerivedID(owner, name)
+	if ids[id] > 1 {
+		return fail(CheckSchema, "id %s is derived by %d repositories", id, ids[id])
+	}
+	if err := checkClaims(reviewed, id, gr.repo, gr.images()); err != nil {
+		return err
+	}
+	return checkEvidence(gr.entries)
 }
 
 // checkClaims is the collision part of C1: a reviewed entry wins every key,
@@ -178,6 +197,11 @@ func vendorProduct(name string) (string, bool) {
 func (g *Generator) findCPE(ctx context.Context, repo string) (string, error) {
 	_, name, _ := strings.Cut(repo, "/")
 	products, err := g.NVD.SearchProducts(ctx, name)
+	if errors.Is(err, ErrTruncated) {
+		// Some products were not returned; one of them could tie another
+		// pair to the repository.
+		return "", nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -202,6 +226,9 @@ func (g *Generator) findCPE(ctx context.Context, repo string) (string, error) {
 func (g *Generator) checkCPE(ctx context.Context, cpe string, repos []string) error {
 	products, err := g.NVD.Products(ctx, cpe)
 	if err != nil {
+		if errors.Is(err, ErrTruncated) {
+			return fail(CheckCPE, "NVD lists more products for %s than it returned", cpe)
+		}
 		if notFound(err) {
 			return fail(CheckCPE, "%s is not in NVD", cpe)
 		}
@@ -290,10 +317,11 @@ func (g *Generator) checkReviewedTags(ctx context.Context, app *catalog.App, rep
 		if err != nil {
 			continue
 		}
-		tags, err := g.Registry.Tags(ctx, image)
+		tags, err := g.tags(ctx, image)
 		if err != nil {
-			if notFound(err) {
-				out = append(out, Problem{Check: CheckTags, Detail: fmt.Sprintf("%s: image %s has no tag list", app.ID, image)})
+			var f *failure
+			if errors.As(err, &f) {
+				out = append(out, Problem{Check: f.check, Detail: app.ID + ": " + f.detail})
 			} else {
 				out = append(out, Problem{Check: CheckUnchecked, Detail: app.ID + ": " + err.Error()})
 			}
@@ -342,6 +370,21 @@ func ruleText(app *catalog.App) string {
 	return ""
 }
 
+// tags reads the whole tag list of an image for C3. A missing or cut list
+// fails the check: a rule proved on part of the tags proves nothing.
+func (g *Generator) tags(ctx context.Context, image string) ([]string, error) {
+	tags, complete, err := g.Registry.AllTags(ctx, image)
+	switch {
+	case err != nil && notFound(err):
+		return nil, fail(CheckTags, "image %s has no tag list", image)
+	case err != nil:
+		return nil, err
+	case !complete:
+		return nil, fail(CheckTags, "the registry cut the tag list of %s", image)
+	}
+	return tags, nil
+}
+
 // checkStream is C3 on one image's stream: the tag part, then the digest
 // of the newest tag.
 func (g *Generator) checkStream(ctx context.Context, image string, s stream) error {
@@ -349,7 +392,7 @@ func (g *Generator) checkStream(ctx context.Context, image string, s stream) err
 	case len(s.floating) > 0:
 		return fail(CheckTags, "the tag rule matches floating tags of %s (%s)", image, strings.Join(first(s.floating, 5), ", "))
 	case s.released < minReleaseTags:
-		return fail(CheckTags, "the tag rule matches %d tags of %s that are GitHub releases, fewer than %d", s.released, image, minReleaseTags)
+		return fail(CheckTags, "the tag rule matches %d GitHub release versions in the tags of %s, fewer than %d", s.released, image, minReleaseTags)
 	case s.newest == "":
 		return fail(CheckTags, "no tag of %s matched by the rule reads as a version", image)
 	}

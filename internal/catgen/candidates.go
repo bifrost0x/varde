@@ -16,15 +16,11 @@ import (
 // Candidate states besides store.CandidateShipped.
 const (
 	// StatusFailed: the last check failed; the candidate is tried again
-	// after RecheckAfter, within the budget of new candidates.
+	// after store.RecheckAfter, within the budget of new candidates.
 	StatusFailed = "failed"
 	// StatusRetired: the image left the index or got a reviewed entry.
 	StatusRetired = "retired"
 )
-
-// RecheckAfter is how long a check result stands without a change of its
-// inputs; it matches the store's due rule for shipped candidates.
-const RecheckAfter = 30 * 24 * time.Hour
 
 // maxProbes bounds the conditional release requests per build that look
 // for changed inputs of shipped entries not yet due.
@@ -85,11 +81,12 @@ func (g *Generator) weight(ctx context.Context, e applists.Entry) (int64, error)
 
 // plan is the work of one build.
 type plan struct {
-	// fresh are groups with a new image and failed groups due again,
-	// heaviest first; the budget applies to them.
+	// fresh are new groups and failed groups due again, heaviest first;
+	// the budget applies to them.
 	fresh []*group
-	// due are shipped groups whose result is older than RecheckAfter or
-	// that lost an image.
+	// due are shipped groups whose result is older than RecheckAfter, that
+	// lost an image or that gained one. Their entries are withheld or
+	// aging, so they are checked outside the budget.
 	due []*group
 	// probe are the other shipped groups, oldest result first.
 	probe []*group
@@ -103,7 +100,8 @@ func planRun(grs map[string]*group, rows map[string]store.Candidate, forced map[
 		gr      *group
 		checked time.Time // oldest result of the group
 		fresh   bool
-		shipped bool
+		shipped bool // every image shipped
+		some    bool // at least one image shipped
 	}
 	var all []ranked
 	for _, gr := range grs {
@@ -115,6 +113,8 @@ func planRun(grs map[string]*group, rows map[string]store.Candidate, forced map[
 			}
 			if c.Status != store.CandidateShipped {
 				r.shipped = false
+			} else {
+				r.some = true
 			}
 			if r.checked.IsZero() || c.CheckedAt.Before(r.checked) {
 				r.checked = c.CheckedAt
@@ -132,9 +132,11 @@ func planRun(grs map[string]*group, rows map[string]store.Candidate, forced map[
 	})
 	var p plan
 	var retry, probe []ranked
-	old := now.Add(-RecheckAfter)
+	old := now.Add(-store.RecheckAfter)
 	for _, r := range all {
 		switch {
+		case r.fresh && r.some:
+			p.due = append(p.due, r.gr)
 		case r.fresh:
 			p.fresh = append(p.fresh, r.gr)
 		case r.shipped && (forced[r.gr.repo] || r.checked.Before(old)):

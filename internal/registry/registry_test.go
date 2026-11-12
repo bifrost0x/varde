@@ -103,6 +103,31 @@ func TestDigestAsksWithHead(t *testing.T) {
 	}
 }
 
+func TestAllTagsReportsACutList(t *testing.T) {
+	c, host, _ := fakeRegistry(t, nil)
+	tags, complete, err := c.AllTags(t.Context(), host+"/org/app")
+	if err != nil || !complete || len(tags) != 6 {
+		t.Fatalf("%v %v %v", tags, complete, err)
+	}
+	// A registry that always has another page is cut at maxPages.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Link", `</v2/org/app/tags/list?n=1000&last=x>; rel="next"`)
+		_, _ = io.WriteString(w, `{"tags":["1.0.0"]}`)
+	}))
+	defer srv.Close()
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+	c = New(httpx.New(httpx.Options{RootCAs: pool, Timeout: 5 * time.Second}))
+	tags, complete, err = c.AllTags(t.Context(), strings.TrimPrefix(srv.URL, "https://")+"/org/app")
+	if err != nil || complete || len(tags) != maxPages {
+		t.Fatalf("%d tags, complete %v, %v", len(tags), complete, err)
+	}
+	// Tags keeps its behaviour: the cut list, no error.
+	if tags, err := c.Tags(t.Context(), strings.TrimPrefix(srv.URL, "https://")+"/org/app"); err != nil || len(tags) != maxPages {
+		t.Fatalf("Tags: %d %v", len(tags), err)
+	}
+}
+
 func TestNextLinkStaysOnRegistry(t *testing.T) {
 	if p := nextLink(`<https://evil.example/v2/x/tags/list?last=a>; rel="next"`); p != "" {
 		t.Errorf("followed a foreign link: %q", p)

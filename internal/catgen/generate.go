@@ -57,12 +57,15 @@ type Generator struct {
 	// Budget is the number of new candidates (images) per build;
 	// DefaultBudget when zero.
 	Budget int
+	// Deadline, when set, ends the build's network work: no project is
+	// started after it. What was checked by then is recorded and ships.
+	Deadline time.Time
 }
 
 // Report is the outcome of a build. Images name the candidates.
 type Report struct {
-	// Shipped are all generated entries that checks their checks, this
-	// build or before, sorted by name.
+	// Shipped holds the entries to ship, sorted by name: one per project
+	// whose images all passed their latest check, this build or before.
 	Shipped []catalog.Entry
 	// New, Changed and Dropped are images whose entry shipped for the first
 	// time, changed beyond its verified date, or stopped shipping.
@@ -74,6 +77,9 @@ type Report struct {
 	// Skipped maps an image that could not be checked (a source did not
 	// answer) to the error; it keeps its earlier state.
 	Skipped map[string]string
+	// Stopped names the sources this build stopped asking because they
+	// refused with a rate limit, and "deadline" when the time ran out.
+	Stopped []string
 }
 
 func (g *Generator) now() time.Time {
@@ -90,10 +96,39 @@ func (g *Generator) budget() int {
 	return DefaultBudget
 }
 
+// past reports that the deadline has come.
+func (g *Generator) past() bool {
+	return !g.Deadline.IsZero() && !g.now().Before(g.Deadline)
+}
+
+// storeError marks a failure of the builder store, which ends the run;
+// every other error only skips a candidate.
+type storeError struct{ err error }
+
+func (e storeError) Error() string { return e.err.Error() }
+func (e storeError) Unwrap() error { return e.err }
+
 // Run brings the candidate set in line with the index, checks this build's
 // share of it and returns every entry to ship. Errors of a source skip the
-// candidate; only the store failing ends the run.
+// candidate, and a source that refuses with a rate limit is not asked
+// again in this build; only the store failing ends the run.
 func (g *Generator) Run(ctx context.Context, idx *applists.Table, reviewed *catalog.Catalog) (Report, error) {
+	l := &limits{stopped: map[string]bool{}}
+	rg := *g
+	rg.Registry = limitedRegistry{inner: g.Registry, l: l}
+	rg.GitHub = limitedGitHub{inner: g.GitHub, l: l}
+	if g.NVD != nil {
+		rg.NVD = limitedNVD{inner: g.NVD, l: l}
+	}
+	if g.Hub != nil {
+		rg.Hub = limitedHub{inner: g.Hub, l: l}
+	}
+	rep, err := rg.run(ctx, idx, reviewed, l)
+	rep.Stopped = l.order
+	return rep, err
+}
+
+func (g *Generator) run(ctx context.Context, idx *applists.Table, reviewed *catalog.Catalog, l *limits) (Report, error) {
 	now := g.now()
 	rep := Report{Failed: map[string]string{}, Reasons: map[string]string{}, Skipped: map[string]string{}}
 	all, err := g.AllCandidates(ctx)
@@ -130,10 +165,37 @@ func (g *Generator) Run(ctx context.Context, idx *applists.Table, reviewed *cata
 		rows[c.Image] = c
 	}
 
-	// New images (and retired ones that came back) become candidates.
+	// C1's claims and C2 need no network: every project, every build.
+	ids := map[string]int{}
+	for repo := range grs {
+		owner, name, _ := strings.Cut(repo, "/")
+		ids[catalog.DerivedID(owner, name)]++
+	}
+	open := map[string]*group{}
 	for repo, gr := range grs {
+		err := precheck(reviewed, gr, ids)
+		var f *failure
+		if !errors.As(err, &f) {
+			open[repo] = gr
+			continue
+		}
+		if err := g.record(ctx, gr, rows, outcome{failed: f}, now, &rep); err != nil {
+			return rep, err
+		}
+	}
+
+	// New images (and retired ones that came back, and ones whose C1 or
+	// C2 failure is gone) become candidates.
+	for repo, gr := range open {
 		for _, e := range gr.entries {
-			if c, ok := rows[e.Image]; ok && c.Status != StatusRetired && c.Repo == repo {
+			c, ok := rows[e.Image]
+			if ok && c.Status != StatusRetired && c.Repo == repo &&
+				(c.Status != StatusFailed || (c.FailedCheck != CheckSchema && c.FailedCheck != CheckEvidence)) {
+				continue
+			}
+			if g.past() {
+				l.stop(stopDeadline)
+				rep.Skipped[e.Image] = "deadline reached"
 				continue
 			}
 			w, err := g.weight(ctx, e)
@@ -141,44 +203,90 @@ func (g *Generator) Run(ctx context.Context, idx *applists.Table, reviewed *cata
 				rep.Skipped[e.Image] = err.Error()
 				continue
 			}
-			c := store.Candidate{Image: e.Image, Repo: repo, Weight: w}
-			if err := g.UpsertCandidate(ctx, c); err != nil {
+			nc := store.Candidate{Image: e.Image, Repo: repo, Weight: w}
+			if ok && c.Repo == repo {
+				nc.Weight = max(nc.Weight, c.Weight)
+			}
+			if err := g.UpsertCandidate(ctx, nc); err != nil {
 				return rep, err
 			}
-			rows[e.Image] = c
+			rows[e.Image] = nc
 		}
 	}
-	// A project with an image that has no candidate yet waits a build.
-	for repo, gr := range grs {
+	// A project with an image that has no candidate yet waits a build;
+	// shipped leaves its old entry out meanwhile.
+	for repo, gr := range open {
 		for _, e := range gr.entries {
 			if _, ok := rows[e.Image]; !ok {
-				delete(grs, repo)
+				delete(open, repo)
 				break
 			}
 		}
 	}
 
-	p := planRun(grs, rows, forced, now, g.budget())
+	p := planRun(open, rows, forced, now, g.budget())
 	work := append(append([]*group(nil), p.fresh...), p.due...)
 	prefetched := map[string]fetched{}
 	for _, gr := range p.probe {
-		f, changed, err := g.probe(ctx, gr.repo)
-		if err != nil || !changed {
-			continue
+		if g.past() {
+			l.stop(stopDeadline)
+			break
 		}
-		prefetched[gr.repo] = f
-		work = append(work, gr)
+		f, changed, err := g.probe(ctx, gr.repo)
+		if err != nil {
+			return rep, err
+		}
+		if changed {
+			prefetched[gr.repo] = f
+			work = append(work, gr)
+		}
 	}
 	for _, gr := range work {
+		if g.past() {
+			l.stop(stopDeadline)
+			break
+		}
 		if err := g.checkAndRecord(ctx, gr, reviewed, rows, prefetched[gr.repo], now, &rep); err != nil {
 			return rep, err
 		}
 	}
-	rep.Shipped = shipped(rows)
+	if err := g.expire(ctx, rows, now, &rep); err != nil {
+		return rep, err
+	}
+	rep.Shipped = shipped(rows, grs)
 	sort.Strings(rep.New)
 	sort.Strings(rep.Changed)
 	sort.Strings(rep.Dropped)
 	return rep, nil
+}
+
+// expire stops shipping entries that no check confirmed for twice
+// RecheckAfter: their sources kept failing (a deleted or private
+// repository answers 401 or 403, not 404), and an entry nobody can check
+// is not trusted for ever.
+func (g *Generator) expire(ctx context.Context, rows map[string]store.Candidate, now time.Time, rep *Report) error {
+	images := make([]string, 0, len(rows))
+	for img := range rows {
+		images = append(images, img)
+	}
+	sort.Strings(images)
+	limit := now.Add(-2 * store.RecheckAfter)
+	for _, img := range images {
+		c := rows[img]
+		if c.Status != store.CandidateShipped || !c.CheckedAt.Before(limit) {
+			continue
+		}
+		last := c.CheckedAt
+		c.Status, c.FailedCheck, c.EntryYAML, c.CheckedAt, c.ShippedAt = StatusFailed, CheckStale, "", now, time.Time{}
+		if err := g.UpsertCandidate(ctx, c); err != nil {
+			return err
+		}
+		rows[img] = c
+		rep.Dropped = append(rep.Dropped, img)
+		rep.Failed[img] = CheckStale
+		rep.Reasons[img] = "not confirmed by a check since " + last.Format(time.DateOnly)
+	}
+	return nil
 }
 
 // fetched is a release list read in this build.
@@ -190,23 +298,31 @@ type fetched struct {
 
 // probe asks whether the release list of a shipped entry changed since its
 // last check, with the ETag of that check. A repository without a stored
-// ETag is not probed; its entry waits for RecheckAfter.
+// ETag is not probed; its entry waits for RecheckAfter. Only a store error
+// is returned: a source that does not answer means no change for now.
 func (g *Generator) probe(ctx context.Context, repo string) (fetched, bool, error) {
 	st, err := g.SourceState(ctx, releasesSource, repo)
-	if err != nil || st.ETag == "" {
+	if err != nil {
 		return fetched{}, false, err
 	}
-	rels, etag, notModified, err := g.GitHub.Releases(ctx, repo, st.ETag)
-	if err != nil || notModified {
-		return fetched{}, false, err
+	if st.ETag == "" {
+		return fetched{}, false, nil
+	}
+	rels, etag, notModified, askErr := g.GitHub.Releases(ctx, repo, st.ETag)
+	if changed := askErr == nil && !notModified; !changed {
+		return fetched{}, false, nil
 	}
 	return fetched{rels: rels, etag: etag, ok: true}, true, nil
 }
 
 // checkAndRecord checks a group and stores the outcome for each image.
 func (g *Generator) checkAndRecord(ctx context.Context, gr *group, reviewed *catalog.Catalog, rows map[string]store.Candidate, f fetched, now time.Time, rep *Report) error {
-	o, err := g.checkGroup(ctx, gr, reviewed, f, now.UTC().Format(time.DateOnly))
+	o, err := g.checkGroup(ctx, gr, reviewed, f, now)
 	if err != nil {
+		var se storeError
+		if errors.As(err, &se) {
+			return se.err
+		}
 		for _, img := range gr.images() {
 			rep.Skipped[img] = err.Error()
 		}
@@ -218,8 +334,16 @@ func (g *Generator) checkAndRecord(ctx context.Context, gr *group, reviewed *cat
 			return err
 		}
 	}
+	return g.record(ctx, gr, rows, o, now, rep)
+}
+
+// record stores the outcome of a group for each of its images.
+func (g *Generator) record(ctx context.Context, gr *group, rows map[string]store.Candidate, o outcome, now time.Time, rep *Report) error {
 	for _, e := range gr.entries {
-		prev := rows[e.Image]
+		prev, ok := rows[e.Image]
+		if !ok {
+			prev = store.Candidate{Image: e.Image}
+		}
 		c := prev
 		c.Repo, c.CheckedAt, c.InputsHash = gr.repo, now, o.hash
 		was := prev.Status == store.CandidateShipped
@@ -261,24 +385,25 @@ func withoutVerified(entry string) string {
 	return b.String()
 }
 
-// shipped returns one entry per shipped project, sorted by name. The
-// images of a project carry the same entry; should they ever differ, the
-// first image's wins, so the package stays reproducible.
-func shipped(rows map[string]store.Candidate) []catalog.Entry {
-	images := make([]string, 0, len(rows))
-	for img := range rows {
-		images = append(images, img)
-	}
-	sort.Strings(images)
-	byRepo := map[string]string{}
-	for _, img := range images {
-		c := rows[img]
-		if _, seen := byRepo[c.Repo]; !seen && c.Status == store.CandidateShipped && c.EntryYAML != "" {
-			byRepo[c.Repo] = c.EntryYAML
+// shipped returns one entry per project of the index whose images all
+// shipped the same entry, sorted by name. A project that gained an image
+// since its last check is left out until it is checked with that image:
+// its old entry would take the derived entry the new image gets.
+func shipped(rows map[string]store.Candidate, grs map[string]*group) []catalog.Entry {
+	out := make([]catalog.Entry, 0, len(grs))
+	for repo, gr := range grs {
+		data := ""
+		for _, e := range gr.entries {
+			c := rows[e.Image]
+			if c.Status != store.CandidateShipped || c.EntryYAML == "" || (data != "" && c.EntryYAML != data) {
+				data = ""
+				break
+			}
+			data = c.EntryYAML
 		}
-	}
-	out := make([]catalog.Entry, 0, len(byRepo))
-	for repo, data := range byRepo {
+		if data == "" {
+			continue
+		}
 		owner, name, _ := strings.Cut(repo, "/")
 		out = append(out, catalog.Entry{Name: catalog.DerivedID(owner, name) + ".yaml", Data: data})
 	}
@@ -295,7 +420,7 @@ type outcome struct {
 
 // checkGroup runs C1 to C5 on the entry for a project. A failed check is
 // an outcome; an error means a source did not answer.
-func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog.Catalog, f fetched, date string) (o outcome, err error) {
+func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog.Catalog, f fetched, now time.Time) (o outcome, err error) {
 	verdict := func(err error) (outcome, error) {
 		var fl *failure
 		if errors.As(err, &fl) {
@@ -332,12 +457,9 @@ func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog
 
 	tagLists := make([][]string, 0, len(images))
 	for _, img := range images {
-		tags, err := g.Registry.Tags(ctx, img)
+		tags, err := g.tags(ctx, img)
 		if err != nil {
-			if notFound(err) {
-				return verdict(fail(CheckTags, "image %s has no tag list", img))
-			}
-			return o, err
+			return verdict(err)
 		}
 		sorted := append([]string(nil), tags...)
 		sort.Strings(sorted)
@@ -363,20 +485,13 @@ func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog
 		}
 	}
 
-	cpe := ""
-	if g.NVD != nil {
-		if cpe, err = g.findCPE(ctx, gr.repo); err != nil {
-			return o, err
-		}
-		if cpe != "" {
-			if err := g.checkCPE(ctx, cpe, []string{gr.repo}); err != nil {
-				return verdict(err)
-			}
-		}
+	cpe, err := g.cpe(ctx, gr.repo, now)
+	if err != nil {
+		return verdict(err)
 	}
 	fmt.Fprintf(h, "cpe %s\n", cpe)
 
-	data, err := entryYAML(id, gr.repo, images, tpl, cpe, date)
+	data, err := entryYAML(id, gr.repo, images, tpl, cpe, now.UTC().Format(time.DateOnly))
 	if err != nil {
 		return o, err
 	}
@@ -389,6 +504,41 @@ func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog
 	}
 	o.yaml = string(data)
 	return o, nil
+}
+
+// nvdSource is the source state key under which NVD's answer for a
+// repository is kept: ETag holds the CPE that passed C5 (empty: none) and
+// LastSuccess when NVD gave it. NVD allows 5 requests per 30 s without a
+// key, so the answer is reused for RecheckAfter.
+const nvdSource = "catgen-nvd"
+
+// cpe finds the CPE of a repository and runs C5 on it, or reuses an answer
+// younger than RecheckAfter.
+func (g *Generator) cpe(ctx context.Context, repo string, now time.Time) (string, error) {
+	if g.NVD == nil {
+		return "", nil
+	}
+	st, err := g.SourceState(ctx, nvdSource, repo)
+	if err != nil {
+		return "", storeError{err}
+	}
+	if !st.LastSuccess.IsZero() && now.Sub(st.LastSuccess) < store.RecheckAfter {
+		return st.ETag, nil
+	}
+	cpe, err := g.findCPE(ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	if cpe != "" {
+		if err := g.checkCPE(ctx, cpe, []string{repo}); err != nil {
+			return "", err
+		}
+	}
+	st = store.SourceState{Source: nvdSource, Key: repo, ETag: cpe, LastAttempt: now, LastSuccess: now}
+	if err := g.PutSourceState(ctx, st); err != nil {
+		return "", storeError{err}
+	}
+	return cpe, nil
 }
 
 // entryDoc is the YAML form of a generated entry, in the field order of

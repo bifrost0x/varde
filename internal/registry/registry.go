@@ -279,32 +279,41 @@ func splitChallenge(s string) []string {
 
 // Tags lists the tags of a repository, at most maxPages pages.
 func (c *Client) Tags(ctx context.Context, repository string) ([]string, error) {
+	tags, _, err := c.AllTags(ctx, repository)
+	return tags, err
+}
+
+// AllTags is Tags that also reports whether the list is complete: false
+// when the registry had more pages than maxPages. A caller that draws
+// conclusions from the whole list (the catalog generator) must not trust a
+// cut one.
+func (c *Client) AllTags(ctx context.Context, repository string) ([]string, bool, error) {
 	host, name, err := endpoint(repository)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	s := &session{c: c, host: host, name: name}
 	return s.tags(ctx)
 }
 
-func (s *session) tags(ctx context.Context) ([]string, error) {
+func (s *session) tags(ctx context.Context) ([]string, bool, error) {
 	var out []string
 	path := "/v2/" + s.name + "/tags/list?n=" + fmt.Sprint(pageSize)
 	for i := 0; i < maxPages && path != ""; i++ {
 		resp, err := s.do(ctx, http.MethodGet, path, nil, 8<<20)
 		if err != nil {
-			return out, err
+			return out, false, err
 		}
 		var page struct {
 			Tags []string `json:"tags"`
 		}
 		if err := json.Unmarshal(resp.Body, &page); err != nil {
-			return out, fmt.Errorf("registry: tag list: %w", err)
+			return out, false, fmt.Errorf("registry: tag list: %w", err)
 		}
 		out = append(out, page.Tags...)
 		path = nextLink(resp.Header.Get("Link"))
 	}
-	return out, nil
+	return out, path == "", nil
 }
 
 // nextLink extracts the path of a Link: <...>; rel="next" header; only

@@ -4,6 +4,7 @@ package catgen
 
 import (
 	"crypto/x509"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -78,11 +79,25 @@ func TestHubPullCount(t *testing.T) {
 		}
 		_, _ = io.WriteString(w, `{"name":"widget","pull_count":12345}`)
 	})
-	h := &Hub{HTTP: hc, BaseURL: base}
+	h := &Hub{HTTP: hc, BaseURL: base, Pause: 50 * time.Millisecond}
+	start := time.Now()
 	if n, err := h.PullCount(t.Context(), "acme/widget"); err != nil || n != 12345 {
 		t.Fatalf("%d %v", n, err)
 	}
 	if _, err := h.PullCount(t.Context(), "acme/gone"); !notFound(err) {
 		t.Errorf("missing repository: %v", err)
+	}
+	if d := time.Since(start); d < 50*time.Millisecond {
+		t.Errorf("two lookups %v apart, want the pause", d)
+	}
+}
+
+func TestNVDCutAnswer(t *testing.T) {
+	hc, base := tlsServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"totalResults":2,"products":[{"cpe":{"cpeName":"cpe:2.3:a:acme:widget:1.0:*:*:*:*:*:*:*"}}]}`)
+	})
+	n := &NVD{HTTP: hc, BaseURL: base, Pause: time.Millisecond}
+	if _, err := n.SearchProducts(t.Context(), "widget"); !errors.Is(err, ErrTruncated) {
+		t.Errorf("cut answer: %v", err)
 	}
 }

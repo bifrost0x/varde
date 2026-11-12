@@ -8,15 +8,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/bifrost0x/varde/internal/httpx"
 )
 
 // NVD asks NVD's CPE API (services.nvd.nist.gov/rest/json/cpes/2.0). Its
-// answers are not cached: the generator asks only for candidates that
-// passed C1 to C4 and records what it saw in the candidate's inputs hash.
+// generator asks only for candidates that passed C1 to C4 and keeps the
+// answer per repository for RecheckAfter.
 type NVD struct {
 	HTTP *httpx.Client
 	// APIKey raises the rate limit; optional.
@@ -27,8 +26,7 @@ type NVD struct {
 	// one, NVD's published limits of 5 and 50 requests per 30 s.
 	Pause time.Duration
 
-	mu   sync.Mutex
-	last time.Time
+	pace pacer
 }
 
 // SearchProducts implements NVDAPI.
@@ -59,7 +57,8 @@ func (n *NVD) get(ctx context.Context, q url.Values) ([]CPEProduct, error) {
 		return nil, fmt.Errorf("nvd cpe: %w", err)
 	}
 	var doc struct {
-		Products []struct {
+		TotalResults int `json:"totalResults"`
+		Products     []struct {
 			CPE struct {
 				Name       string `json:"cpeName"`
 				Deprecated bool   `json:"deprecated"`
@@ -80,6 +79,9 @@ func (n *NVD) get(ctx context.Context, q url.Values) ([]CPEProduct, error) {
 		}
 		out = append(out, cp)
 	}
+	if doc.TotalResults > len(out) {
+		return out, fmt.Errorf("nvd cpe: %d of %d results: %w", len(out), doc.TotalResults, ErrTruncated)
+	}
 	return out, nil
 }
 
@@ -92,17 +94,5 @@ func (n *NVD) wait(ctx context.Context) error {
 			pause = 600 * time.Millisecond
 		}
 	}
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if d := time.Until(n.last.Add(pause)); !n.last.IsZero() && d > 0 {
-		t := time.NewTimer(d)
-		defer t.Stop()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-		}
-	}
-	n.last = time.Now()
-	return nil
+	return n.pace.wait(ctx, pause)
 }
