@@ -108,12 +108,28 @@ type View struct {
 	layer     int
 	hide      map[string]bool
 	hideBelow map[string]bool
+
+	// For layer records (cache.go): changed says that the archive member
+	// being added changed the view, made is the file node it put, and
+	// layerPartial that the layer made the view Partial. replay is the
+	// recorded member being replayed, whose program is not rescanned.
+	changed      bool
+	layerPartial bool
+	made         *node
+	replay       *RecordEntry
 }
 
 // Build streams layers bottom to top and returns the view of the files the
 // package reader reads of an image with cfg. A broken or unreadable layer
 // is an error; a limit reached ends the build early with a Partial view.
 func Build(ctx context.Context, layers []registry.Layer, open Opener, cfg docker.ImageConfig, lim Limits) (*View, error) {
+	return BuildCached(ctx, layers, open, cfg, lim, nil)
+}
+
+// BuildCached is Build that takes layers from cache where it holds them and
+// stores the record of every layer it reads in full (cache.go). A nil
+// cache is Build.
+func BuildCached(ctx context.Context, layers []registry.Layer, open Opener, cfg docker.ImageConfig, lim Limits, cache Cache) (*View, error) {
 	v := &View{
 		cfg:   cfg,
 		lim:   lim.withDefaults(),
@@ -126,10 +142,14 @@ func Build(ctx context.Context, layers []registry.Layer, open Opener, cfg docker
 			v.anchors = append(v.anchors, t)
 		}
 	}
+	var keys []string
+	if cache != nil {
+		keys = LayerKeys(layers, cfg, v.lim)
+	}
 	left := v.lim.LayerBytes
 	for i, l := range layers {
 		v.layer, v.hide, v.hideBelow = i, map[string]bool{}, map[string]bool{}
-		used, err := v.readLayer(ctx, l, open, left)
+		used, err := v.layerFrom(ctx, l, open, left, cache, keys)
 		left -= used
 		// What the layer hid applies even when it was cut short.
 		v.endLayer()
@@ -205,8 +225,9 @@ func (t *trackReader) Read(p []byte) (int, error) {
 }
 
 // readLayer streams one layer into the view and returns the uncompressed
-// bytes it took.
-func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, left int64) (int64, error) {
+// bytes it took. With rec, the members that changed the view are recorded
+// into it.
+func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, left int64, rec *LayerRecord) (int64, error) {
 	rc, err := open(ctx, l)
 	if err != nil {
 		return 0, fmt.Errorf("imagelayers: layer %s: %w", l.Digest, err)
@@ -237,8 +258,12 @@ func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, lef
 		if err != nil {
 			return fail(err)
 		}
+		v.changed, v.made = false, nil
 		if err := v.add(hdr, tr); err != nil {
 			return fail(err)
+		}
+		if rec != nil && v.changed {
+			rec.Entries = append(rec.Entries, recordOf(hdr, v.made))
 		}
 	}
 	// The rest of the layer (tar padding, the compressed stream's end) is
@@ -248,6 +273,9 @@ func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, lef
 	}
 	if _, err := io.Copy(io.Discard, rc); err != nil {
 		return fail(err)
+	}
+	if rec != nil {
+		rec.Used, rec.Partial = br.used, v.layerPartial
 	}
 	return br.used, nil
 }
@@ -321,7 +349,7 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 	dir, crossed, ok := v.resolveDir(parent)
 	if !ok {
 		// A link loop above the entry: where it belongs is unknown.
-		v.partial.Store(true)
+		v.setPartial()
 		return nil
 	}
 	if crossed {
@@ -330,7 +358,7 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 	switch {
 	case base == ".wh..wh..opq":
 		if v.below[parent] > 0 {
-			v.hideBelow[parent] = true
+			v.hideBelow[parent], v.changed = true, true
 		}
 		return nil
 	case strings.HasPrefix(base, ".wh..wh."):
@@ -339,7 +367,7 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 	case strings.HasPrefix(base, ".wh."):
 		gone := path.Join(parent, strings.TrimPrefix(base, ".wh."))
 		if v.files[gone] != nil || v.below[gone] > 0 {
-			v.hide[gone] = true
+			v.hide[gone], v.changed = true, true
 		}
 		return nil
 	}
@@ -350,7 +378,7 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 	}
 	if v.below[p] > 0 {
 		// A file replaces a lower layer's directory and all under it.
-		v.hideBelow[p] = true
+		v.hideBelow[p], v.changed = true, true
 	}
 	use, limit := v.use(p)
 	switch hdr.Typeflag {
@@ -369,7 +397,7 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 		if src == nil || src.isLink || src.use != use {
 			// A hard link to a file the view did not keep for this use.
 			v.remove(p)
-			v.partial.Store(true)
+			v.setPartial()
 			return nil
 		}
 		n := *src
@@ -398,8 +426,11 @@ func (v *View) addFile(p string, size int64, use docker.FileUse, limit int64, r 
 		return nil
 	case size > limit:
 		v.remove(p)
-		v.partial.Store(true)
+		v.setPartial()
 		return nil
+	case use == docker.Program && v.replay != nil:
+		// The program's bytes are not recorded, its build information is.
+		n.prog, n.progErr = v.replay.program()
 	case use == docker.Program:
 		tr := &trackReader{r: r}
 		n.prog, n.progErr = docker.ScanProgram(tr, size)
@@ -408,7 +439,7 @@ func (v *View) addFile(p string, size int64, use docker.FileUse, limit int64, r 
 		}
 	case v.kept-v.keptAt(p)+size > v.lim.KeptBytes:
 		v.remove(p)
-		v.partial.Store(true)
+		v.setPartial()
 		return nil
 	default:
 		b, err := io.ReadAll(io.LimitReader(r, size))
@@ -421,7 +452,14 @@ func (v *View) addFile(p string, size int64, use docker.FileUse, limit int64, r 
 		n.data = b
 	}
 	v.put(p, n)
+	v.made = n
 	return nil
+}
+
+// setPartial marks the view Partial from the member being added.
+func (v *View) setPartial() {
+	v.partial.Store(true)
+	v.changed, v.layerPartial = true, true
 }
 
 // keptAt returns the bytes held at p, which a new file at p replaces.
@@ -436,10 +474,11 @@ func (v *View) keptAt(p string) int64 {
 func (v *View) put(p string, n *node) {
 	if v.inserts >= v.lim.Files {
 		v.remove(p)
-		v.partial.Store(true)
+		v.setPartial()
 		return
 	}
 	v.inserts++
+	v.changed = true
 	v.remove(p)
 	n.layer = v.layer
 	v.files[p] = n
@@ -459,6 +498,7 @@ func (v *View) remove(p string) {
 		return
 	}
 	delete(v.files, p)
+	v.changed = true
 	v.kept -= int64(len(n.data))
 	for d := path.Dir(p); ; d = path.Dir(d) {
 		if v.below[d]--; v.below[d] <= 0 {
