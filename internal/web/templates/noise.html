@@ -1,0 +1,22 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-head">
+  <div><h1>Background noise</h1><p>Findings no attack path uses, each with the reason. They stay listed and are fixed with the next regular update, but they never wake you: Varde keeps them at P3, or P2 when the flaw is known to be exploited.</p></div>
+</div>
+{{if $d.Count}}
+<p class="small muted">{{plural $d.Count "finding"}} in {{len $d.Groups}} {{if eq (len $d.Groups) 1}}group{{else}}groups{{end}}.</p>
+{{range $d.Groups}}
+<section class="panel">
+  <div class="panel__head"><h2>{{.Reason}}</h2><span class="small muted">{{plural (len .Rows) "finding"}}</span></div>
+  {{template "findingtable" .Rows}}
+</section>
+{{end}}
+{{else}}
+<div class="empty panel">
+  <img src="/static/brand/mark-unlit.svg" alt="">
+  <h2>No background noise</h2>
+  <p>Varde calls a finding noise only when it knows why no attack path uses it: a flaw that needs physical access, a package no listening service uses, a container nothing reaches. That needs the ports a host listens on, which agents and SSH inventories report.</p>
+</div>
+{{end}}
+{{end}}

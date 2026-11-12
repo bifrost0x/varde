@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+id: lidarr
+name: Lidarr
+homepage: https://lidarr.audio
+tags: [media, arr, pvr, music]
+images:
+  - match: lscr.io/linuxserver/lidarr
+    flavor: lsio
+  - match: ghcr.io/hotio/lidarr
+    note: third-party image by hotio, release-<version> and release-<commit> tags, version in the OCI label
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  notes: >-
+    No repository advisories in Lidarr/Lidarr, no OSV package and no NVD CPE (no CVE for Lidarr
+    found in NVD). SECURITY.md asks for private reports via the Servarr Discord or
+    development@servarr.com; fixes are only mentioned in GitHub release notes
+    (https://github.com/Lidarr/Lidarr/releases). The sibling project Sonarr publishes repository
+    advisories; Servarr-wide issues may appear there first. The project publishes no official
+    container image. Versions have four components (3.1.6.5079); lsio tags add -lsNNN.
+exposure_hints:
+  default_ports: [8686]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

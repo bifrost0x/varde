@@ -1,0 +1,115 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}{{$csrf := .CSRF}}
+<div class="page-head">
+  <div><h1>Network and platforms</h1><p>What Varde finds in the networks you allow, and the platforms it reads through their official interfaces. For the full inventory of a host, <a href="/connections/agents">install the agent</a>.</p></div>
+</div>
+
+{{template "setupsteps" $d.Steps}}
+
+<section class="panel" id="scope" aria-labelledby="scope-title">
+  <h2 id="scope-title">1. Networks Varde may look at</h2>
+  <p class="small">Varde only connects to addresses in these ranges, for scans and for every integration. Only private ranges are accepted.</p>
+  {{if $d.NetworkErr}}<div class="banner banner--warn" role="alert"><p>{{$d.NetworkErr}}</p></div>{{end}}
+  <form class="form form--inline" method="post" action="/connections/scope">
+    {{template "csrf" $csrf}}
+    <div class="field field--grow"><label for="networks">Ranges</label>
+      <input id="networks" name="networks" type="text" value="{{$d.Networks}}" placeholder="192.168.1.0/24, 10.0.10.0/24" maxlength="1024"></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="scan" aria-labelledby="scan-title">
+  <div class="panel__head"><h2 id="scan-title">2. Scan</h2>
+    {{if $d.Scope}}<form method="post" action="/connections/scan">{{template "csrf" $csrf}}<button class="btn" type="submit" {{if $d.Scan.Running}}disabled{{end}}><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#refresh"></use></svg>{{if $d.Scan.Running}}Scanning…{{else}}Scan network{{end}}</button></form>{{end}}
+  </div>
+  {{if $d.Scope}}<form class="form form--inline" method="post" action="/settings">{{template "csrf" $csrf}}<input type="hidden" name="return" value="network">
+    <div class="field"><label for="scan-every">Scan automatically</label>
+      <select id="scan-every" name="DISCOVERY_SCAN_EVERY">{{range $d.ScanPeriods}}<option value="{{.Value}}" {{if eq .Value $d.ScanEvery}}selected{{end}}>{{.Label}}</option>{{end}}</select></div>
+    <button class="btn btn--ghost" type="submit">Save</button></form>{{end}}
+  {{if not $d.Scope}}
+  <p class="small muted">Allow a network range first.</p>
+  {{else if $d.Scan.Running}}
+  <p class="small" role="status">Scanning {{join $d.Scope ", "}}: {{$d.Percent}} %.</p>
+  <div class="meter" role="img" aria-label="{{$d.Percent}} percent scanned"><span class="meter__fill {{meterClass $d.Percent}}"></span></div>
+  {{else if not $d.Scan.Ended.IsZero}}
+  <p class="small">{{if $d.Scan.Err}}Last scan failed: {{$d.Scan.Err}}{{else}}Last {{if eq $d.Scan.Trigger "schedule"}}scheduled {{end}}scan {{since $d.Scan.Ended}}: {{plural $d.Scan.Found "device"}} answered.{{end}}</p>
+  {{if $d.Scan.Intercepted}}<p class="small muted">Port{{if gt (len $d.Scan.Intercepted) 1}}s{{end}} {{range $i, $p := $d.Scan.Intercepted}}{{if $i}}, {{end}}{{$p}}{{end}} answered on almost every address, which usually means the router redirects that traffic (for example all DNS). Varde ignored {{if gt (len $d.Scan.Intercepted) 1}}them{{else}}it{{end}} so it does not report devices that do not exist.</p>{{end}}
+  {{else}}
+  <p class="small muted">Varde connects to a few common ports on each address ({{join $d.Scope ", "}}), reads what the services announce and sends nothing else. A scan of a /24 takes about half a minute.</p>
+  {{end}}
+</section>
+
+<section class="panel" id="devices" aria-labelledby="dev-title">
+  <h2 id="dev-title">3. Found in your network</h2>
+  {{if $d.Devices}}
+  <p class="small">{{len $d.Devices}} {{if eq (len $d.Devices) 1}}address{{else}}addresses{{end}} answered. Varde knows what is installed on <a href="/systems">{{$d.Machines.Read}} of {{plural $d.Machines.Hosts "system"}}</a>{{if $d.Machines.Devices}}, {{plural $d.Machines.Devices "device"}} only seen by the scan{{end}}.</p>
+  <table class="table"><thead><tr><th scope="col">Address</th><th scope="col">Detected</th><th scope="col">Services</th><th scope="col">Varde reads it as</th></tr></thead><tbody>
+  {{range $d.Devices}}
+  <tr>
+    <td data-label="Address"><span class="mono">{{.Address}}</span>{{if .Hostname}}<span class="cell-sub">{{.Hostname}}</span>{{end}}</td>
+    <td data-label="Detected">{{.Label}}{{if .Insecure}} <span class="badge badge--kev">open without password</span>{{end}}<span class="cell-sub">last seen {{since .LastSeen}}{{if .Missed}}; did not answer the last scan{{end}}</span></td>
+    <td data-label="Services" class="small">{{if not .Services}}<span class="muted">none of the probed ports</span>{{end}}{{range $i, $s := .Services}}{{if $i}}, {{end}}<span class="mono">{{$s.Port}}</span>{{if $s.Product}} {{truncate $s.Product 40}}{{end}}{{end}}</td>
+    <td data-label="Varde reads it as">
+      {{if .Covered}}{{join .Covered ", "}}<span class="cell-sub">{{template "machineState" .Machine}}</span>{{else}}<span class="badge badge--muted">not read yet</span><span class="cell-sub">Varde knows it answers, not what runs on it.</span>{{end}}
+      {{if .Hint}}<span class="cell-sub">{{.Hint}}</span>{{end}}
+      {{if or .CanProxmox .CanAgent .CanLXC .Service}}<div class="actions">
+        {{if .Service}}<a class="btn btn--primary" href="/connections/connect/{{.Service}}?address={{.Address}}">Connect {{serviceName .Service}}</a>{{end}}
+        {{if .CanProxmox}}<a class="btn btn--primary" href="/connections/connect/proxmox?address={{.Address}}">Connect Proxmox</a>{{end}}
+        {{if .CanLXC}}<a class="btn btn--ghost" href="/connections/connect/proxmox-lxc?address={{.Address}}">Read all guests</a>{{end}}
+        {{if .CanAgent}}<a class="btn btn--primary" href="/connections/agents/install?address={{.Address}}">Install the agent</a><span class="cell-sub">Recommended: every package and Docker container, kept current.</span>{{end}}
+      </div>{{end}}
+      {{if or .CanDocker .CanPackages}}<details class="small"><summary>{{if .CanAgent}}Without an agent{{else}}Read over SSH{{end}}</summary><div class="actions">
+        {{if .CanDocker}}<a class="btn btn--ghost" href="/connections/connect/docker?address={{.Address}}">Read Docker via SSH</a>{{end}}
+        {{if .CanPackages}}<a class="btn btn--ghost" href="/connections/connect/packages?address={{.Address}}">Read packages via SSH</a>{{end}}
+      </div></details>{{end}}
+    </td>
+  </tr>
+  {{end}}
+  </tbody></table>
+  {{else}}<p class="small muted">Nothing found yet. Allow a range and start a scan.</p>{{end}}
+</section>
+
+<section class="panel" id="integrations" aria-labelledby="int-title">
+  <div class="panel__head"><h2 id="int-title">4. Connected platforms</h2>
+    <div class="actions"><a class="btn btn--ghost" href="/connections/connect/proxmox">Add Proxmox</a><a class="btn btn--ghost" href="/connections/connect/docker">Add Docker host</a><a class="btn btn--ghost" href="/connections/connect/packages">Read packages</a>{{range $d.ServiceKinds}}<a class="btn btn--ghost" href="/connections/connect/{{.Kind}}">Add {{.Name}}</a>{{end}}</div></div>
+  {{if $d.Integration}}
+  {{range $d.Integration}}
+  <article class="integration">
+    <div class="panel__head">
+      <h3>{{.Name}} {{if eq .Health "off"}}<span class="badge badge--muted">off</span>{{else if eq .Health "failing"}}<span class="badge badge--p1">not reading</span>{{else if eq .Health "error"}}<span class="badge badge--p2">error</span>{{else if eq .Health "ok"}}<span class="badge badge--ok">connected</span>{{else}}<span class="badge badge--muted">waiting</span>{{end}}</h3>
+      <div class="actions">
+        {{if .Enabled}}<form method="post" action="/connections/integrations/{{.ID}}/sync">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Read now</button></form>
+        <form method="post" action="/connections/integrations/{{.ID}}/disable">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Switch off</button></form>
+        {{else}}<form method="post" action="/connections/integrations/{{.ID}}/enable">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Switch on</button></form>{{end}}
+        <form method="post" action="/connections/integrations/{{.ID}}/delete" data-confirm="Remove {{.Name}} and every host it reported?">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Remove</button></form>
+      </div>
+    </div>
+    {{if .LastError}}<p class="small"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg> {{.LastError}}</p>{{end}}
+    {{if .LastSuccess}}<p class="small muted">Last read {{since .LastSuccess}}.</p>{{else if .Enabled}}<p class="small muted">No successful read yet.</p>{{end}}
+    {{if eq .Health "failing"}}<p class="small">Its hosts count as not reporting until it reads again. Check that the host is reachable, then use Read now.</p>{{else if eq .Health "off"}}<p class="small muted">Switched off: its hosts are kept but not read.</p>{{end}}
+    {{with .Proxmox}}
+    <p class="small">Proxmox VE {{.Version}} · {{plural (len .Nodes) "node"}} · {{plural (len .Guests) "guest"}}</p>
+    <table class="table"><thead><tr><th scope="col">Guest</th><th scope="col">Type</th><th scope="col">State</th><th scope="col">Addresses</th></tr></thead><tbody>
+    {{range .Guests}}<tr>
+      <td data-label="Guest">{{.Name}}<span class="cell-sub mono">{{.VMID}} on {{.Node}}</span></td>
+      <td data-label="Type">{{if eq .Type "lxc"}}LXC container{{else}}VM{{end}}</td>
+      <td data-label="State">{{.Status}}</td>
+      <td data-label="Addresses">{{if .Addresses}}<span class="mono">{{join .Addresses ", "}}</span>{{else}}<span class="small muted">{{.AddressNote}}</span>{{end}}</td>
+    </tr>{{end}}
+    </tbody></table>
+    {{end}}
+    {{with .Docker}}<p class="small">Docker {{.Version}} on {{.Host}} · {{plural .Containers "container"}}. The containers are listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
+    {{with .Service}}{{if .Clients}}<p class="small">{{plural (len .Clients) "device"}} with MAC address and name; they give names to found devices and tie Proxmox guests to their addresses.</p>{{end}}{{end}}
+    {{if .Routes}}<table class="table"><thead><tr><th scope="col">Host name</th><th scope="col">Forwards to</th><th scope="col">Machine</th></tr></thead><tbody>
+    {{range .Routes}}<tr><td data-label="Host name" class="mono">{{.Host}}{{if .Public}} <span class="badge">public</span>{{end}}</td><td data-label="Forwards to" class="mono">{{.Backend}}</td>
+      <td data-label="Machine">{{if .Machine}}{{.Machine}}{{if not .Checked}} <span class="badge badge--unverified">not checked</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}</td></tr>{{end}}
+    </tbody></table>{{else if .Service}}{{if not .Service.Clients}}<p class="small muted">No routes.</p>{{end}}{{end}}
+    {{with .LXC}}<p class="small">{{plural .Containers "running container"}}, {{plural .Packages "package"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
+    {{if .CanLXC}}<p class="small"><a href="/connections/connect/proxmox-lxc?address={{.Address}}">Read the full inventory of every guest on this node</a> (LXC containers and VMs with guest agent: packages and Docker containers) with one key line, without signing in to each guest.</p>{{end}}
+    {{with .Inventory}}<p class="small">{{if .OS}}{{.OS}} · {{end}}{{plural .Packages "package"}} and {{plural .Services "service"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
+  </article>
+  {{end}}
+  {{else}}<p class="small muted">No platform connected yet. Found devices offer the matching setup.</p>{{end}}
+</section>
+{{end}}

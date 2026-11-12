@@ -1,0 +1,30 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-head">
+  <div><h1>Advisory data</h1><p>Where the advisories come from, and how fresh they are.</p></div>
+</div>
+<div class="banner banner--info"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#eye-off"></use></svg>
+  {{if eq $d.Mode "package"}}<p>Data package: Varde reads one signed package the project builds once a day, the same for every installation. The package's mirror learns nothing about the apps you run{{if $d.Direct}}; for apps the package does not cover Varde asks api.github.com, as switched on under <a href="/settings#package">Settings</a>{{end}}. The optional sources below, where switched on, are asked as before.</p>
+  {{else if eq $d.Mode "feed"}}<p>Feed mode: Varde downloads the signed central feed, the same data for every installation. Upstream sources learn nothing about the apps you run.</p>
+  {{else if eq $d.Mode "hybrid"}}<p>Hybrid mode: Varde uses the signed central feed. Where direct queries are switched on, it asks GitHub about local catalog entries and apps the feed does not cover; GitHub learns about those apps from the advisory repositories requested.</p>
+  {{else}}<p>Direct mode: Varde queries upstream sources itself. GitHub learns which apps you run from the advisory repositories requested. A signed central feed, where every installation downloads the same data, is planned and will avoid this.</p>{{end}}</div>
+<section class="panel">
+  <table class="table">
+    <thead><tr><th scope="col">Source</th><th scope="col">Key</th><th scope="col">Last success</th><th scope="col">Next check</th><th scope="col">Status</th></tr></thead>
+    <tbody>
+    {{range $d.States}}
+    <tr><td data-label="Source">{{.Source}}</td><td data-label="Key" class="mono">{{.Key}}</td>
+      <td data-label="Last success">{{if .LastSuccess.IsZero}}<span class="muted">never</span>{{else}}{{since .LastSuccess}}{{end}}</td>
+      <td data-label="Next check">{{if .NextRun.IsZero}}<span class="muted">next schedule</span>{{else}}{{date .NextRun}}{{end}}</td>
+      <td data-label="Status">{{if .LastError}}<span class="badge badge--unverified">error</span><span class="cell-sub">{{truncate .LastError 160}}</span>{{else}}<span class="badge badge--ok">ok</span>{{end}}</td></tr>
+    {{else}}<tr><td colspan="5" class="muted">No source has run yet. Sources start once an app from the catalog is identified.</td></tr>{{end}}
+    </tbody>
+  </table>
+</section>
+<section class="panel">
+  <h2>Optional sources</h2>
+  <p class="small">OSV: {{if $d.OSV}}enabled{{else}}off{{end}} · NVD: {{if $d.NVD}}enabled{{else}}off{{end}}. Both reveal package or product names of the apps you run to their operators; enable them under <a href="/settings#sources">Settings</a>.</p>
+  <p class="small">GitHub access: {{if $d.GitHubToken}}token configured (5000 requests per hour){{else}}anonymous (60 requests per hour){{end}}.</p>
+</section>
+{{end}}

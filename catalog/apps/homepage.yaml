@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+id: homepage
+name: Homepage
+homepage: https://gethomepage.dev
+tags: [dashboard]
+images:
+  - match: ghcr.io/gethomepage/homepage
+oci_source:
+  - https://github.com/gethomepage/homepage
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - gethomepage/homepage
+  cpe:
+    - cpe:2.3:a:gethomepage:homepage
+  notes: >-
+    Tags and the version label carry a v prefix (v2.7.0); latest and minor tags (v2.7) are
+    floating, feature-* and fix-* tags are development builds. No OSV package (the npm name
+    homepage belongs to an unrelated package).
+exposure_hints:
+  default_ports: [3000]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

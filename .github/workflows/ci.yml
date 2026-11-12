@@ -1,0 +1,124 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Single definition of the image name for CI.
+  IMAGE_NAME: bifrost0x/varde
+  GOVULNCHECK_VERSION: v1.9.0
+  GOLANGCI_LINT_VERSION: v2.15.0
+  # Compressed image size budget (bytes).
+  IMAGE_SIZE_LIMIT: "26214400"
+
+jobs:
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: ./scripts/check-license-headers.sh
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: no private or local files are tracked, no session links in commit messages
+        run: ./scripts/check-tracked-files.sh
+      - name: gitleaks (full history)
+        run: >
+          docker run --rm -v "$PWD:/repo:ro"
+          ghcr.io/gitleaks/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854
+          git /repo --no-banner --redact --exit-code 1
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go vet -tags feeddev ./cmd/feedbuilder
+      - name: development feed tooling stays out of default builds
+        run: |
+          if go list ./cmd/feedbuilder >/dev/null 2>&1; then
+            echo "cmd/feedbuilder builds without -tags feeddev"; exit 1
+          fi
+          if grep -rn --include='*.go' -l 'feeddev' cmd/varde internal; then
+            echo "the feeddev tag must not appear in the server or its packages"; exit 1
+          fi
+      - run: go test -race -count=1 ./...
+      # The recognition gate also runs in the tests above; this step shows
+      # the numbers in the job summary.
+      - name: recognition report
+        run: EVAL_REPORT="$GITHUB_STEP_SUMMARY" go test -count=1 -run TestCorpus ./internal/eval
+      - name: fuzz smoke
+        run: make fuzz FUZZTIME=5s
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: build
+        run: docker build --build-arg VERSION=ci-${GITHUB_SHA} -t "${IMAGE_NAME}:ci" .
+      - name: size budget
+        run: |
+          size=$(docker save "${IMAGE_NAME}:ci" | gzip -c | wc -c)
+          echo "compressed image size: ${size} bytes"
+          test "${size}" -lt "${IMAGE_SIZE_LIMIT}"
+      - name: smoke test (hardened runtime)
+        run: |
+          docker run -d --name smoke --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true -p 127.0.0.1:8080:8080 "${IMAGE_NAME}:ci"
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8080/healthz; then break; fi
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:8080/healthz
+          docker exec smoke /varde healthcheck
+          docker stop -t 10 smoke
+          docker logs smoke

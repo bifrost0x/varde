@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+id: netbird
+name: NetBird
+homepage: https://netbird.io
+tags: [vpn, wireguard, network]
+images:
+  - match: netbirdio/netbird-server
+    note: combined management, signal, relay and STUN server used by the current setup script
+  - match: ghcr.io/netbirdio/netbird-server
+  - match: netbirdio/management
+  - match: ghcr.io/netbirdio/management
+  - match: netbirdio/signal
+  - match: ghcr.io/netbirdio/signal
+  - match: netbirdio/relay
+  - match: ghcr.io/netbirdio/relay
+  - match: netbirdio/reverse-proxy
+    note: NetBird Proxy, released together with the server
+  - match: netbirdio/netbird
+    note: client/agent image, same release version and Go module as the server
+  - match: ghcr.io/netbirdio/netbird
+version:
+  scheme: semver
+  sources:
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+(?:-rc\.\d+)?)(?:-(?:ubi|rootless|rootless-ubi))?$'
+advisories:
+  coverage: full
+  github_repos:
+    - netbirdio/netbird
+  osv_packages:
+    - {ecosystem: Go, name: github.com/netbirdio/netbird}
+  notes: >-
+    The images carry no OCI source label; management and netbird-server set
+    org.opencontainers.image.version to the Ubuntu base version (24.04), so only the tag is
+    used. latest, ubi-latest, rootless-latest and canary tags never yield a version. The
+    dashboard (netbirdio/dashboard) is a separate repository with its own version line and no
+    advisories and is not listed. No NVD CPE exists; NetBird CVEs (e.g. CVE-2024-41260,
+    CVE-2025-10678) have no CPE configuration.
+exposure_hints:
+  default_ports: [80, 3478]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

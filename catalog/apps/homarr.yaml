@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+id: homarr
+name: Homarr
+homepage: https://homarr.dev
+tags: [dashboard]
+images:
+  - match: ghcr.io/homarr-labs/homarr
+  - match: ghcr.io/ajnart/homarr
+    note: legacy 0.x line, repository ajnart/homarr is archived (last release 0.16.1)
+oci_source:
+  - https://github.com/homarr-labs/homarr
+  - https://github.com/ajnart/homarr
+version:
+  scheme: semver
+  sources:
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)$'
+advisories:
+  coverage: full
+  github_repos:
+    - homarr-labs/homarr
+  cpe:
+    - cpe:2.3:a:homarr:homarr
+  notes: >-
+    ghcr.io/homarr-labs/homarr sets org.opencontainers.image.version to "main" even on release
+    tags, so only the tag (v2.12.0) is used. The archived ajnart/homarr repository has no
+    advisories.
+exposure_hints:
+  default_ports: [7575]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+id: mealie
+name: Mealie
+homepage: https://mealie.io
+tags: [recipes, food]
+images:
+  - match: ghcr.io/mealie-recipes/mealie
+  - match: hkotel/mealie
+    note: Docker Hub repository pushed by the project's publish workflow, same digests
+oci_source:
+  - https://github.com/mealie-recipes/mealie
+version:
+  scheme: semver
+advisories:
+  coverage: partial
+  github_repos:
+    - mealie-recipes/mealie
+  cpe:
+    - cpe:2.3:a:mealie:mealie
+  notes: >-
+    mealie-recipes/mealie has one repository advisory (2026); the earlier CVEs (2022 to 2026)
+    exist only in NVD. Reports go through GitHub private vulnerability reporting (SECURITY.md);
+    only the latest version receives fixes. No OSV package (PyPI mealie has no records). Tags and
+    the version label carry a v prefix (v3.30.0); latest and nightly are floating.
+exposure_hints:
+  default_ports: [9000]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

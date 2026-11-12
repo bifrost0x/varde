@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+id: nginx-ui
+name: Nginx UI
+homepage: https://nginxui.com
+tags: [nginx, web-server, management]
+images:
+  - match: uozi/nginx-ui
+oci_source:
+  - https://github.com/0xJacky/nginx-ui
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - 0xJacky/nginx-ui
+  osv_packages:
+    - {ecosystem: Go, name: github.com/0xJacky/Nginx-UI}
+  cpe:
+    - cpe:2.3:a:nginxui:nginx_ui
+  notes: >-
+    Release tags exist with and without v prefix (v3.0.1, 3.0.1); sha-*, dev, main and branch
+    tags are floating.
+exposure_hints:
+  default_ports: [80, 443]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

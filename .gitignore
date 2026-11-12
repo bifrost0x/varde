@@ -1,0 +1,66 @@
+# Build output
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+/coverage.*
+/testdata/fuzz-cache/
+
+# Local state: databases, data directories, feed output of cmd/feedbuilder
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+/data/
+/feed/
+/dev-keys/
+
+# Secrets: never commit keys, tokens or environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+/secrets/
+/deploy/secrets/
+/deploy/enroll_token
+/deploy/.env
+*_token
+!*_token.go
+!*_token_test.go
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+/tmp/
+*.tmp
+*.log
+eval-report.md
+
+# Fetched pages of the index builder
+/.cache/
+
+# Working directories of the data package workflow and of a build by hand
+/published/
+/work/
+
+# Key ceremony: private keys are covered by *.key above. A signed root is
+# public, but only the one embedded at internal/feed/roots/production.json
+# belongs in the repository.
+/production*.json
+/root*.json
+
+# Working files of coding assistants and planning tools
+/.superpowers/
+/.claude/
+/CLAUDE.local.md

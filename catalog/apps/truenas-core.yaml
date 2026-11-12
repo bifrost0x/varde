@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+id: truenas-core
+name: TrueNAS CORE
+homepage: https://www.truenas.com/truenas-core/
+tags: [nas, storage, appliance]
+packages:
+  # FreeBSD-based TrueNAS CORE: "TrueNAS-13.0-U6.2" is recorded as 13.0.6.2.
+  - {manager: firmware, name: truenas-core, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:o:ixsystems:truenas_core
+  notes: >-
+    TrueNAS CORE is in maintenance; iXsystems publishes security notes on security.truenas.com.
+    CPE product name to be confirmed against NVD records.
+exposure_hints:
+  default_ports: [443, 80]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

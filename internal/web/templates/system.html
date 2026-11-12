@@ -1,0 +1,78 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}{{$m := $d.Machine}}
+<div class="page-head">
+  <div>
+    <p class="small"><a href="/systems">Systems</a>{{if $m.ParentName}} › <a href="/systems/{{$m.ParentID}}">{{$m.ParentName}}</a>{{end}}</p>
+    <h1>{{$m.Name}}</h1>
+    <p>{{machineKind $m.Kind}}{{if $m.OS}} · {{$m.OS}}{{end}}{{if $m.Addresses}} · <span class="mono">{{join $m.Addresses ", "}}</span>{{end}}</p>
+  </div>
+  <div class="actions">{{template "machineState" $m}}</div>
+</div>
+
+{{if $d.Reboot}}<div class="banner banner--warn" role="status"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#refresh"></use></svg>
+  <div><p><strong>Restart needed.</strong> {{$d.Reboot}}. Until the system restarts, the fixes of these updates do not take effect, even where Varde shows the package as updated.</p></div></div>{{end}}
+{{range $d.Blind}}
+<div class="banner banner--warn" role="status"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg>
+  <div><p>{{.Text}}</p>{{if .Link}}<p><a class="btn btn--primary" href="{{.Link}}">{{.Action}}</a></p>{{end}}</div></div>
+{{end}}
+
+<div class="grid-2">
+  <section class="panel" aria-labelledby="known-title">
+    <h2 id="known-title">Where Varde knows it from</h2>
+    <ul class="source-list">{{range $m.Evidence}}<li><strong>{{evidenceLabel .Source}}</strong>{{if eq .State "stale"}} <span class="badge badge--p2">not reporting</span>{{end}}{{if .Detail}}<span class="cell-sub">{{.Detail}}</span>{{end}}<span class="cell-sub muted">last {{date .LastSeen}}</span></li>{{end}}</ul>
+    {{if $d.Children}}<h3>Runs on it</h3><ul class="source-list">{{range $d.Children}}<li><a href="/systems/{{.ID}}">{{.Name}}</a><span class="cell-sub">{{machineKind .Kind}}{{if .OS}} · {{.OS}}{{end}}</span></li>{{end}}</ul>{{end}}
+  </section>
+  <section class="panel" aria-labelledby="risk-title">
+    <h2 id="risk-title">What is affected</h2>
+    {{if $d.Findings}}
+    <ul class="source-list">{{range $d.Findings}}<li>{{template "prio" .Priority}} <a href="/findings/{{.ID}}">{{.AdvisoryID}}</a> <span class="muted">{{index $d.AppNames .AppID}}</span>{{if eq .MatchState "unverified"}} <span class="badge badge--unverified">unverified</span>{{end}}{{if .FixedIn}}<span class="cell-sub">fixed in <span class="mono">{{.FixedIn}}</span></span>{{end}}</li>{{end}}</ul>
+    {{else}}<p class="muted small">No open finding on this system{{if not (or $d.Apps $d.Total)}}; Varde does not know yet what runs on it{{end}}.</p>{{end}}
+  </section>
+</div>
+
+{{if $d.Apps}}
+<section class="panel" aria-labelledby="apps-title">
+  <h2 id="apps-title">Apps</h2>
+  <table class="table">
+    <thead><tr><th scope="col">App</th><th scope="col">Version</th><th scope="col">Where the version comes from</th><th scope="col">Findings</th></tr></thead>
+    <tbody>{{range $d.Apps}}
+    <tr><td data-label="App">{{.AppName}}<span class="cell-sub mono">{{.Image}}</span></td>
+      <td data-label="Version">{{if .Version}}<span class="mono">{{.Version}}</span>{{if eq .Trust "conflict"}} <span class="badge badge--unverified">sources disagree</span>{{else if eq .Trust "reported"}} <span class="badge badge--muted">reported</span>{{end}}{{else if .Distro}}<span class="mono">{{.PackageVersion}}</span> <span class="badge badge--muted">{{.Distro}}</span>{{else}}<span class="badge badge--unverified">unknown</span>{{end}}</td>
+      <td data-label="Source">{{if .Doubt}}{{.Doubt}}{{else if .VersionSource}}{{.VersionSource}}{{else}}<span class="muted">{{truncate .Note 160}}</span>{{end}}</td>
+      <td data-label="Findings">{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else}}<span class="muted">none</span>{{end}}</td></tr>
+    {{end}}</tbody>
+  </table>
+</section>
+{{end}}
+
+{{if $d.Containers}}
+<section class="panel" aria-labelledby="ct-title">
+  <h2 id="ct-title">Containers <span class="muted small">{{len $d.Containers}}</span></h2>
+  <table class="table">
+    <thead><tr><th scope="col">Container</th><th scope="col">Image</th><th scope="col">App</th><th scope="col">Version</th></tr></thead>
+    <tbody>{{range $d.Containers}}
+    <tr><td data-label="Container">{{.Name}}{{if .Stack}} <span class="badge badge--muted">{{.Stack}}</span>{{end}}</td>
+      <td data-label="Image"><span class="mono">{{.Image}}</span>{{if .Pulled}} <span class="badge badge--unverified">newer image pulled</span>{{end}}{{if .Open}} <a class="badge badge--p3" href="/findings?workload={{.ID}}">{{.Open}} open</a>{{end}}{{if and .Unfixed $d.Checked}} <span class="badge badge--muted" title="Issues in the image's packages that no newer image fixes yet">{{.Unfixed}} without fix</span>{{end}}</td>
+      <td data-label="App">{{if .AppName}}{{.AppName}}{{else if .NotApp}}<span class="muted">helper</span>{{else}}<span class="muted">not in catalog</span>{{end}}</td>
+      <td data-label="Version">{{if .Version}}<span class="mono">{{.Version}}</span><span class="cell-sub">{{.VersionSource}}</span>{{else if .AppID}}<span class="badge badge--unverified">unknown</span>{{else}}<span class="muted">–</span>{{end}}</td></tr>
+    {{end}}</tbody>
+  </table>
+</section>
+{{end}}
+
+<section class="panel" id="packages" aria-labelledby="pk-title">
+  <div class="panel__head"><h2 id="pk-title">Installed packages <span class="muted small">{{$d.Total}}</span></h2>{{if $d.Total}}<span class="small muted">{{if $d.PackageOS}}{{$d.PackageOS}}, {{end}}{{if $d.Kernel}}kernel <span class="mono">{{$d.Kernel}}</span>, {{end}}read {{date $d.PackageRead}}</span>{{end}}</div>
+  {{if $d.Total}}
+  <form class="form form--inline" method="get" action="/systems/{{$m.ID}}#packages">
+    <div class="field"><label for="q">Filter</label><input id="q" name="q" type="search" value="{{$d.Query}}" placeholder="openssl, nginx, libc…"></div>
+    <button class="btn" type="submit">Filter</button>
+  </form>
+  <p class="small muted">{{if $d.Query}}{{$d.Shown}} matching{{else}}{{$d.Shown}} of {{$d.Total}}{{end}}{{if lt $d.Shown $d.Total}}{{if not $d.Query}}; filter to see the others{{end}}{{end}}. From the system's own package database.{{if $d.Checked}} Checked against the distribution's security data; a package marked "to update" has a security fix waiting.{{if $d.UnfixedTotal}} {{plural $d.UnfixedTotal "known issue"}} {{if eq $d.UnfixedTotal 1}}has{{else}}have{{end}} no fix from the distribution yet ("without fix"); Varde reports {{if eq $d.UnfixedTotal 1}}it{{else}}them{{end}} as soon as an update fixes {{if eq $d.UnfixedTotal 1}}it{{else}}them{{end}}.{{end}}{{else}} Not checked against security data yet: <a href="/settings#sources">turn on package checks</a>.{{end}}</p>
+  <table class="table">
+    <thead><tr><th scope="col">Package</th><th scope="col">Version</th><th scope="col">Source package</th><th scope="col">Manager</th></tr></thead>
+    <tbody>{{range $d.Packages}}<tr><td data-label="Package" class="mono">{{.Name}}</td><td data-label="Version" class="mono">{{.Version}}</td><td data-label="Source" class="mono">{{if .Source}}{{.Source}}{{else}}<span class="muted">–</span>{{end}}{{with index $d.Updates (or .Source .Name)}} <span class="badge badge--p3">{{.}} to update</span>{{end}}{{with index $d.Unfixed (or .Source .Name)}} <span class="badge badge--muted">{{.}} without fix</span>{{end}}</td><td data-label="Manager">{{.Manager}}</td></tr>{{end}}</tbody>
+  </table>
+  {{else}}<p class="muted small">No package list read from this system yet.</p>{{end}}
+</section>
+{{end}}

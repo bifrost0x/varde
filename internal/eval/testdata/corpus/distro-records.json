@@ -1,0 +1,122 @@
+[
+ {
+  "id": "DEBIAN-CVE-2026-9256",
+  "modified": "2026-10-01T03:03:55.743877565Z",
+  "upstream": [
+   "CVE-2026-9256"
+  ],
+  "summary": "",
+  "affected": [
+   {
+    "package": {
+     "name": "nginx",
+     "ecosystem": "Debian:12",
+     "purl": "pkg:deb/debian/nginx?arch=source&distro=bookworm"
+    },
+    "ranges": [
+     {
+      "type": "ECOSYSTEM",
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "1.22.1-9+deb12u8"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "DEBIAN-CVE-2026-97629",
+  "modified": "2026-10-21T17:01:59.753933274Z",
+  "upstream": [
+   "CVE-2026-97629"
+  ],
+  "summary": "",
+  "affected": [
+   {
+    "package": {
+     "name": "nginx",
+     "ecosystem": "Debian:12",
+     "purl": "pkg:deb/debian/nginx?arch=source&distro=bookworm"
+    },
+    "ranges": [
+     {
+      "type": "ECOSYSTEM",
+      "events": [
+       {
+        "introduced": "0"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "ALPINE-CVE-2026-9256",
+  "modified": "2026-10-01T02:17:49.420874630Z",
+  "upstream": [
+   "CVE-2026-9256"
+  ],
+  "summary": "",
+  "affected": [
+   {
+    "package": {
+     "name": "nginx",
+     "ecosystem": "Alpine:v3.22",
+     "purl": "pkg:apk/alpine/nginx?arch=source"
+    },
+    "ranges": [
+     {
+      "type": "ECOSYSTEM",
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "1.28.3-r2"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "ALSA-2026:7343",
+  "modified": "2026-10-29T11:32:37.611524259Z",
+  "upstream": [
+   "CVE-2026-27651",
+   "CVE-2026-27654",
+   "CVE-2026-27784",
+   "CVE-2026-32647"
+  ],
+  "summary": "Important: nginx:1.26 security update",
+  "affected": [
+   {
+    "package": {
+     "name": "nginx",
+     "ecosystem": "AlmaLinux:9",
+     "purl": "pkg:rpm/almalinux/nginx"
+    },
+    "ranges": [
+     {
+      "type": "ECOSYSTEM",
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "2:1.26.3-2.module_el9.7.0+223+9cd7031b.1"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+]

@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+id: qnap-qts
+name: QNAP QTS
+homepage: https://www.qnap.com/qts
+tags: [nas, storage, appliance]
+packages:
+  # Read without a credential from /cgi-bin/authLogin.cgi: version and
+  # build number, "5.1.4.2596".
+  - {manager: firmware, name: qnap-qts, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:o:qnap:qts
+  notes: >-
+    QNAP publishes Security Advisories (QSA-YY-NN) naming fixed versions as "QTS 5.1.4.2596 build
+    20231128"; there is no machine-readable feed. NVD lists the same as qts version 5.1.4.2596.
+exposure_hints:
+  default_ports: [8080, 443]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

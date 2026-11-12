@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+id: authelia
+name: Authelia
+homepage: https://www.authelia.com
+tags: [identity, sso, security]
+images:
+  - match: authelia/authelia
+  - match: ghcr.io/authelia/authelia
+oci_source:
+  - https://github.com/authelia/authelia
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - authelia/authelia
+  osv_packages:
+    - {ecosystem: Go, name: github.com/authelia/authelia/v4}
+  cpe:
+    - cpe:2.3:a:authelia:authelia
+  notes: >-
+    The image's org.opencontainers.image.source label is
+    https://github.com/authelia/authelia/tree/<commit>, so it only matches oci_source if the
+    value is normalised to the repository URL. Branch builds (master, feat-*, PR*) are floating.
+exposure_hints:
+  default_ports: [9091]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

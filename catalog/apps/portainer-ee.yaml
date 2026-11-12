@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+id: portainer-ee
+name: Portainer Business Edition
+homepage: https://www.portainer.io
+tags: [docker, management]
+images:
+  - match: portainer/portainer-ee
+version:
+  scheme: semver
+  sources:
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-(?:alpine|linux-[a-z0-9]+(?:-alpine)?|windows[a-z0-9]+-amd64))?$'
+    - tag: '^linux-[a-z0-9]+-(?P<v>\d+\.\d+\.\d+)(?:-alpine)?$'
+advisories:
+  coverage: limited
+  notes: >-
+    Split from the CE entry because EE uses its own version line (3.0.x while CE is at 2.45.x).
+    Advisories in portainer/portainer state CE version ranges and must not be applied to EE
+    versions as they are. Portainer announces EE fixes in its release notes
+    (https://docs.portainer.io/release-notes) and security notices on portainer.io; the central
+    pipeline has to map them to EE versions before Varde can match EE installations.
+exposure_hints:
+  default_ports: [9443, 9000, 8000]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

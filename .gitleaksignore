@@ -1,0 +1,8 @@
+# Synthetic test token in the API tests, not a credential.
+ae6727c9a693d05df729a7810a4d8b12a5c87e5c:internal/api/api_test.go:generic-api-key:20
+# Synthetic enrollment token in the agent installation tests, replaced by a
+# constant since; not a credential.
+094fa41b620542bab689a15055ac25702423bb82:internal/integrations/agentinstall_test.go:generic-api-key:132
+094fa41b620542bab689a15055ac25702423bb82:internal/integrations/agentinstall_test.go:generic-api-key:152
+b4ce1317fd1c380cdc4ffe0ba2787184f831bd03:internal/integrations/agentinstall_test.go:generic-api-key:132
+b4ce1317fd1c380cdc4ffe0ba2787184f831bd03:internal/integrations/agentinstall_test.go:generic-api-key:152

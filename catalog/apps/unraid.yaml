@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+id: unraid
+name: Unraid
+homepage: https://unraid.net
+tags: [nas, storage, appliance]
+packages:
+  # Read through the Unraid API (info.versions.core.unraid), "7.1.4".
+  - {manager: firmware, name: unraid, versioning: upstream, version_pattern: '^(?P<v>\d+\.\d+\.\d+(?:-(?:rc|beta)\.?\d+)?)$'}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  notes: >-
+    Lime Technology announces security fixes in the Unraid release notes and blog; there is no
+    machine-readable feed and few CVE records. Varde records the release so the end-of-life and
+    update state are visible.
+exposure_hints:
+  default_ports: [80, 443]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

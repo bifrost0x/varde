@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+id: frigate
+name: Frigate
+homepage: https://frigate.video
+tags: [nvr, cameras, video]
+images:
+  - match: ghcr.io/blakeblackshear/frigate
+  - match: blakeblackshear/frigate
+    note: legacy Docker Hub repository, last release 0.11.1
+version:
+  scheme: semver
+  sources:
+    - tag: '^(?P<v>\d+\.\d+\.\d+(?:-(?:beta|rc)\d+)?)(?:-(?:standard-arm64|tensorrt(?:-jp[456])?|rk|rocm|synaptics|h8l))?$'
+advisories:
+  coverage: full
+  github_repos:
+    - blakeblackshear/frigate
+  osv_packages:
+    - {ecosystem: PyPI, name: frigate}
+  cpe:
+    - cpe:2.3:a:frigate:frigate
+  notes: >-
+    The images carry no OCI labels. Release tags are 0.18.2 plus hardware variants
+    (-tensorrt, -rocm, -rk, -synaptics, -h8l, -standard-arm64); stable and stable-* are floating
+    and <commit>-<variant> tags are development builds, so pin a release tag or set
+    varde.version. The PyPI name frigate is used by the GitHub advisory database although
+    Frigate is not distributed on PyPI.
+exposure_hints:
+  default_ports: [8971, 5000, 8554, 8555]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

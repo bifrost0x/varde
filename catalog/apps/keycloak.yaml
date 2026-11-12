@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+id: keycloak
+name: Keycloak
+homepage: https://www.keycloak.org
+tags: [identity, sso, security]
+images:
+  - match: quay.io/keycloak/keycloak
+oci_source:
+  - https://github.com/keycloak-rel/keycloak-rel
+version:
+  scheme: semver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-\d+)?$'
+advisories:
+  coverage: full
+  github_repos:
+    - keycloak/keycloak
+  osv_packages:
+    - {ecosystem: Maven, name: org.keycloak:keycloak-services}
+    - {ecosystem: Maven, name: org.keycloak:keycloak-quarkus-server}
+  cpe:
+    - cpe:2.3:a:redhat:keycloak
+    - cpe:2.3:a:keycloak:keycloak
+  notes: >-
+    The image's OCI source label names the release repository keycloak-rel/keycloak-rel, not
+    keycloak/keycloak. Image rebuilds get tags with a build suffix (26.8.2-0, 26.8.2-1); the plain
+    tag 26.8.2 points to the latest rebuild. latest, nightly and minor tags (26.8) are floating.
+    The Docker Hub image jboss/keycloak (WildFly based) no longer exists. Red Hat build of
+    Keycloak (registry.redhat.io) has its own versions and is not covered.
+exposure_hints:
+  default_ports: [8080, 8443]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

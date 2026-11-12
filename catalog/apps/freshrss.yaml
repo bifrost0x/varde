@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+id: freshrss
+name: FreshRSS
+homepage: https://freshrss.org
+tags: [rss, reader]
+images:
+  - match: freshrss/freshrss
+  - match: ghcr.io/freshrss/freshrss
+  - match: lscr.io/linuxserver/freshrss
+    flavor: lsio
+oci_source:
+  - https://github.com/FreshRSS/FreshRSS
+version:
+  scheme: semver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-alpine)?$'
+advisories:
+  coverage: full
+  github_repos:
+    - FreshRSS/FreshRSS
+  cpe:
+    - cpe:2.3:a:freshrss:freshrss
+  notes: >-
+    Docker Hub also carries bare numeric tags (e.g. 9536, 8400) that are not release versions;
+    the tag regex excludes them. edge and edge-alpine are development builds. FreshRSS is not
+    published on Packagist, so there is no OSV package.
+exposure_hints:
+  default_ports: [80]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

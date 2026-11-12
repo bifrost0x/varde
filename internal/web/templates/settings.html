@@ -1,0 +1,207 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "locked"}}{{if .}}<span class="badge badge--muted"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#lock"></use></svg>set by environment</span>{{end}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$csrf := .CSRF}}
+<div class="page-head"><div><h1>Settings</h1><p>Values set by environment variables are locked here.</p></div></div>
+
+{{if $d.NewToken}}
+<div class="banner banner--ok" role="status"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>
+  <div><p>API token created. Copy it now; it is not shown again.</p>
+  <div class="secret"><span id="new-token">{{$d.NewToken}}</span><button class="btn btn--ghost" type="button" data-copy="#new-token"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div></div></div>
+{{end}}
+{{if $d.Error}}<div class="banner banner--warn" role="alert"><p>{{$d.Error}}</p></div>{{end}}
+
+<section class="panel" id="exposure" aria-labelledby="exp-title">
+  <h2 id="exp-title">Exposure</h2>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="pd">Public domains {{template "locked" (index $d.Locked "PUBLIC_DOMAINS")}}</label>
+      <input id="pd" name="PUBLIC_DOMAINS" type="text" value="{{$d.Values.PUBLIC_DOMAINS}}" {{if index $d.Locked "PUBLIC_DOMAINS"}}disabled{{end}} placeholder="example.com, home.example.org">
+      <span class="hint">Domain suffixes reachable from the internet. Traefik routes on these mark containers public.</span></div>
+    <div class="field"><label for="id">Internal domains {{template "locked" (index $d.Locked "INTERNAL_DOMAINS")}}</label>
+      <input id="id" name="INTERNAL_DOMAINS" type="text" value="{{$d.Values.INTERNAL_DOMAINS}}" {{if index $d.Locked "INTERNAL_DOMAINS"}}disabled{{end}} placeholder="home.arpa, lan"></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="networks" aria-labelledby="net-title">
+  <h2 id="net-title">Networks</h2>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="nets">Ranges Varde may contact</label>
+      <input id="nets" name="DISCOVERY_NETWORKS" type="text" value="{{$d.Values.DISCOVERY_NETWORKS}}" maxlength="1024" placeholder="192.168.1.0/24, 10.0.10.0/24" spellcheck="false">
+      <span class="hint">Private ranges only. Varde connects only to these addresses, for scans and for every integration. The same setting as under <a href="/connections#scope">Connections</a>.</span></div>
+    <div class="field"><label for="scan-every">Scan automatically</label>
+      <select id="scan-every" name="DISCOVERY_SCAN_EVERY">{{range $d.ScanPeriods}}<option value="{{.Value}}" {{if eq .Value $d.Values.DISCOVERY_SCAN_EVERY}}selected{{end}}>{{.Label}}</option>{{end}}</select>
+      <span class="hint">Scheduled scans use the same limits as a scan on request.</span></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="registry" aria-labelledby="reg-title">
+  <h2 id="reg-title">Versions of floating tags</h2>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}<input type="hidden" name="REGISTRY_TAGS" value="false">
+    <label class="check"><input type="checkbox" name="REGISTRY_TAGS" value="true" {{if $d.RegistryTags}}checked{{end}}> Ask the registries which version tag points to a running image</label>
+    <span class="hint">For containers started from tags such as <code>latest</code>: Varde reads the tag list of the image's repository and compares the digests of release tags with the running one, anonymously and read-only. The registry learns which images you run, as it does when you pull them.</span>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}<input type="hidden" name="CONTAINER_PACKAGES" value="false">
+    <label class="check"><input type="checkbox" name="CONTAINER_PACKAGES" value="true" {{if $d.ContainerPackages}}checked{{end}}> Read the package lists of images from their containers</label>
+    <span class="hint">Once per image and week, Varde reads fixed files from one of its containers: <code>/etc/os-release</code> (or <code>/usr/lib/os-release</code>), <code>/var/lib/dpkg/status</code> and <code>/lib/apk/db/installed</code>. It also reads the <code>package.json</code> in the image's working directory and its parent. An app installed from its project's own package, or shipping its own manifest, gives its version this way. Agents read the images of their own containers the same way. With the osv.dev source on, the packages of each image are also checked against their distribution's security data. Nothing else is read.</span>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+  <form class="form" method="post" action="/settings" id="eol">
+    {{template "csrf" $csrf}}<input type="hidden" name="EOL_DATA" value="false">
+    <label class="check"><input type="checkbox" name="EOL_DATA" value="true" {{if $d.EOLData}}checked{{end}}> Read release lines from endoflife.date</label>
+    <span class="hint">Shows when the release line an app runs stops getting fixes, for apps endoflife.date tracks (nginx, Nextcloud, Traefik, Caddy, Proxmox, authentik). Reveals these product names to endoflife.date, once a day.</span>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="priorities" aria-labelledby="prio-title">
+  <h2 id="prio-title">Priorities</h2>
+  <p class="small muted">Known exploited (KEV) is always P1. Unverified findings never notify.</p>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="p1c">P1: CVSS at or above, when public</label><input id="p1c" name="P1_CVSS_PUBLIC" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P1CVSSPublic}}"></div>
+    <div class="field"><label for="p1ce">P1: CVSS at or above, when public and EPSS high</label><input id="p1ce" name="P1_CVSS_PUBLIC_EPSS" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P1CVSSPublicEPSS}}"></div>
+    <div class="field"><label for="p1e">P1: EPSS at or above (0 to 1)</label><input id="p1e" name="P1_EPSS" type="number" step="0.01" min="0" max="1" value="{{$d.Policy.P1EPSS}}"></div>
+    <div class="field"><label for="p2c">P2: CVSS at or above</label><input id="p2c" name="P2_CVSS" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P2CVSS}}"></div>
+    <div class="field"><label for="p2ce">P2: CVSS at or above, when public or LAN</label><input id="p2ce" name="P2_CVSS_EXPOSED" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P2CVSSExposed}}"></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="notifications" aria-labelledby="n-title">
+  <h2 id="n-title">Notifications</h2>
+  {{if $d.Channels}}<p class="small">Configured: {{join $d.Channels ", "}}. Channels are configured with environment variables, so secrets never pass through the browser.</p>
+  <form method="post" action="/settings/notifications/test">{{template "csrf" $csrf}}<button class="btn" type="submit">Send test notification</button></form>
+  {{else}}<p class="small">No channel configured. Set <code>VARDE_NTFY_URL</code>, <code>VARDE_GOTIFY_URL</code>, <code>VARDE_WEBHOOK_URL</code> or <code>VARDE_SMTP_HOST</code>; see the configuration guide.</p>{{end}}
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="dh">Digest hour (0-23, local time) {{template "locked" (index $d.Locked "DIGEST_HOUR")}}</label><input id="dh" name="DIGEST_HOUR" type="number" min="0" max="23" value="{{$d.DigestHour}}" {{if index $d.Locked "DIGEST_HOUR"}}disabled{{end}}></div>
+    <div class="field"><label for="dw">Weekly digest day {{template "locked" (index $d.Locked "DIGEST_WEEKDAY")}}</label>
+      <select id="dw" name="DIGEST_WEEKDAY" {{if index $d.Locked "DIGEST_WEEKDAY"}}disabled{{end}}>{{range $w := list "monday" "tuesday" "wednesday" "thursday" "friday" "saturday" "sunday"}}<option value="{{$w}}" {{if eq $d.DigestWeekday $w}}selected{{end}}>{{title $w}}</option>{{end}}</select></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="sources" aria-labelledby="src-title">
+  <h2 id="src-title">Optional advisory sources</h2>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <input type="hidden" name="DIRECT_OSV" value="false"><input type="hidden" name="DIRECT_NVD" value="false">
+    <label class="check"><input type="checkbox" name="DIRECT_OSV" value="true" {{if $d.OSV}}checked{{end}} {{if index $d.Locked "DIRECT_OSV"}}disabled{{end}}><span>Query osv.dev {{template "locked" (index $d.Locked "DIRECT_OSV")}}<span class="cell-sub">Reveals the package names of apps you run to osv.dev. Also checks every installed package of your systems (Debian, Ubuntu, Alpine, AlmaLinux, Rocky Linux, openSUSE Leap) against its distribution's security data, which knows backported fixes, and reports each update that fixes one; this reveals the names, versions and releases of those packages to osv.dev.</span></span></label>
+    <label class="check"><input type="checkbox" name="DIRECT_NVD" value="true" {{if $d.NVD}}checked{{end}} {{if index $d.Locked "DIRECT_NVD"}}disabled{{end}}><span>Query the NVD by product {{template "locked" (index $d.Locked "DIRECT_NVD")}}<span class="cell-sub">Reveals which products you run to NIST. Helps apps without structured advisories.</span></span></label>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="package" aria-labelledby="pkg-title">
+  <h2 id="pkg-title">Data package</h2>
+  {{with $d.Package}}
+  {{if not .Available}}
+  <p class="hint">The data package is not available in this installation{{if .Reason}}: {{.Reason}}{{else}}.{{end}} Varde asks the public sources itself.</p>
+  {{else}}
+  <p class="hint">Varde reads its advisories and its recognition table from one signed package the project builds once a day. It asks no other source about your apps.</p>
+  {{if eq .Channel "uplink"}}<p>The uplink is switched on and takes the place of the data package.</p>
+  {{else if .Channel}}<p>In use: package {{.Sequence}}, built {{date .BuiltAt}}{{if not .CheckedAt.IsZero}}, last checked {{date .CheckedAt}}{{end}}.</p>
+  {{else}}<p>No package installed yet. Varde fetches it with the next check.</p>{{end}}
+  {{if .TooOld}}<div class="banner banner--warn" role="note"><p>This Varde version is too old for the current data package. Update Varde; until then the package above stays in use.</p></div>
+  {{else if .LastError}}<div class="banner banner--warn" role="note"><p>The last check failed: {{.LastError}}. The package above stays in use.</p></div>{{end}}
+  <form class="form form--inline" method="post" action="/settings/package/update">{{template "csrf" $csrf}}<button class="btn btn--primary" type="submit">Update now</button></form>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <input type="hidden" name="DIRECT_QUERIES" value="false">
+    <label class="check"><input type="checkbox" name="DIRECT_QUERIES" value="true" {{if $d.Direct}}checked{{end}} {{if index $d.Locked "DIRECT_QUERIES"}}disabled{{end}}><span>Also ask public sources directly {{template "locked" (index $d.Locked "DIRECT_QUERIES")}}<span class="cell-sub">For apps the package does not cover (your own catalog entries, images recognised only by their source label). Varde then asks api.github.com for each of those apps, which shows GitHub which of them you run.</span></span></label>
+    <button class="btn" type="submit">Save</button>
+  </form>
+  {{end}}
+  {{end}}
+</section>
+
+<section class="panel" id="uplink" aria-labelledby="up-title">
+  <h2 id="up-title">Uplink</h2>
+  {{with $d.Uplink}}
+  {{if .Locked}}
+  <p class="hint">Set by VARDE_MODE in the environment.</p>
+  {{else if eq .State "unavailable"}}
+  <p class="hint">The uplink is not available in this build. Varde works completely without it.</p>
+  {{if .Reason}}<p class="hint">{{.Reason}}</p>{{end}}
+  {{else if eq .State "active"}}
+  <p>Active. License <code>{{.LicenseID}}</code>, valid until {{.ExpiresAt.Format "2006-01-02"}}.</p>
+  <p class="hint">Varde reads its data from the project's servers. It asks the public sources only about apps that data does not cover, and only if that is switched on under Data package.</p>
+  {{if .Development}}<div class="banner banner--warn" role="note"><p>Development trust root: for tests only.</p></div>{{end}}
+  <form class="form form--inline" method="post" action="/settings/uplink/disable">{{template "csrf" $csrf}}<button class="btn" type="submit">Switch off</button></form>
+  {{else}}
+  {{if eq .State "expired"}}<div class="banner banner--warn" role="note"><p>{{.Reason}} {{if $d.Package.Available}}Varde reads the data package again.{{else}}Varde is back on the public sources.{{end}}</p></div>
+  {{else if eq .State "error"}}<div class="banner banner--warn" role="note"><p>{{.Reason}}</p></div>
+  {{else}}<p class="hint">{{if $d.Package.Available}}Varde reads the daily data package. With an uplink license it reads the same data from the project's servers, more often.{{else}}Varde asks the public sources itself. With an uplink license it reads its data from the project's servers instead.{{end}} Nothing else changes, and switching off returns to this.</p>{{end}}
+  {{if and .LicenseID (eq .State "off")}}
+  <p>Stored license <code>{{.LicenseID}}</code>, valid until {{.ExpiresAt.Format "2006-01-02"}}.</p>
+  <form class="form form--inline" method="post" action="/settings/uplink">{{template "csrf" $csrf}}<button class="btn btn--primary" type="submit">Switch on</button></form>
+  {{end}}
+  <form class="form" method="post" action="/settings/uplink">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="uplink-license">{{if .LicenseID}}Another license{{else}}License{{end}}</label>
+      <textarea id="uplink-license" name="license" rows="4" class="mono" spellcheck="false" autocomplete="off" required></textarea>
+      <span class="hint">Paste the license you received. Varde checks it on this machine, then fetches the feed once; only if both work does anything change.</span></div>
+    <button class="btn{{if not .LicenseID}} btn--primary{{end}}" type="submit">Switch on</button>
+  </form>
+  {{if .LicenseID}}<form method="post" action="/settings/uplink/remove" data-confirm="Remove the stored license?">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Remove license</button></form>{{end}}
+  {{end}}
+  {{end}}
+</section>
+
+<section class="panel" id="tokens" aria-labelledby="tok-title">
+  <h2 id="tok-title">API tokens</h2>
+  {{if $d.Tokens}}
+  <table class="table"><thead><tr><th scope="col">Name</th><th scope="col">Scope</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col"></th></tr></thead><tbody>
+  {{range $d.Tokens}}<tr><td data-label="Name">{{.Name}}</td><td data-label="Scope">{{.Scope}}</td><td data-label="Created">{{date .CreatedAt}}{{if .ExpiresAt}}<span class="cell-sub">expires {{date .ExpiresAt}}</span>{{end}}</td><td data-label="Last used">{{if .LastUsed}}{{since .LastUsed}}{{else}}<span class="muted">never</span>{{end}}</td>
+    <td><form method="post" action="/settings/tokens/{{.ID}}/delete" data-confirm="Revoke the token {{.Name}}?">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Revoke</button></form></td></tr>{{end}}
+  </tbody></table>
+  {{else}}<p class="small muted">No tokens.</p>{{end}}
+  <form class="form form--inline" method="post" action="/settings/tokens">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="tn">Name</label><input id="tn" name="name" type="text" required maxlength="64"></div>
+    <div class="field"><label for="ts">Scope</label><select id="ts" name="scope"><option value="read">read</option><option value="write">write</option></select></div>
+    <div class="field"><label for="te">Expires (days)</label><input id="te" name="days" type="number" min="1" max="3650" placeholder="never"></div>
+    <button class="btn" type="submit">Create token</button>
+  </form>
+</section>
+
+<section class="panel" id="users" aria-labelledby="u-title">
+  <h2 id="u-title">Users</h2>
+  <table class="table"><thead><tr><th scope="col">User</th><th scope="col">Created</th><th scope="col">Last sign-in</th><th scope="col"></th></tr></thead><tbody>
+  {{range $d.Users}}<tr><td data-label="User">{{.Username}}</td><td data-label="Created">{{date .CreatedAt}}</td><td data-label="Last sign-in">{{if .LastLogin}}{{since .LastLogin}}{{else}}<span class="muted">never</span>{{end}}</td>
+    <td>{{if ne .ID $d.Me}}<form method="post" action="/settings/users/{{.ID}}/delete" data-confirm="Delete the user {{.Username}}?">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Delete</button></form>{{end}}</td></tr>{{end}}
+  </tbody></table>
+  <div class="grid-2">
+    <form class="form" method="post" action="/settings/users">
+      {{template "csrf" $csrf}}
+      <h3>Add user</h3>
+      <div class="field"><label for="nu">Username</label><input id="nu" name="username" type="text" required maxlength="64" autocomplete="off"></div>
+      <div class="field"><label for="np">Password</label><input id="np" name="password" type="password" required minlength="12" autocomplete="new-password"></div>
+      <button class="btn" type="submit">Add user</button>
+    </form>
+    <form class="form" method="post" action="/settings/password">
+      {{template "csrf" $csrf}}
+      <h3>Change your password</h3>
+      <div class="field"><label for="cp">Current password</label><input id="cp" name="current" type="password" required autocomplete="current-password"></div>
+      <div class="field"><label for="pp">New password</label><input id="pp" name="password" type="password" required minlength="12" autocomplete="new-password"></div>
+      <button class="btn" type="submit">Change password</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel" id="audit" aria-labelledby="a-title">
+  <h2 id="a-title">Audit log</h2>
+  {{if $d.Audit}}
+  <table class="table"><thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Detail</th></tr></thead><tbody>
+  {{range $d.Audit}}<tr><td data-label="When" class="nowrap">{{date .At}}</td><td data-label="Who">{{.Actor}}</td><td data-label="Action" class="mono">{{.Action}}</td><td data-label="Detail" class="small">{{truncate .Detail 160}}</td></tr>{{end}}
+  </tbody></table>
+  {{else}}<p class="small muted">No entries.</p>{{end}}
+</section>
+{{end}}

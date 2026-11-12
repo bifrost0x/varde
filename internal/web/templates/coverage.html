@@ -1,0 +1,75 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-head">
+  <div><h1>Gaps</h1><p>What Varde cannot assess yet: apps it does not recognise, versions it cannot read, routes it cannot check. Every gap comes with the step that closes it.</p></div>
+</div>
+<section class="panel">
+  <p>{{$d.Summary.Assessable}} of {{plural $d.Summary.Total "workload"}} checked against advisories · {{$d.Summary.Identified}} identified · {{len $d.Summary.VersionUnknown}} with unknown version · {{plural (len $d.Summary.PublicRoutes) "public route"}} Varde cannot check{{if $d.Summary.NotApps}} · <a href="#not-apps">{{plural (len $d.Summary.NotApps) "helper container"}} not counted</a>{{end}}</p>
+  <div class="meter" role="img" aria-label="{{$d.Summary.Percent}} percent identified"><span class="meter__fill {{meterClass $d.Summary.Percent}}"></span></div>
+  <p class="small">{{if $d.Machines.Hosts}}Varde knows what is installed on <a href="/systems">{{$d.Machines.Read}} of {{plural $d.Machines.Hosts "system"}}</a>{{if $d.Machines.Devices}} · {{plural $d.Machines.Devices "further device"}} found in the network{{end}}.{{else}}No host known yet.{{end}}</p>
+</section>
+
+{{if $d.PublicRoutes}}
+<section class="panel" id="routes" aria-labelledby="routes-title">
+  <h2 id="routes-title"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#globe"></use></svg> Public routes Varde cannot check</h2>
+  <p class="small">Something is reachable from the internet that Varde cannot assess. This is the most important gap.</p>
+  <table class="table"><thead><tr><th scope="col">Host name</th><th scope="col">Container</th><th scope="col">Next step</th></tr></thead><tbody>
+  {{range $d.PublicRoutes}}<tr><td data-label="Host name" class="mono">{{.Host}}</td><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="Next step">{{if .AppID}}Add the label <code>varde.version=&lt;version&gt;</code>, or use an image tag with a version number.{{else}}Add <code>varde.app=&lt;id&gt;</code> if the app is in the catalog, or <a href="{{.SuggestURL}}" rel="noopener noreferrer" target="_blank">suggest a catalog entry</a>.{{end}}</td></tr>{{end}}
+  </tbody></table>
+</section>
+{{end}}
+
+<section class="panel" id="unidentified" aria-labelledby="un-title">
+  <h2 id="un-title">Not in the catalog</h2>
+  {{if $d.Unidentified}}
+  <table class="table"><thead><tr><th scope="col">Containers</th><th scope="col">Image</th><th scope="col">Next step</th></tr></thead><tbody>
+  {{range $d.Unidentified}}<tr><td data-label="Container">{{.Workload}}</td><td data-label="Image" class="mono">{{.Image}}</td><td data-label="Next step"><a href="{{.SuggestURL}}" rel="noopener noreferrer" target="_blank">Suggest a catalog entry</a><span class="cell-sub">Opens GitHub with only the image name filled in.</span>{{if .Repository}}<form class="form--inline" method="post" action="/systems/gaps/not-an-app">{{template "csrf" $.CSRF}}<input type="hidden" name="repository" value="{{.Repository}}"><button class="btn btn--ghost" type="submit">Not an app</button></form><span class="cell-sub">For databases, proxies and other helpers: stops counting this image as a gap.</span>{{end}}</td></tr>{{end}}
+  </tbody></table>
+  {{else}}<p class="small muted">Every workload matches a catalog entry.</p>{{end}}
+</section>
+
+<section class="panel" id="version" aria-labelledby="v-title">
+  <h2 id="v-title">Version unknown</h2>
+  {{if $d.VersionUnknown}}
+  <p class="small">Varde knows the app but not which version runs, so it cannot tell which advisories apply.</p>
+  <table class="table"><thead><tr><th scope="col">Container</th><th scope="col">App</th><th scope="col">Why</th><th scope="col">Next step</th></tr></thead><tbody>
+  {{range $d.VersionUnknown}}<tr><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="App">{{.AppName}}</td><td data-label="Why" class="small">{{.Note}}</td><td data-label="Next step" class="small">Add the label <code>varde.version=&lt;version&gt;</code>, or use an image tag with a version number instead of <code>latest</code>.</td></tr>{{end}}
+  </tbody></table>
+  {{else}}<p class="small muted">Every identified workload has a readable version.</p>{{end}}
+</section>
+
+<section class="panel" id="weak" aria-labelledby="w-title">
+  <h2 id="w-title">Probable matches to confirm</h2>
+  {{if $d.Weak}}
+  <table class="table"><thead><tr><th scope="col">Container</th><th scope="col">Probably</th><th scope="col">Confirm with</th></tr></thead><tbody>
+  {{range $d.Weak}}<tr><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="Probably">{{.AppName}}</td><td data-label="Confirm with"><code>varde.app={{.AppID}}</code></td></tr>{{end}}
+  </tbody></table>
+  {{else}}<p class="small muted">No guesses pending.</p>{{end}}
+</section>
+
+{{if $d.NotApps}}
+<section class="panel" id="not-apps" aria-labelledby="na-title">
+  <h2 id="na-title">Not counted</h2>
+  <p class="small">Databases, proxies and other helpers support your apps rather than being one. Varde lists them here instead of as gaps.</p>
+  <table class="table"><thead><tr><th scope="col">Container</th><th scope="col">Why</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead><tbody>
+  {{range $d.NotApps}}<tr><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="Why" class="small">{{.Note}}</td><td data-label="Action">{{if .Marked}}<form class="form--inline" method="post" action="/systems/gaps/not-an-app/delete">{{template "csrf" $.CSRF}}<input type="hidden" name="repository" value="{{.Repository}}"><button class="btn btn--ghost" type="submit">Count again</button></form>{{end}}</td></tr>{{end}}
+  </tbody></table>
+</section>
+{{end}}
+
+{{if $d.NoSource}}
+<section class="panel" id="no-source" aria-labelledby="ns-title">
+  <h2 id="ns-title">Apps with no advisory source</h2>
+  <p class="small">The data package does not cover these apps, and Varde does not ask the public sources about them. No finding for them means nothing was checked, not that they are fine. To have them checked, switch on "Also ask public sources directly" under <a href="/settings#package">Settings</a>.</p>
+  <ul class="small">{{range $d.NoSource}}<li>{{.}} <span class="badge badge--unverified">no advisory source</span></li>{{end}}</ul>
+</section>
+{{end}}
+
+<section class="panel" aria-labelledby="lim-title">
+  <h2 id="lim-title">Apps with limited advisory data</h2>
+  {{if $d.Limited}}<p class="small">These apps publish no structured advisories. Varde uses every source it has, but may learn of issues late.</p>
+  <ul class="small">{{range $d.Limited}}<li>{{.Name}} <span class="muted">({{.Coverage}})</span></li>{{end}}</ul>
+  {{else}}<p class="small muted">All identified apps publish structured advisories.</p>{{end}}
+</section>
+{{end}}

@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+id: actual
+name: Actual Budget
+homepage: https://actualbudget.org
+tags: [finance, budgeting]
+images:
+  - match: actualbudget/actual-server
+  - match: ghcr.io/actualbudget/actual
+  - match: ghcr.io/actualbudget/actual-server
+version:
+  scheme: semver
+  sources:
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)(?:-alpine)?$'
+advisories:
+  coverage: full
+  github_repos:
+    - actualbudget/actual
+  osv_packages:
+    - {ecosystem: npm, name: '@actual-app/sync-server'}
+    - {ecosystem: npm, name: '@actual-app/web'}
+  cpe:
+    - cpe:2.3:a:actualbudget:actual
+  notes: >-
+    Versions are YY.M.patch (e.g. 26.11.0) and compare correctly as semver. The images carry no
+    OCI labels; latest, edge, nightly and sha-* tags never yield a version, so pin a release tag
+    or set varde.version. The former actualbudget/actual-server repository is archived; the
+    server now lives in the actualbudget/actual monorepo.
+exposure_hints:
+  default_ports: [5006]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

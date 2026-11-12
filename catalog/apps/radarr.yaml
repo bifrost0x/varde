@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+id: radarr
+name: Radarr
+homepage: https://radarr.video
+tags: [media, arr, pvr]
+images:
+  - match: lscr.io/linuxserver/radarr
+    flavor: lsio
+  - match: ghcr.io/hotio/radarr
+    note: third-party image by hotio, release-<commit> tags, version only in the OCI label
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  notes: >-
+    No repository advisories in Radarr/Radarr, no OSV package and no NVD CPE. SECURITY.md asks
+    for private reports via the Servarr Discord or development@servarr.com; fixes are only
+    mentioned in GitHub release notes (https://github.com/Radarr/Radarr/releases). The only
+    Radarr CVE found is CVE-2025-13130 (VulDB, no CPE configuration), mirrored as the unreviewed
+    global advisory GHSA-r72q-m2q4-p766 without package data. Keyword hits for Radarr in NVD
+    mostly belong to companion tools (Bazarr, Cleanuparr, Seerr). The sibling project Sonarr
+    publishes repository advisories; Servarr-wide issues may appear there first. The project
+    publishes no official container image. Versions have four components (6.4.4.10685).
+exposure_hints:
+  default_ports: [7878]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

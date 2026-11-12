@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+id: qnap-quts-hero
+name: QNAP QuTS hero
+homepage: https://www.qnap.com/quts-hero
+tags: [nas, storage, appliance]
+packages:
+  # QuTS hero reports h5.1.4 with its build number; recorded as 5.1.4.2596.
+  - {manager: firmware, name: qnap-quts-hero, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:o:qnap:quts_hero
+  notes: >-
+    Covered by the same QNAP Security Advisories as QTS, with "QuTS hero h5.1.4.2596" versions.
+exposure_hints:
+  default_ports: [8080, 443]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+id: paperless-ngx
+name: Paperless-ngx
+homepage: https://docs.paperless-ngx.com
+tags: [documents, ocr]
+images:
+  - match: ghcr.io/paperless-ngx/paperless-ngx
+  - match: paperlessngx/paperless-ngx
+  - match: lscr.io/linuxserver/paperless-ngx
+    flavor: lsio
+    note: deprecated by linuxserver.io, last build v1.8.0 (2022), docker-paperless-ngx is archived
+oci_source:
+  - https://github.com/paperless-ngx/paperless-ngx
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - paperless-ngx/paperless-ngx
+  notes: >-
+    No NVD CPE exists; the CVEs found by keyword (e.g. CVE-2024-35184) have no CPE
+    configuration, so NVD matching does not work for this app. Not published on PyPI, so there
+    is no OSV package. latest, dev, beta and major.minor tags are floating.
+exposure_hints:
+  default_ports: [8000]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

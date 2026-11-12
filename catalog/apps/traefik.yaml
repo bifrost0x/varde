@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+id: traefik
+name: Traefik
+homepage: https://traefik.io/traefik
+tags: [reverse-proxy, ingress]
+images:
+  - match: library/traefik
+    note: Docker official image, the image used by the Traefik docs
+  - match: traefik/traefik
+    note: experimental builds only (experimental-* tags)
+oci_source:
+  - https://github.com/traefik/traefik
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - traefik/traefik
+  packages:
+    - {ecosystem: go, name: github.com/traefik/traefik}
+    - {ecosystem: go, name: github.com/traefik/traefik/v2}
+    - {ecosystem: go, name: github.com/traefik/traefik/v3}
+  osv_packages:
+    - {ecosystem: Go, name: github.com/traefik/traefik}
+    - {ecosystem: Go, name: github.com/traefik/traefik/v2}
+    - {ecosystem: Go, name: github.com/traefik/traefik/v3}
+  cpe:
+    - cpe:2.3:a:traefik:traefik
+    - cpe:2.3:a:containous:traefik
+  notes: >-
+    Tags exist with and without v prefix (v3.7.17, 3.7.17) plus windowsservercore/nanoserver
+    variants; code-name tags (e.g. mimolette), latest and major/minor tags are floating. Both
+    NVD vendors (traefik, containous) carry CPEs.
+exposure_hints:
+  default_ports: [80, 443, 8080]
+  typical: public
+eol: traefik
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

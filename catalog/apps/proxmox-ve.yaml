@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+id: proxmox-ve
+name: Proxmox VE
+homepage: https://www.proxmox.com/en/products/proxmox-virtual-environment/overview
+tags: [virtualization, hypervisor]
+packages:
+  # Native Proxmox package, only in Proxmox's own repositories; its version
+  # is the release version (9.2.26). The Proxmox VE API reports the same
+  # value, which Varde records as this package on the node it talks to.
+  - {manager: dpkg, name: pve-manager, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:a:proxmox:virtual_environment
+  notes: >-
+    Proxmox publishes advisories (PSA-YYYY-NNNNN-R) in the "Security Advisories" section of the
+    Proxmox forum, with affected and fixed package versions; there is no machine-readable feed.
+    NVD CPEs use the x.y release, advisories cite pve-manager package versions.
+exposure_hints:
+  default_ports: [8006]
+  typical: lan
+eol: proxmox-ve
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

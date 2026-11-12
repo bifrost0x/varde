@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+id: mosquitto
+name: Eclipse Mosquitto
+homepage: https://mosquitto.org
+tags: [mqtt, iot, broker]
+images:
+  - match: library/eclipse-mosquitto
+    note: Docker official image
+oci_source:
+  - https://github.com/eclipse-mosquitto/mosquitto
+packages:
+  - {manager: dpkg, name: mosquitto}
+  - {manager: apk, name: mosquitto}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:a:eclipse:mosquitto
+  notes: >-
+    No GitHub repository advisories (eclipse-mosquitto/mosquitto has none) and no OSV package.
+    Vulnerabilities are reported through the Eclipse Foundation security process
+    (https://www.eclipse.org/security/), CVEs are assigned by the Eclipse CNA and matched via the
+    NVD CPE. The project lists past vulnerabilities with affected and fixed versions at
+    https://mosquitto.org/security/ (last entry 2023, may lag behind) and announces fixes in the
+    blog security category (https://mosquitto.org/blog/categories/security/) and in the
+    ChangeLog of each release. Tags: 2.0.22, 2.0.22-openssl, 2.1.2-alpine; latest, alpine,
+    openssl and major/minor tags are floating.
+exposure_hints:
+  default_ports: [1883]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

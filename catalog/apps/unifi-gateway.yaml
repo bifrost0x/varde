@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+id: unifi-gateway
+name: UniFi gateway and console firmware
+homepage: https://www.ui.com
+tags: [network, appliance]
+packages:
+  # Read through the UniFi integration's device list (firmwareVersion), one
+  # system per device.
+  - {manager: firmware, name: unifi-gateway, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  notes: >-
+    Ubiquiti publishes Security Advisory Bulletins in its community (community.ui.com/releases,
+    "Security Advisory Bulletin NNN") naming affected and fixed firmware per device line; there is
+    no machine-readable feed and few CVE records with usable versions. The firmware-outdated notice
+    of the UniFi integration covers updates the controller offers.
+exposure_hints:
+  default_ports: []
+  typical: internal
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

@@ -1,0 +1,33 @@
+name: Catalog entry
+description: Request or propose a catalog entry for a self-hosted app.
+labels: [catalog]
+body:
+  - type: input
+    id: app
+    attributes:
+      label: App name
+    validations:
+      required: true
+  - type: input
+    id: homepage
+    attributes:
+      label: Homepage or source repository
+    validations:
+      required: true
+  - type: textarea
+    id: images
+    attributes:
+      label: Container images
+      description: Image repositories in use, one per line (e.g. ghcr.io/org/app).
+    validations:
+      required: true
+  - type: textarea
+    id: advisories
+    attributes:
+      label: Where are security advisories published?
+      description: GitHub repositories with security advisories, mailing lists, or "unknown".
+  - type: textarea
+    id: version
+    attributes:
+      label: How can the running version be determined?
+      description: OCI version label, tag format, other labels.

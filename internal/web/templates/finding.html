@@ -1,0 +1,128 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$f := .Data.Finding}}{{$m := .Data.Match}}{{$csrf := .CSRF}}
+<div class="page-head">
+  <div>
+    <p class="small"><a href="/findings">Findings</a></p>
+    <h1>{{.Data.AppName}}: <span class="mono">{{$f.AdvisoryID}}</span></h1>
+    <p>{{if $m.Summary}}{{$m.Summary}}{{else}}No summary published.{{end}}</p>
+  </div>
+  <div class="actions">{{template "prio" $f.Priority}}{{if $m.KEV}}<span class="badge badge--kev">known exploited</span>{{end}}{{template "pathclass" $f.PathClass}}{{template "exposure" $f.Exposure}}<span class="badge badge--muted">{{$f.State}}</span></div>
+</div>
+
+<div class="grid-2">
+  <section class="panel" aria-labelledby="action-title">
+    <h2 id="action-title">What to do</h2>
+    {{if eq $f.MatchState "unverified"}}
+      {{if not $m.Evidence.Version}}
+      <p>Varde does not know which version of <strong>{{.Data.WorkloadName}}</strong> runs, so it cannot tell whether this advisory applies.</p>
+      <p class="small">Next step: add the container label <code>varde.version=&lt;version&gt;</code>, or use an image tag with a version number instead of <code>latest</code>.</p>
+      {{else}}
+      <p>Varde cannot confirm whether <span class="mono">{{$m.Evidence.Version}}</span> is affected: {{$m.Evidence.Reason}}.</p>
+      <p class="small">Next step: compare your version with the affected versions in the advisory. If it does not apply, acknowledge it.</p>
+      {{end}}
+    {{else if $f.FixedIn}}
+      <p>Update <strong>{{.Data.WorkloadName}}</strong> to <span class="mono">{{$f.FixedIn}}</span> or later.</p>
+      {{with $m.Target}}{{if and .Version (gt .Total 1)}}<p class="small">Updating to <span class="mono">{{.Version}}</span> fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of {{.Total}}{{end}} advisories of this version together.{{if .NewLine}} It is a new major version; read the upgrade notes first.{{end}}</p>{{end}}{{end}}
+    {{else}}
+      <p>No fixed version is published yet. Limit who can reach <strong>{{.Data.WorkloadName}}</strong> until one is available.</p>
+    {{end}}
+    {{with .Data.Update}}
+    <div class="update" id="update">
+      <h3>How to update</h3>
+      {{if .Floating}}
+      <p class="small">The container runs a floating tag. Pull it again and recreate the container, then check that the version Varde reads afterwards is the fixed one{{if not $.Data.RegistryTags}}; with <a href="/settings#registry">registry versions</a> on, Varde reads it for floating tags too{{end}}.</p>
+      {{else}}
+      <p class="small">Run <span class="mono">{{.Image}}</span>{{if .Verified}}, a release tag the registry lists{{else}}. Varde has not seen this tag in the registry{{if not $.Data.RegistryTags}} (<a href="/settings#registry">registry versions</a> are off){{end}}; check that it exists{{end}}.</p>
+      {{end}}
+      {{with .Compose}}
+      <p class="small">It is the Compose service <strong>{{.Service}}</strong> of the project <strong>{{.Project}}</strong>{{if .Files}}, defined in <span class="mono">{{join .Files ", "}}</span>{{end}}.{{if not $.Data.Update.Floating}} Change its line to:{{end}}</p>
+      {{if not $.Data.Update.Floating}}<div class="secret"><pre id="compose-line" class="mono install">image: {{$.Data.Update.Image}}</pre><button class="btn btn--ghost" type="button" data-copy="#compose-line"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>{{end}}
+      <p class="small">Then{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}:</p>
+      <div class="secret"><pre id="compose-cmd" class="mono install">{{.Pull}}</pre><button class="btn btn--ghost" type="button" data-copy="#compose-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+      {{end}}
+    </div>
+    {{end}}
+    {{if $m.URL}}<p><a href="{{$m.URL}}" rel="noopener noreferrer" target="_blank">Read the advisory <svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#external"></use></svg></a></p>{{end}}
+    {{if $f.PriorityReason}}<p class="small muted">Priority: {{$f.PriorityReason}}.</p>{{end}}
+
+    {{if ne $f.State "resolved"}}
+    <div class="actions">
+      {{if or (eq $f.State "open") (eq $f.State "snoozed")}}
+      <form method="post" action="/findings/{{$f.ID}}/ack">{{template "csrf" $csrf}}<button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>Acknowledge</button></form>
+      {{end}}
+      {{if ne $f.State "suppressed"}}
+      <form method="post" action="/findings/{{$f.ID}}/snooze">{{template "csrf" $csrf}}<input type="hidden" name="days" value="7"><button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#clock"></use></svg>Snooze 7 days</button></form>
+      {{end}}
+      {{if or (eq $f.State "acknowledged") (eq $f.State "snoozed")}}
+      <form method="post" action="/findings/{{$f.ID}}/reopen">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Reopen</button></form>
+      {{end}}
+      {{if eq $f.State "suppressed"}}
+      <form method="post" action="/findings/{{$f.ID}}/unsuppress" data-confirm="Every finding this suppression covers opens again and may notify. Continue?">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Lift the suppression</button></form>
+      {{end}}
+    </div>
+    {{if ne $f.State "suppressed"}}
+    <details class="small">
+      <summary>Suppress this advisory</summary>
+      <form class="form" method="post" action="/findings/{{$f.ID}}/suppress" data-confirm="Suppressed findings never notify. Continue?">
+        {{template "csrf" $csrf}}
+        <div class="field"><label for="reason">Reason (required, kept in the audit log)</label><input id="reason" name="reason" type="text" required maxlength="512"></div>
+        <div class="field"><label for="scope">Scope</label>
+          <select id="scope" name="scope"><option value="workload">Only {{.Data.WorkloadName}}</option><option value="app">Every {{.Data.AppName}} workload</option></select></div>
+        <div class="field"><label for="days">Expires after (days, empty for never)</label><input id="days" name="days" type="number" min="1" max="3650"></div>
+        <button class="btn btn--danger" type="submit">Suppress</button>
+      </form>
+    </details>
+    {{end}}
+    {{end}}
+  </section>
+
+  <section class="panel" aria-labelledby="evidence-title">
+    <h2 id="evidence-title">Evidence</h2>
+    <dl class="evidence">
+      <dt>Workload</dt><dd><a href="/systems/apps#w-{{$f.WorkloadID}}">{{.Data.WorkloadName}}</a>{{if .Data.HostName}} on {{.Data.HostName}}{{end}}</dd>
+      <dt>Running version</dt><dd>{{if $m.Evidence.Version}}<span class="mono">{{$m.Evidence.Version}}</span> <span class="muted">({{$m.Evidence.VersionSource}})</span>{{else}}<span class="muted">unknown</span>{{end}}</dd>
+      <dt>Affected range</dt><dd class="mono">{{if $m.Evidence.Range}}{{$m.Evidence.Range}}{{else}}not machine-readable{{end}}</dd>
+      {{if $m.Evidence.Package}}<dt>Package</dt><dd class="mono">{{$m.Evidence.Package}}</dd>{{end}}
+      <dt>Source</dt><dd>{{join $m.Sources ", "}} <span class="muted">(record {{$m.Evidence.RecordID}})</span></dd>
+      {{if $m.Aliases}}<dt>Also known as</dt><dd class="mono">{{join $m.Aliases ", "}}</dd>{{end}}
+      <dt>Severity</dt><dd>{{if $m.CVSS}}CVSS {{printf "%.1f" $m.CVSS}}{{end}}{{if $m.SeverityLabel}} {{$m.SeverityLabel}}{{end}}{{if not (or $m.CVSS $m.SeverityLabel)}}<span class="muted">not rated</span>{{end}}</dd>
+      <dt>Exploitation</dt><dd>{{if $m.KEV}}listed in CISA KEV{{else}}not in CISA KEV{{end}}{{if $m.EPSS}}, EPSS {{printf "%.3f" $m.EPSS}}{{end}}</dd>
+      <dt>Exposure</dt><dd>{{$f.Exposure}}{{range $f.ExposureEvidence}}<span class="cell-sub">{{.}}</span>{{end}}</dd>
+      <dt>Attack paths</dt><dd>{{if $f.PathReason}}{{$f.PathReason}}{{else}}<span class="muted">not placed yet</span>{{end}}{{if $m.Vector}}<span class="cell-sub mono">{{$m.Vector}}</span>{{end}}</dd>
+      <dt>First seen</dt><dd>{{date $f.FirstSeen}}</dd>
+      {{if $f.NotifiedAt}}<dt>Notified</dt><dd>{{date $f.NotifiedAt}} ({{$f.LastNotifiedPriority}})</dd>{{end}}
+    </dl>
+  </section>
+</div>
+{{if .Data.Paths}}
+<section class="panel" aria-labelledby="paths-title">
+  <div class="panel__head"><h2 id="paths-title">Attack paths through this finding</h2><a class="small" href="/findings/paths">All attack paths</a></div>
+  {{range .Data.Paths}}
+  <h3 class="small">{{if eq .Entry "internet"}}From the internet{{else}}From the LAN{{end}}: {{.Impact}}</h3>
+  <ol class="path">{{range .Steps}}<li class="path__step path__step--{{.Kind}}">{{.Label}}{{if .Indirect}} <span class="badge badge--unverified">indirect</span>{{end}}</li>{{end}}</ol>
+  {{end}}
+</section>
+{{end}}
+{{if .Data.History}}
+<section class="panel" aria-labelledby="history-title">
+  <div class="panel__head"><h2 id="history-title">History</h2><a class="small" href="/findings/history">All history</a></div>
+  <ol class="history">
+  {{range .Data.History}}
+    <li class="history__entry history__entry--{{.Kind}}">
+      <div class="history__head"><span class="history__time mono">{{date .At}}</span><strong>{{.Headline}}</strong>{{if .Actor}}<span class="muted">by {{.Actor}}</span>{{end}}
+        {{range .Items}}{{if .To}}<span class="small"><span class="mono">{{.From}}</span> → <span class="mono">{{.To}}</span></span>{{else if .From}}<span class="small muted">version <span class="mono">{{.From}}</span></span>{{end}}{{end}}</div>
+      {{if .Explain}}<p class="small muted">{{.Explain}}</p>{{end}}
+    </li>
+  {{end}}
+  </ol>
+</section>
+{{end}}
+{{if .Data.Details}}
+<section class="panel" aria-labelledby="details-title">
+  <h2 id="details-title">Advisory text</h2>
+  <p class="small muted">Shown as plain text, as published upstream.</p>
+  <div class="details-text">{{.Data.Details}}</div>
+</section>
+{{end}}
+{{end}}

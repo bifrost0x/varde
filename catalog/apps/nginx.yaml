@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+id: nginx
+name: nginx
+homepage: https://nginx.org
+tags: [web-server, reverse-proxy]
+images:
+  - match: library/nginx
+    note: Docker official image
+  - match: nginxinc/nginx-unprivileged
+packages:
+  - {manager: dpkg, name: nginx}
+  - {manager: apk, name: nginx}
+  - {manager: rpm, name: nginx}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:a:f5:nginx
+  notes: >-
+    No GitHub repository advisories and no upstream OSV package. nginx publishes its advisories with
+    affected and fixed versions at https://nginx.org/en/security_advisories.html; CVEs are assigned
+    by F5 and matched via the NVD CPE. The distribution packages (Debian, Ubuntu, Alpine) carry
+    backported fixes and are checked against the distributions' own security data (ADR 0028). The
+    nginx.org packages (version "1.28.0-1~bookworm") are named nginx as well; their version has no
+    distribution revision and stays not comparable. Tags: 1.28.0, 1.28, mainline, stable, latest,
+    alpine variants; only full version tags are pinned.
+exposure_hints:
+  default_ports: [80, 443]
+  typical: public
+eol: nginx
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

@@ -1,0 +1,82 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}{{$csrf := .CSRF}}
+<div class="page-head">
+  <div><p class="small"><a href="/connections/agents">Agents</a></p><h1>Install the agent</h1>
+  <p>Varde signs in to each host once over SSH, installs its agent as a service and forgets the credentials. From then on the agent reports the full inventory of the host by itself: every installed package and, if you allow it, every Docker container. It connects out to this server and needs no open port, and it updates itself to the version of this server.</p></div>
+</div>
+{{if $d.Unavailable}}<div class="banner banner--warn" role="alert"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg><p>{{$d.Unavailable}}</p></div>
+{{else}}
+{{if $d.Error}}<div class="banner banner--warn" role="alert"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg><p>{{$d.Error}}</p></div>{{end}}
+
+{{if eq $d.Step "done"}}
+<section class="panel" aria-labelledby="done-title">
+  <h2 id="done-title">Result</h2>
+  <table class="table">
+    <thead><tr><th scope="col">Host</th><th scope="col">Outcome</th><th scope="col">Platform</th><th scope="col">Docker</th></tr></thead>
+    <tbody>{{range $d.Hosts}}
+    <tr>
+      <td data-label="Host" class="mono">{{.Address}}</td>
+      <td data-label="Outcome">{{if .Done}}{{if .Result.KeptEnrollment}}<span class="badge badge--ok">updated</span><span class="cell-sub">Installed before; it keeps its enrollment. If you revoked it, remove <code>/var/lib/varde-agent/data</code> on the host and install again.</span>{{else if .Enrolled}}<span class="badge badge--ok">installed and connected</span><span class="cell-sub">Its first inventory arrives within a minute.</span>{{else if .Result.Unreachable}}<span class="badge badge--p1">installed, cannot reach Varde</span><span class="cell-sub">The host cannot open a connection to <span class="mono">{{$d.ServerURL}}</span>: <span class="mono">{{.Result.Unreachable}}</span>. A firewall or router between the host's network and this server blocks the agent port, or the address is one only some networks reach. Allow the port from the host to this server, or enter an address the host reaches and install again. The agent keeps trying; once the way is open within 15 minutes, it connects on its own.</span>{{else}}<span class="badge badge--p2">installed, not connected yet</span><span class="cell-sub">The host does not reach <span class="mono">{{$d.ServerURL}}</span> yet. Usual causes: the agent port is not published (in Docker Compose, <code>ports: ["8443:8443"]</code>), or a firewall blocks it; <code>journalctl -u varde-agent</code> on the host shows why.</span>{{end}}
+        {{else if eq .Error "Not selected."}}<span class="muted">skipped</span>
+        {{else}}<span class="badge badge--kev">failed</span><span class="cell-sub">{{.Error}}</span>{{if and .Result .Result.Output}}<details class="small"><summary>Output</summary><pre class="details-text">{{.Result.Output}}</pre></details>{{end}}{{end}}</td>
+      <td data-label="Platform">{{if .Done}}{{.Result.Platform}}, {{.Result.Init}}{{else}}<span class="muted">–</span>{{end}}</td>
+      <td data-label="Docker">{{if .Done}}{{if .Result.Docker}}read{{else}}not read{{if $d.Docker}}: no Docker socket{{end}}{{end}}{{else}}<span class="muted">–</span>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table>
+  <p><a class="btn btn--primary" href="/systems">Go to systems</a> <a class="btn" href="/connections/agents/install">Install on more hosts</a></p>
+  <details class="small"><summary>Remove the agent from a host</summary>
+  <p>Run as root: signed in as another user, put <code>sudo</code> in front (or use <code>su -c</code>). With systemd:</p>
+  <pre class="details-text">sudo sh -c 'systemctl disable --now varde-agent; rm -f /etc/systemd/system/varde-agent.service /etc/varde-agent.env; systemctl daemon-reload; rm -rf /var/lib/varde-agent; userdel varde-agent'</pre>
+  <p>With OpenRC (Alpine):</p>
+  <pre class="details-text">sudo sh -c 'rc-service varde-agent stop; rc-update del varde-agent; rm -f /etc/init.d/varde-agent /etc/varde-agent.env; rm -rf /var/lib/varde-agent; deluser varde-agent'</pre>
+  <p>Then revoke the agent under Connections › Agents.</p></details>
+</section>
+{{else}}
+<section class="panel" aria-labelledby="i1">
+  <h2 id="i1">Step 1: Hosts</h2>
+  <form class="form" method="post" action="/connections/agents/install">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="address">
+    <div class="field"><label for="addrs">Addresses</label><textarea id="addrs" name="addresses" rows="{{if $d.Addresses}}4{{else}}2{{end}}" class="mono" required spellcheck="false" placeholder="192.168.1.20">{{$d.Addresses}}</textarea>
+      <span class="hint">One per line; up to 20 hosts with the same user and credentials.</span></div>
+    <div class="field"><label for="port">SSH port</label><input id="port" name="port" type="number" min="1" max="65535" required value="{{if $d.Port}}{{$d.Port}}{{else}}22{{end}}"></div>
+    <div class="field"><label for="user">User</label><input id="user" name="user" type="text" required value="{{$d.User}}" maxlength="32">
+      <span class="hint">root, or a user who may use sudo.</span></div>
+    <button class="btn {{if eq $d.Step "address"}}btn--primary{{end}}" type="submit">Check hosts</button>
+  </form>
+</section>
+{{if eq $d.Step "credentials"}}
+<section class="panel" aria-labelledby="i2">
+  <h2 id="i2">Step 2: Confirm the hosts and sign in once</h2>
+  <p class="small">Each host presents its key. Compare each fingerprint with the output of <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> on that host (the file is named per host below), so that the credentials go to these hosts and no others. Clear a host to leave it out.</p>
+  <form class="form" method="post" action="/connections/agents/install" autocomplete="off">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="install"><input type="hidden" name="addresses" value="{{$d.Addresses}}"><input type="hidden" name="port" value="{{$d.Port}}"><input type="hidden" name="user" value="{{$d.User}}">
+    <table class="table">
+      <thead><tr><th scope="col">Install</th><th scope="col">Host</th><th scope="col">Host key</th></tr></thead>
+      <tbody>{{range $d.Hosts}}
+      <tr>
+        <td data-label="Install">{{if .HostKeyFingerprint}}<input type="checkbox" name="host" value="{{.Address}}" checked aria-label="Install on {{.Address}}"><input type="hidden" name="fp-{{.Address}}" value="{{.HostKeyFingerprint}}">{{else}}<span class="muted">–</span>{{end}}</td>
+        <td data-label="Host" class="mono">{{.Address}}</td>
+        <td data-label="Host key">{{if .HostKeyFingerprint}}<span class="mono">{{.HostKeyFingerprint}}</span><span class="cell-sub">{{.HostKeyFile}}</span>{{else}}<span class="badge badge--kev">not reachable</span><span class="cell-sub">{{.Error}}</span>{{end}}</td>
+      </tr>{{end}}</tbody>
+    </table>
+    <div class="field"><label for="pw">Password of {{$d.User}}</label><input id="pw" name="password" type="password" maxlength="1024" autocomplete="off">
+      <span class="hint">Used to sign in{{if ne $d.User "root"}} and for sudo{{end}} on every selected host. Leave empty when you paste a key.</span></div>
+    <details class="small"><summary>Sign in with a private key instead</summary>
+      <div class="field"><label for="pk">Private key</label><textarea id="pk" name="private_key" rows="5" class="mono" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea></div>
+      <div class="field"><label for="pp">Passphrase (if the key has one)</label><input id="pp" name="passphrase" type="password" maxlength="1024" autocomplete="off"></div>
+    </details>
+    <div class="field"><label for="surl">This server, as the hosts reach it</label><input id="surl" name="server_url" type="text" required value="{{$d.ServerURL}}" placeholder="https://varde.lan:8443">{{if $d.LoopbackURL}}<span class="cell-sub">This is the machine you opened Varde on; the hosts cannot reach it there. Enter this server's name or address in your network.</span>{{end}}
+      <span class="hint">The agent port of this Varde server (VARDE_AGENT_LISTEN_ADDR), as the hosts reach it: usually this machine's LAN address, not a name only your browser knows. The agent verifies the server by its certificate authority, not by this name.</span></div>
+    <label class="check"><input type="checkbox" name="docker" value="yes"{{if $d.Docker}} checked{{end}}> Read the Docker containers, on hosts that run Docker</label>
+    <p class="small muted">This puts the agent's user into the <code>docker</code> group, which is equivalent to root on that host. Without it the agent reads the packages only and runs without any privileges.</p>
+    <label class="check"><input type="checkbox" name="confirm" value="yes" required> I compared the fingerprints of the selected hosts</label>
+    <button class="btn btn--primary" type="submit">Install the agent</button>
+  </form>
+  <details class="small"><summary>What Varde does on each host</summary>
+  <p>In one SSH session: read the platform ({{range $i, $p := $d.Platforms}}{{if $i}}, {{end}}{{$p}}{{end}} are available), upload the agent binary, its configuration with a one-time enrollment token and an install script into a private temporary directory, and run the script as root. The script creates the system user <code>varde-agent</code> without a login, installs the agent to <code>/var/lib/varde-agent</code>, its configuration to <code>/etc/varde-agent.env</code> and a hardened systemd or OpenRC service, starts it and removes the temporary directory. Running it again updates the installation. Varde stores neither the password nor the key.</p></details>
+</section>
+{{end}}
+{{end}}
+{{end}}
+{{end}}

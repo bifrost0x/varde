@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+id: proxmox-backup-server
+name: Proxmox Backup Server
+homepage: https://www.proxmox.com/en/products/proxmox-backup-server/overview
+tags: [backup]
+packages:
+  # Native Proxmox package (4.2.9-1), only in Proxmox's own repositories.
+  - {manager: dpkg, name: proxmox-backup-server, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:a:proxmox:backup_server
+  notes: >-
+    Proxmox publishes advisories in the "Security Advisories" section of the Proxmox forum; there is
+    no machine-readable feed.
+exposure_hints:
+  default_ports: [8007]
+  typical: lan
+eol: proxmox-backup-server
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

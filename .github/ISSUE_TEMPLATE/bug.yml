@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not paste inventory data, hostnames, tokens or logs containing secrets.
+  - type: input
+    id: version
+    attributes:
+      label: Varde version
+      description: Output of `varde version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options: [direct, feed, hybrid, agent]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines (redacted)
+      render: text

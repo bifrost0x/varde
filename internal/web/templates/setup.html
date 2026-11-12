@@ -1,0 +1,29 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+<div class="auth__card">
+  <div class="auth__brand"><img src="/static/brand/mark-unlit.svg" alt=""><span>varde</span></div>
+  <h1>Set up Varde</h1>
+  <p class="muted">Create the first account with the one-time setup token. Varde printed it to its log when it started; it works once and for 24 hours.</p>
+  <details class="small" open><summary>Where is the setup token?</summary>
+    <p>Run one of these on the machine that runs Varde and copy the value after <code>setup_token=</code>, without the <code>setup_token=</code> itself:</p>
+    <dl class="cmds">
+      <dt>Linux, macOS</dt><dd><code>docker logs {{.Data.Container}} 2&gt;&amp;1 | grep setup_token</code></dd>
+      <dt>Windows (cmd)</dt><dd><code>docker logs {{.Data.Container}} 2&gt;&amp;1 | findstr setup_token</code></dd>
+      <dt>Windows (PowerShell)</dt><dd><code>docker logs {{.Data.Container}} 2&gt;&amp;1 | Select-String setup_token</code></dd>
+      <dt>Docker Compose</dt><dd><code>docker compose logs varde | grep setup_token</code></dd>
+      <dt>Without Docker (systemd)</dt><dd><code>journalctl -u varde | grep setup_token</code></dd>
+    </dl>
+    <p>{{if eq .Data.Container "<varde-container>"}}Replace <code>&lt;varde-container&gt;</code> with the name of Varde's container (<code>docker ps</code> lists it). {{end}}No token in the log, or older than 24 hours? Restart Varde; it prints a new one while no account exists.</p>
+  </details>
+  {{if .Data.Error}}<p class="error" role="alert">{{.Data.Error}}</p>{{end}}
+  {{if .Data.Insecure}}<div class="banner banner--warn">{{if .Data.Proxy}}{{template "proxyhint" .Data.Proxy}}{{else}}<p>This connection is not encrypted. Prefer setting up over HTTPS or from the machine itself.</p>{{end}}</div>{{end}}
+  <form class="form" method="post" action="/setup">
+    {{template "csrf" .CSRF}}
+    <div class="field"><label for="token">Setup token</label><input id="token" name="token" type="password" autocomplete="off" required spellcheck="false"></div>
+    <div class="field"><label for="username">Username</label><input id="username" name="username" type="text" autocomplete="username" required value="{{.Data.Username}}" maxlength="64"></div>
+    <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="new-password" required minlength="12"><span class="hint">At least 12 characters. A passphrase works well.</span></div>
+    <div class="field"><label for="password2">Repeat password</label><input id="password2" name="password2" type="password" autocomplete="new-password" required minlength="12"></div>
+    <button class="btn btn--primary" type="submit">Create account</button>
+  </form>
+</div>
+{{end}}

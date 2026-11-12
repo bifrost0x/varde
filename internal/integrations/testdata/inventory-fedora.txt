@@ -1,0 +1,31 @@
+varde-inventory 1
+@@os-release
+NAME="Fedora Linux"
+VERSION="42 (Container Image)"
+RELEASE_TYPE=stable
+ID=fedora
+VERSION_ID=42
+VERSION_CODENAME=""
+PLATFORM_ID="platform:f42"
+PRETTY_NAME="Fedora Linux 42 (Container Image)"
+ANSI_COLOR="0;38;2;60;110;180"
+LOGO=fedora-logo-icon
+CPE_NAME="cpe:/o:fedoraproject:fedora:42"
+DEFAULT_HOSTNAME="fedora"
+HOME_URL="https://fedoraproject.org/"
+DOCUMENTATION_URL="https://docs.fedoraproject.org/en-US/fedora/f42/"
+SUPPORT_URL="https://ask.fedoraproject.org/"
+BUG_REPORT_URL="https://bugzilla.redhat.com/"
+REDHAT_BUGZILLA_PRODUCT="Fedora"
+REDHAT_BUGZILLA_PRODUCT_VERSION=42
+REDHAT_SUPPORT_PRODUCT="Fedora"
+REDHAT_SUPPORT_PRODUCT_VERSION=42
+SUPPORT_END=2026-05-13
+VARIANT="Container Image"
+VARIANT_ID=container
+@@dpkg
+@@rpm
+libgcc=15.2.1-7.fc42;publicsuffix-list-dafsa=20260116-1.fc42;libssh-config=0.11.4-1.fc42;fedora-release-identity-container=42-30;fedora-gpg-keys=42-1;fedora-repos=42-1;fedora-release-common=42-30;fedora-release-container=42-30;setup=2.15.0-13.fc42;filesystem=3.18-47.fc42;basesystem=11-22.fc42;pcre2-syntax=10.46-1.fc42;gnulib-l10n=20241231-1.fc42;coreutils-common=9.6-8.fc42;ncurses-base=6.5-5.20250125.fc42;bash=5.2.37-1.fc42;ncurses-libs=6.5-5.20250125.fc42;glibc-minimal-langpack=2.41-16.fc42;glibc-common=2.41-16.fc42;glibc=2.41-16.fc42;zlib-ng-compat=2.2.5-2.fc42;xz-libs=5.8.1-4.fc42;libstdc++=15.2.1-7.fc42;bzip2-libs=1.0.8-20.fc42;libzstd=1.5.7-1.fc42;gmp=6.3.0-4.fc42;libxcrypt=4.5.2-1.fc42;fmt=11.1.4-1.fc42;libxml2=2.12.10-1.fc42;popt=1.19-8.fc42;json-c=0.18-2.fc42;libeconf=0.7.6-2.fc42;pcre2=10.46-1.fc42;libuuid=2.40.4-10.fc42;gdbm-libs=1.23-9.fc42;libffi=3.4.6-5.fc42;libtasn1=4.20.0-1.fc42;p11-kit=0.26.2-1.fc42;libunistring=1.1-9.fc42;libidn2=2.3.8-1.fc42;crypto-policies=20251125-1.git3839d0e.fc42;libblkid=2.40.4-10.fc42;grep=3.11-10.fc42;elfutils-libelf=0.194-1.fc42;sqlite-libs=3.47.2-5.fc42;lz4-libs=1.10.0-2.fc42;libattr=2.5.2-5.fc42;libacl=2.3.2-3.fc42;readline=8.2-13.fc42;libsepol=3.8-1.fc42;libselinux=3.8-3.fc42;libmount=2.40.4-10.fc42;sed=4.9-4.fc42;lua-libs=5.4.8-4.fc42;libsmartcols=2.40.4-10.fc42;libcom_err=1.47.2-3.fc42;findutils=4.10.0-5.fc42;gdbm=1.23-9.fc42;libpsl=0.21.5-5.fc42;cyrus-sasl-lib=2.1.28-30.fc42;mpfr=4.2.2-1.fc42;nettle=3.10.1-1.fc42;file-libs=5.46-3.fc42;libgomp=15.2.1-7.fc42;libtool-ltdl=2.5.4-4.fc42;keyutils-libs=1.6.3-5.fc42;libverto=0.3.2-10.fc42;libyaml=0.2.5-16.fc42;libcap-ng=0.9.3-1.fc42;audit-libs=4.1.4-1.fc42;pam-libs=1.7.0-7.fc42;libcap=2.73-3.fc42;systemd-libs=257.13-1.fc42;sdbus-cpp=1.5.0-4.fc42;systemd-standalone-sysusers=257.13-1.fc42;libsemanage=3.8.1-2.fc42;shadow-utils=4.17.4-1.fc42;alternatives=1.33-3.fc42;p11-kit-trust=0.26.2-1.fc42;openssl-libs=3.2.6-3.fc42;coreutils=9.6-8.fc42;ca-certificates=2025.2.80_v9.0.304-1.1.fc42;krb5-libs=1.21.3-6.fc42;libtirpc=1.3.7-1.fc42;zchunk-libs=1.5.1-2.fc42;libnsl2=2.0.1-3.fc42;libssh=0.11.4-1.fc42;gzip=1.13-3.fc42;cracklib=2.9.11-7.fc42;libpwquality=1.4.5-12.fc42;pam=1.7.0-7.fc42;authselect-libs=1.5.1-1.fc42;rpm-sequoia=1.10.1-1.fc42;rpm-libs=4.20.1-1.fc42;libsolv=0.7.36-2.fc42;libarchive=3.8.1-1.fc42;libevent=2.1.12-15.fc42;openldap=2.6.13-1.fc42;gnutls=3.8.11-3.fc42;glib2=2.84.4-1.fc42;libmodulemd=2.15.2-1.fc42;libnghttp2=1.64.0-3.fc42;libbrotli=1.2.0-1.fc42;libcurl=8.11.1-8.fc42;librepo=1.20.0-1.fc42;libdnf5=5.2.18.0-2.fc42;libdnf5-cli=5.2.18.0-2.fc42;dnf5=5.2.18.0-2.fc42;curl=8.11.1-8.fc42;elfutils-default-yama-scope=0.194-1.fc42;elfutils-libs=0.194-1.fc42;rpm-build-libs=4.20.1-1.fc42;vim-data=9.2.280-1.fc42;vim-minimal=9.2.280-1.fc42;dnf5-plugins=5.2.18.0-2.fc42;rpm=4.20.1-1.fc42;sudo=1.9.17-2.p1.fc42;authselect=1.5.1-1.fc42;util-linux-core=2.40.4-10.fc42;gawk=5.3.1-1.fc42;tar=1.35-5.fc42;zstd=1.5.7-1.fc42;xz=5.8.1-4.fc42;bzip2=1.0.8-20.fc42;tzdata=2025c-1.fc42;rootfiles=8.1-38.fc42;gpg-pubkey=105ef944-65ca83d1;
+@@apk
+@@systemd
+@@end

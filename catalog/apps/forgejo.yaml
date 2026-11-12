@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+id: forgejo
+name: Forgejo
+homepage: https://forgejo.org
+tags: [git, forge, devops]
+images:
+  - match: codeberg.org/forgejo/forgejo
+  - match: data.forgejo.org/forgejo/forgejo
+    note: documented mirror of codeberg.org, same digests
+oci_source:
+  - https://codeberg.org/forgejo/forgejo
+version:
+  scheme: semver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-rootless)?$'
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:a:forgejo:forgejo
+  notes: >-
+    Forgejo is developed on Codeberg, not GitHub, and has no OSV records (none for the Go modules
+    forgejo.org or codeberg.org/forgejo/forgejo). Vulnerabilities are reported to
+    security@forgejo.org (https://forgejo.org/.well-known/security.txt); fixes are announced in
+    the release notes (https://codeberg.org/forgejo/forgejo/releases) and in blog posts tagged
+    security (https://forgejo.org/tag/security/). Only a few CVEs carry the NVD CPE; newer ones
+    (e.g. CVE-2025-68937) have no CPE configuration. Gitea advisories do not apply by version:
+    Forgejo is a hard fork with its own numbering. Several release lines are maintained at once
+    (17.0.x, 16.0.x, 15.0.x). Tags: 17.0.1, 17.0.1-rootless; major tags (17, 17-rootless) are
+    floating and there is no latest tag.
+exposure_hints:
+  default_ports: [3000, 22]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

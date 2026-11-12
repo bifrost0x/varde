@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+id: syncthing
+name: Syncthing
+homepage: https://syncthing.net
+tags: [sync, files]
+images:
+  - match: syncthing/syncthing
+  - match: ghcr.io/syncthing/syncthing
+  - match: lscr.io/linuxserver/syncthing
+    flavor: lsio
+oci_source:
+  - https://github.com/syncthing/syncthing
+version:
+  scheme: semver
+advisories:
+  coverage: partial
+  github_repos:
+    - syncthing/syncthing
+  osv_packages:
+    - {ecosystem: Go, name: github.com/syncthing/syncthing}
+  cpe:
+    - cpe:2.3:a:syncthing:syncthing
+  notes: >-
+    Only two repository advisories (2021, 2023); older issues exist only as CVEs and in the Go
+    vulnerability database. Security fixes are also announced on forum.syncthing.net and in
+    release notes. edge, rc, latest and major/minor tags are floating.
+exposure_hints:
+  default_ports: [8384, 22000, 21027]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

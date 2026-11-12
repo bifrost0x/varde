@@ -1,0 +1,68 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-head">
+  <div><h1>Findings</h1><p>Advisories that apply to an app you run or a package installed on your systems, in the version you run{{if eq $d.View ""}}, grouped by what fixes them: one update per container or system, most urgent first{{else if eq $d.View "package"}}, grouped by app or package and version with the update that fixes them{{end}}.</p></div>
+  <nav class="segmented" aria-label="Group findings">
+    <a href="/findings{{if $d.Query}}?{{$d.Query}}{{end}}"{{if eq $d.View ""}} aria-current="page"{{end}}>By system</a>
+    <a href="/findings?view=package{{if $d.Query}}&amp;{{$d.Query}}{{end}}"{{if eq $d.View "package"}} aria-current="page"{{end}}>By package</a>
+    <a href="/findings?view=list{{if $d.Query}}&amp;{{$d.Query}}{{end}}"{{if eq $d.View "list"}} aria-current="page"{{end}}>One row per advisory</a>
+  </nav>
+</div>
+<form class="filters" method="get" action="/findings">
+  {{if $d.View}}<input type="hidden" name="view" value="{{$d.View}}">{{end}}
+  <div class="field"><label for="f-priority">Priority</label>
+    <select id="f-priority" name="priority">
+      <option value="">Any</option>
+      {{range $p := list "P1" "P2" "P3"}}<option value="{{$p}}" {{if eq $d.Filter.Priority $p}}selected{{end}}>{{$p}}</option>{{end}}
+    </select></div>
+  <div class="field"><label for="f-match">Check</label>
+    <select id="f-match" name="match">
+      <option value="">Any</option>
+      <option value="affected" {{if eq $d.Filter.Match "affected"}}selected{{end}}>Confirmed</option>
+      <option value="unverified" {{if eq $d.Filter.Match "unverified"}}selected{{end}}>Needs a check</option>
+    </select></div>
+  <div class="field"><label for="f-state">State</label>
+    <select id="f-state" name="state">
+      <option value="">All open</option>
+      <option value="open" {{if eq $d.Filter.State "open"}}selected{{end}}>New</option>
+      {{range $s := list "acknowledged" "snoozed" "suppressed" "resolved" "all"}}<option value="{{$s}}" {{if eq $d.Filter.State $s}}selected{{end}}>{{title $s}}</option>{{end}}
+    </select></div>
+  <div class="field"><label for="f-app">App</label>
+    <select id="f-app" name="app">
+      <option value="">Any</option>
+      {{range $d.Apps}}<option value="{{.ID}}" {{if eq $d.Filter.App .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+    </select></div>
+  <div class="field"><label for="f-exposure">Exposure</label>
+    <select id="f-exposure" name="exposure">
+      <option value="">Any</option>
+      {{range $e := list "public" "lan" "internal" "unknown"}}<option value="{{$e}}" {{if eq $d.Filter.Exposure $e}}selected{{end}}>{{$e}}</option>{{end}}
+    </select></div>
+  <div class="field"><label for="f-path">Attack paths</label>
+    <select id="f-path" name="path">
+      <option value="">Any</option>
+      <option value="path" {{if eq $d.Filter.Path "path"}}selected{{end}}>On an attack path</option>
+      <option value="path-internet" {{if eq $d.Filter.Path "path-internet"}}selected{{end}}>From the internet</option>
+      <option value="noise" {{if eq $d.Filter.Path "noise"}}selected{{end}}>Background noise</option>
+      <option value="unclear" {{if eq $d.Filter.Path "unclear"}}selected{{end}}>Not placed</option>
+    </select></div>
+  <button class="btn" type="submit">Filter</button>
+</form>
+{{if $d.Count}}
+{{if $d.List}}
+<section class="panel">{{template "findingtable" $d.Findings}}</section>
+{{else if eq $d.View ""}}
+<p class="small muted">{{plural (len $d.Todo) "update"}} to do, {{plural $d.Count "finding"}}. For a container the packages are part of its image: updating them inside the container does not last. Pull the image again (with a tag such as <code>latest</code> too) and recreate the container; Varde sees the new image at the host's next report, with an agent within a minute.</p>
+{{template "todogroups" $d.Todo}}
+{{else}}
+<p class="small muted">{{len $d.Groups}} {{if eq (len $d.Groups) 1}}app or package version{{else}}app and package versions{{end}}, {{plural $d.Count "finding"}}.</p>
+{{template "findinggroups" $d.Groups}}
+{{end}}
+{{else}}
+<div class="empty panel">
+  <img src="/static/brand/mark-unlit.svg" alt="">
+  <h2>Nothing here</h2>
+  <p>{{if $d.Filtered}}No findings match these filters.{{else}}No open findings. Varde stays silent until something applies to you.{{end}}</p>
+</div>
+{{end}}
+{{end}}

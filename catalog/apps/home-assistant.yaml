@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+id: home-assistant
+name: Home Assistant
+homepage: https://www.home-assistant.io
+tags: [home-automation, iot]
+images:
+  - match: ghcr.io/home-assistant/home-assistant
+  - match: homeassistant/home-assistant
+  - match: lscr.io/linuxserver/homeassistant
+    flavor: lsio
+oci_source:
+  - https://github.com/home-assistant/core
+packages:
+  # Home Assistant OS and Supervised run Core in a container Varde cannot
+  # see; the Home Assistant integration reads its version from /api/config.
+  - {manager: firmware, name: home-assistant-core, versioning: upstream}
+version:
+  scheme: calver
+advisories:
+  coverage: full
+  github_repos:
+    - home-assistant/core
+  packages:
+    - {name: Home Assistant Core}
+    - {name: Home Assistant}
+    - {name: homeassistant}
+  osv_packages:
+    - {ecosystem: PyPI, name: homeassistant}
+  cpe:
+    - cpe:2.3:a:home-assistant:home-assistant
+  notes: >-
+    Advisories are published in home-assistant/core (frontend, supervisor and operating-system
+    repos have none) and announced on the Home Assistant blog. Stable tags are YYYY.M.x; betas
+    (2026.11.0b6) and dev builds (2026.12.0.dev202611080216) are also tagged; stable, latest,
+    beta, rc, dev and YYYY.M are floating. Images run by the Supervisor on HAOS
+    (ghcr.io/home-assistant/<machine>-homeassistant) are not listed.
+exposure_hints:
+  default_ports: [8123]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

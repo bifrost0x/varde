@@ -1,0 +1,112 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}{{$csrf := .CSRF}}
+<div class="page-head">
+  <div><p class="small"><a href="/connections">Connections</a></p><h1>{{.Title}}</h1>
+  {{if eq $d.Kind "proxmox"}}<p>Varde reads nodes, VMs and containers through the Proxmox VE API with a read-only token. It never changes anything.</p>
+  {{else if $d.Service}}<p>Varde reads {{if $d.Service.Routes}}the routes: host names and where they forward to{{else}}the devices in your network with address, MAC and name{{end}}. It never changes anything.</p>
+  <p class="small">{{$d.Service.Setup}}</p>
+  {{else if eq $d.Kind "proxmox-lxc"}}<p>One key line on the Proxmox node lets Varde read the packages of every running LXC container, without signing in to each one. The key runs one fixed command as root on the node: it lists the containers and, for each running one, reads a few files with <code>pct exec &lt;id&gt; -- cat</code> inside the container, with the container's own rights. Nothing is installed or changed.</p>
+  {{else if eq $d.Kind "packages"}}<p>Varde signs in over SSH with a key that can run one fixed, read-only command: it lists the installed packages (dpkg, rpm, apk) and the systemd services. Nothing is installed on the host and Varde keeps only packages and services of apps in its catalog.</p>
+  {{else}}<p>Varde reads the containers through the Docker Engine API over SSH, the way <code>docker -H ssh://</code> does. Nothing is installed on the host.</p>{{end}}
+  </div>
+</div>
+{{if $d.Error}}<div class="banner banner--warn" role="alert"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg><p>{{$d.Error}}</p></div>{{end}}
+
+{{if $d.Service}}
+<section class="panel" aria-labelledby="v1">
+  <h2 id="v1">Step 1: Address</h2>
+  <form class="form" method="post" action="/connections/connect/{{$d.Kind}}">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="address">
+    <div class="field"><label for="surl">{{$d.Service.Name}}</label><input id="surl" name="url" type="text" required value="{{$d.URL}}" placeholder="{{if $d.Service.DefaultTLS}}https{{else}}http{{end}}://192.168.1.1:{{$d.Service.DefaultPort}}"></div>
+    <button class="btn {{if eq $d.Step "address"}}btn--primary{{end}}" type="submit">Check address</button>
+  </form>
+</section>
+{{if eq $d.Step "credential"}}
+<section class="panel" aria-labelledby="v2">
+  {{if $d.Fingerprint}}<h2 id="v2">Step 2: Confirm the certificate</h2>
+  <p class="small">The service presents this certificate fingerprint. Compare it with the one its web interface shows. Varde pins it and refuses any other certificate later.</p>
+  <p class="mono secret">{{$d.Fingerprint}}</p>
+  {{else if $d.Plain}}<h2 id="v2">Step 2: Plain http</h2>
+  <div class="banner banner--warn" role="alert"><p>This address uses http: the credential travels unencrypted through your LAN. Use https where the service offers it.</p></div>{{end}}
+  <h2>Step 3: A read-only credential</h2>
+  <p class="small">{{$d.Service.Setup}}</p>
+  <form class="form" method="post" action="/connections/connect/{{$d.Kind}}">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="credential"><input type="hidden" name="url" value="{{$d.URL}}"><input type="hidden" name="fingerprint" value="{{$d.Fingerprint}}">
+    <div class="field"><label for="suser">User{{if $d.Service.UserOptional}} (optional){{end}}</label><input id="suser" name="user" type="text" value="{{$d.User}}" maxlength="128" autocomplete="off"></div>
+    <div class="field"><label for="ssec">Password or secret</label><input id="ssec" name="secret" type="password" maxlength="512" autocomplete="off">
+      <span class="hint">Stored encrypted on this server; Varde reads once before saving.</span></div>
+    {{if $d.Fingerprint}}<label class="check"><input type="checkbox" name="confirm" value="yes" required> The fingerprint matches the one the service shows</label>{{end}}
+    <button class="btn btn--primary" type="submit">Connect</button>
+  </form>
+</section>
+{{end}}
+{{else if eq $d.Kind "proxmox"}}
+<section class="panel" aria-labelledby="s1">
+  <h2 id="s1">Step 1: Address</h2>
+  <form class="form" method="post" action="/connections/connect/proxmox">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="address">
+    <div class="field"><label for="url">Proxmox node</label><input id="url" name="url" type="text" required value="{{$d.URL}}" placeholder="https://192.168.1.10:8006">
+      <span class="hint">Any node of the cluster. Varde reads the whole cluster through it.</span></div>
+    <button class="btn {{if eq $d.Step "address"}}btn--primary{{end}}" type="submit">Check certificate</button>
+  </form>
+</section>
+{{if eq $d.Step "token"}}
+<section class="panel" aria-labelledby="s2">
+  <h2 id="s2">Step 2: Confirm the certificate</h2>
+  <p class="small">The node presents this certificate fingerprint. Compare it with <em>Datacenter &rsaquo; your node &rsaquo; System &rsaquo; Certificates</em> in Proxmox (or run <code>pvenode cert info</code>). Varde pins it and refuses any other certificate later.</p>
+  <p class="mono secret">{{$d.Fingerprint}}</p>
+  <h2>Step 3: Create a read-only token</h2>
+  <p class="small">In the shell of the node (<em>node &rsaquo; Shell</em>), run:</p>
+  <pre class="details-text">pveum user add varde@pve --comment "Varde (read-only)"
+pveum acl modify / --users varde@pve --roles PVEAuditor
+pveum user token add varde@pve varde --privsep 0</pre>
+  <p class="small">The last command shows the token secret once. <code>PVEAuditor</code> can only read. Addresses of VMs come from the QEMU guest agent; on Proxmox 8 they also need <code>VM.Monitor</code>, on Proxmox 9 <code>VM.GuestAgent.Audit</code> (part of PVEAuditor).</p>
+  <form class="form" method="post" action="/connections/connect/proxmox">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="token"><input type="hidden" name="url" value="{{$d.URL}}"><input type="hidden" name="fingerprint" value="{{$d.Fingerprint}}">
+    <div class="field"><label for="tid">Token ID</label><input id="tid" name="token_id" type="text" required value="{{if $d.TokenID}}{{$d.TokenID}}{{else}}varde@pve!varde{{end}}"></div>
+    <div class="field"><label for="sec">Token secret</label><input id="sec" name="secret" type="password" required autocomplete="off" maxlength="256">
+      <span class="hint">Stored encrypted on this server.</span></div>
+    <label class="check"><input type="checkbox" name="confirm" value="yes" required> The fingerprint matches the one Proxmox shows</label>
+    <button class="btn btn--primary" type="submit">Connect</button>
+  </form>
+</section>
+{{end}}
+
+{{else}}
+<section class="panel" aria-labelledby="d1">
+  <h2 id="d1">Step 1: Host</h2>
+  <form class="form" method="post" action="/connections/connect/{{$d.Kind}}">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="address">
+    <div class="field"><label for="addr">Address</label><input id="addr" name="address" type="text" required value="{{$d.Address}}" placeholder="192.168.1.20"></div>
+    <div class="field"><label for="port">SSH port</label><input id="port" name="port" type="number" min="1" max="65535" required value="{{if $d.Port}}{{$d.Port}}{{else}}22{{end}}"></div>
+    <div class="field"><label for="user">User</label><input id="user" name="user" type="text" required value="{{$d.User}}" maxlength="32">
+      <span class="hint">{{if eq $d.Kind "proxmox-lxc"}}root: only root may run <code>pct</code>. The key line forces the one command, so the key cannot open a shell.{{else if eq $d.Kind "packages"}}Any user; reading the package lists needs no privileges. A dedicated user without a password is best.{{else}}A user that may run <code>docker</code>, usually a member of the <code>docker</code> group.{{end}}</span></div>
+    <button class="btn {{if eq $d.Step "address"}}btn--primary{{end}}" type="submit">Check host</button>
+  </form>
+</section>
+{{if eq $d.Step "key"}}
+<section class="panel" aria-labelledby="d2">
+  <h2 id="d2">Step 2: Confirm the host</h2>
+  <p class="small">The host presents this key. Compare it with the output of <code>ssh-keygen -lf {{$d.HostKeyFile}}</code> on the host. Varde pins it and refuses any other key later.</p>
+  <p class="mono secret">{{$d.HostKeyFingerprint}}</p>
+  <h2>Step 3: Allow Varde's key</h2>
+  <p class="small">On the host, signed in as <strong>{{$d.User}}</strong>, add this line to <code>~/.ssh/authorized_keys</code>. {{if eq $d.Kind "proxmox-lxc"}}The key only runs the listed command: no shell, no forwarding. It is Varde's third key, separate from the Docker and package keys.{{else if eq $d.Kind "packages"}}The key only runs the listed read-only command: no shell, no forwarding. It is a different key from the Docker one, so a host can have both lines.{{else}}The key only works for the Docker API stream: no shell, no forwarding.{{end}}</p>
+  {{if $d.Install}}<p class="small"><strong>Copy these commands and paste them into a shell on the host</strong>, signed in as root or as a user that may use sudo. If the user <strong>{{$d.User}}</strong> does not exist, they create it without a password{{if eq $d.Kind "docker"}} and add it to the <code>docker</code> group{{end}}; an existing account keeps its password and groups. Then they add Varde's key line to its <code>~/.ssh/authorized_keys</code>. Running them again replaces the line.</p>
+  <div class="secret"><pre id="install" class="mono install">{{$d.Install}}</pre><button class="btn btn--ghost" type="button" data-copy="#install"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+  <details class="small"><summary>Or add the line yourself</summary>
+  <p>The line below is not a command: it belongs on its own line in <code>~/.ssh/authorized_keys</code> of <strong>{{$d.User}}</strong>.</p>{{end}}
+  <div class="secret"><span id="keyline" class="mono">{{$d.KeyLine}}</span><button class="btn btn--ghost" type="button" data-copy="#keyline"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+  {{if $d.Install}}</details>{{end}}
+  {{if eq $d.Kind "proxmox-lxc"}}<p class="small muted">Read on the node: the lists of containers and VMs and, from each one's configuration, its name and MAC addresses. Read in each running LXC container (with <code>pct exec</code>) and in each VM whose QEMU guest agent answers (with <code>qm guest exec</code>): <code>/etc/os-release</code>, the dpkg, apk and rpm package databases, and <code>docker ps</code> and <code>docker image ls</code>. Varde keeps the full package lists. Whoever controls this Varde server can read these lists from every guest on the node; nothing more, since the key runs only this fixed command.</p>
+  {{else if eq $d.Kind "packages"}}<p class="small muted">The command lists package names and versions and the service names; it reads no files besides <code>/etc/os-release</code>.</p>
+  {{else}}<p class="small muted">Docker access equals root access on that host. Varde only sends read requests, but whoever controls this Varde server could use the key; keep the server private.</p>{{end}}
+  <form class="form" method="post" action="/connections/connect/{{$d.Kind}}">
+    {{template "csrf" $csrf}}<input type="hidden" name="step" value="connect"><input type="hidden" name="address" value="{{$d.Address}}"><input type="hidden" name="port" value="{{$d.Port}}"><input type="hidden" name="user" value="{{$d.User}}"><input type="hidden" name="fingerprint" value="{{$d.HostKeyFingerprint}}">
+    <label class="check"><input type="checkbox" name="confirm" value="yes" required> The fingerprint matches and the key line is added</label>
+    <button class="btn btn--primary" type="submit">Connect</button>
+  </form>
+</section>
+{{end}}
+{{end}}
+{{end}}

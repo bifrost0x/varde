@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+id: pi-hole
+name: Pi-hole
+homepage: https://pi-hole.net
+tags: [dns, adblock, network]
+images:
+  - match: pihole/pihole
+  - match: ghcr.io/pi-hole/pihole
+oci_source:
+  - https://github.com/pi-hole/docker-pi-hole
+version:
+  scheme: calver
+advisories:
+  coverage: partial
+  github_repos:
+    - pi-hole/pi-hole
+    - pi-hole/FTL
+    - pi-hole/web
+  cpe:
+    - cpe:2.3:a:pi-hole:pi-hole
+    - cpe:2.3:a:pi-hole:ftldns
+    - cpe:2.3:a:pi-hole:web_interface
+  notes: >-
+    Advisories are split across the component repos pi-hole/pi-hole (core), pi-hole/FTL and
+    pi-hole/web and use the component versions (e.g. FTL v6.x), while the container image is
+    versioned by docker-pi-hole releases (YYYY.MM.x, zero-padded month, e.g. 2026.10.1).
+    docker-pi-hole itself publishes no advisories. Matching an image version against component
+    advisories needs a mapping from the docker release to the bundled component versions (listed in
+    the docker-pi-hole release notes); until then coverage is partial. nightly, latest,
+    development and experimental are floating.
+exposure_hints:
+  default_ports: [53, 80, 443, 67]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

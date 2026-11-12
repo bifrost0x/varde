@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: Apache-2.0
+id: jellyfin
+name: Jellyfin
+homepage: https://jellyfin.org
+tags: [media, streaming]
+images:
+  - match: jellyfin/jellyfin
+  - match: ghcr.io/jellyfin/jellyfin
+  - match: lscr.io/linuxserver/jellyfin
+    flavor: lsio
+packages:
+  - manager: dpkg
+    name: jellyfin-server
+    versioning: upstream
+    version_pattern: '^(?P<v>\d+\.\d+(?:\.\d+)?)\+'
+oci_source:
+  - https://github.com/jellyfin/jellyfin-packaging
+version:
+  scheme: semver
+  probe:
+    http:
+      path: /System/Info/Public
+      json_pointer: /Version
+      expect: {/ProductName: Jellyfin Server}
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^(?P<v>\d+\.\d+(?:\.\d{1,4})?)(?:\.\d{8}-\d{6})?$'
+advisories:
+  coverage: full
+  github_repos:
+    - jellyfin/jellyfin
+    - jellyfin/jellyfin-web
+  osv_packages:
+    - {ecosystem: NuGet, name: Jellyfin.Controller}
+    - {ecosystem: npm, name: jellyfin-web}
+  cpe:
+    - cpe:2.3:a:jellyfin:jellyfin
+  notes: >-
+    Since 12.0 releases use two components (12.4); stable tags are 12.4 and 12.4.<date>-<time>.
+    The unstable tag and its YYYYMMDDHH tags (e.g. 2026110213) carry that build number as
+    org.opencontainers.image.version, which is not a release version. lsio tags look like
+    12.4ubu2604-ls58. The image OCI source is the packaging repo, not jellyfin/jellyfin.
+exposure_hints:
+  default_ports: [8096]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

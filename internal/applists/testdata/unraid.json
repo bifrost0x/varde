@@ -1,0 +1,10 @@
+{"apps":7,"last_updated":"2026-11-09 19:13","categories":[{"Cat":"AI:","Des":"AI"}],
+"applist":[
+{"Name":"Tandoor","Repository":"vabene1111/recipes:latest","Project":"https://github.com/TandoorRecipes/recipes","Registry":"https://hub.docker.com/r/vabene1111/recipes"},
+{"Name":"Homarr","Repository":"ghcr.io/homarr-labs/homarr","Project":"https://homarr.dev","GitHub":"https://github.com/homarr-labs/homarr/"},
+{"Name":"Some plugin","Plugin":"True","PluginURL":"https://raw.githubusercontent.com/x/y/z.plg","Repository":"https://raw.githubusercontent.com/x/y/z.plg","Project":"https://github.com/x/y"},
+{"Name":"No project","Repository":"someone/thing","Project":null},
+{"Name":"Website only","Repository":"someone/other","Project":"https://example.org"},
+{"Name":"Odd types","Repository":["a","b"],"Project":true},
+{"Name":"TimeTracker","Repository":"postgres:16","Project":"https://github.com/drytrix/TimeTracker"}
+],"repositories":{},"blacklisted":[],"deprecated":[]}

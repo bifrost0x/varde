@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+id: docmost
+name: Docmost
+homepage: https://docmost.com
+tags: [wiki, documentation]
+images:
+  - match: docmost/docmost
+oci_source:
+  - https://github.com/docmost/docmost
+version:
+  scheme: semver
+  sources:
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)$'
+advisories:
+  coverage: full
+  github_repos:
+    - docmost/docmost
+  cpe:
+    - cpe:2.3:a:docmost:docmost
+  notes: >-
+    The image has an OCI source label but no version label; the version comes from the tag
+    (latest and major.minor tags such as 0.97 are floating; -dhi.beta.* and -cf.beta.* tags are
+    pre-release variants and do not match).
+exposure_hints:
+  default_ports: [3000]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

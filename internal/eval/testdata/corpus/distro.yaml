@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# Distribution packages matched against distribution security data (ADR 0028). distro-records.json
+# holds real OSV records read from osv.dev on 2026-11-09, reduced to the entries of nginx in Debian
+# 12, Alpine 3.22 and AlmaLinux 9 (a notice covering four CVEs, matched per CVE). upstream lists an upstream advisory of the same CVE with an upstream
+# range; it is synthetic (nginx has no machine-readable upstream advisories) and must never decide
+# for a distribution package. expect lists the advisories that must be affected; all others must
+# not be.
+distro:
+  records: distro-records.json
+  upstream:
+    - {id: NVD-CVE-2026-9256, app: nginx, aliases: [CVE-2026-9256], fixed: "1.29.4"}
+  cases:
+    - name: debian 12 patched
+      why: Debian backported the fix into 1.22.1; the upstream range below 1.29.4 must not count
+      package: {manager: dpkg, name: nginx, version: "1.22.1-9+deb12u8", distro: debian-12}
+      expect: [DEBIAN-CVE-2026-97629]
+    - name: debian 12 before the fix
+      package: {manager: dpkg, name: nginx, version: "1.22.1-9+deb12u7", distro: debian-12}
+      expect: [DEBIAN-CVE-2026-9256, DEBIAN-CVE-2026-97629]
+    - name: alpine 3.22 patched
+      package: {manager: apk, name: nginx, version: "1.28.3-r2", distro: alpine-3.22.1}
+      expect: []
+    - name: alpine 3.22 before the fix
+      package: {manager: apk, name: nginx, version: "1.28.3-r1", distro: alpine-3.22.1}
+      expect: [ALPINE-CVE-2026-9256]
+    - name: vendor build on debian
+      why: the nginx.org package is not covered by Debian's data; nothing may be affected
+      package: {manager: dpkg, name: nginx, version: "1.28.0-1~bookworm", distro: debian-12}
+      expect: []
+    - name: release without records
+      why: Debian 13 entries were not stored; upstream ranges must not decide
+      package: {manager: dpkg, name: nginx, version: "1.26.3-3+deb13u1", distro: debian-13}
+      expect: []
+    - name: almalinux 9 before the fix
+      why: one notice covers four CVEs; each becomes its own finding
+      package: {manager: rpm, name: nginx, version: "2:1.26.3-2.module_el9.7.0+223+9cd7031b", distro: almalinux-9.7}
+      expect: [CVE-2026-27651, CVE-2026-27654, CVE-2026-27784, CVE-2026-32647]
+    - name: almalinux 9 patched
+      package: {manager: rpm, name: nginx, version: "2:1.26.3-2.module_el9.7.0+223+9cd7031b.1", distro: almalinux-9.7}
+      expect: []
+    - name: almalinux 9 patched, read without epoch
+      why: package lists from older inventory key lines carry no epoch
+      package: {manager: rpm, name: nginx, version: "1.26.3-2.module_el9.7.0+223+9cd7031b.1", distro: almalinux-9.7}
+      expect: []

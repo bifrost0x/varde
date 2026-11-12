@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+id: immich
+name: Immich
+homepage: https://immich.app
+tags: [photos, media]
+images:
+  - match: ghcr.io/immich-app/immich-server
+  - match: altran1502/immich-server
+    note: Docker Hub repository under the original maintainer's namespace; still receives every release
+oci_source:
+  - https://github.com/immich-app/immich
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - immich-app/immich
+  cpe:
+    - cpe:2.3:a:futo:immich
+  notes: >-
+    The machine-learning container (ghcr.io/immich-app/immich-machine-learning) carries the same
+    OCI source and version labels but is intentionally not listed, so one installation is reported
+    once. Release tags are v-prefixed (v3.3.6); release and v<major> are floating.
+exposure_hints:
+  default_ports: [2283]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

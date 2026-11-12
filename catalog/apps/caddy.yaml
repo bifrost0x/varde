@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+id: caddy
+name: Caddy
+homepage: https://caddyserver.com
+tags: [web-server, reverse-proxy]
+images:
+  - match: library/caddy
+    note: Docker official image
+  - match: caddy/caddy
+    note: image maintained by the Caddy project, same tags as the official image
+oci_source:
+  - https://github.com/caddyserver/caddy-docker
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - caddyserver/caddy
+  osv_packages:
+    - {ecosystem: Go, name: github.com/caddyserver/caddy/v2}
+    - {ecosystem: Go, name: github.com/caddyserver/caddy}
+  cpe:
+    - cpe:2.3:a:caddyserver:caddy
+  notes: >-
+    The OCI source label points to the packaging repo caddyserver/caddy-docker; advisories are
+    in caddyserver/caddy. builder* tags are the xcaddy build image, not a running server.
+    Custom builds with plugins (xcaddy) usually lose the labels; set varde.version there.
+exposure_hints:
+  default_ports: [80, 443, 2019]
+  typical: public
+eol: caddy
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

@@ -1,0 +1,673 @@
+openapi: 3.1.0
+info:
+  title: Varde API
+  version: v1
+  description: |
+    REST API of Varde. All endpoints require authentication: an API token
+    (`Authorization: Bearer varde_...`, created in Settings) or a browser
+    session. Tokens with the `read` scope may only use GET. Session requests
+    that change state must send the `X-CSRF-Token` header.
+
+    Responses are JSON. Errors have the shape `{"error": "..."}`.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/v1
+security:
+  - bearer: []
+  - session: []
+
+paths:
+  /status:
+    get:
+      summary: Overall state and open finding counts
+      operationId: getStatus
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /scan:
+    post:
+      summary: Start an inventory sync and advisory refresh
+      operationId: postScan
+      responses:
+        "202":
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { status: { const: started } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /hosts:
+    get:
+      summary: List hosts
+      description: >-
+        `view=records` (default) lists the stored host records, one per source. `view=merged` lists
+        one host per machine with the evidence of every source, as the Hosts page shows them
+        (ADR 0021), plus the host counts.
+      operationId: listHosts
+      parameters:
+        - { name: view, in: query, schema: { type: string, enum: [records, merged], default: records } }
+      responses:
+        "200":
+          description: Hosts
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      hosts: { type: array, items: { $ref: "#/components/schemas/Host" } }
+                  - type: object
+                    properties:
+                      hosts: { type: array, items: { $ref: "#/components/schemas/MergedHost" } }
+                      counts: { $ref: "#/components/schemas/HostCounts" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /devices:
+    get:
+      summary: List addresses found by the network scan
+      description: Devices inside the allowed networks, with the merged host each belongs to, and the last scan.
+      operationId: listDevices
+      responses:
+        "200":
+          description: Devices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices: { type: array, items: { $ref: "#/components/schemas/Device" } }
+                  last_scan: { $ref: "#/components/schemas/ScanRun" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /integrations:
+    get:
+      summary: List integrations with their health
+      description: Configuration and secrets are never returned.
+      operationId: listIntegrations
+      responses:
+        "200":
+          description: Integrations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations: { type: array, items: { $ref: "#/components/schemas/Integration" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /workloads:
+    get:
+      summary: List workloads with their identification
+      operationId: listWorkloads
+      parameters:
+        - { name: host_id, in: query, schema: { type: string } }
+        - { name: kind, in: query, schema: { type: string, enum: [container, endpoint, manual, package, service] } }
+        - { name: include_removed, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Workloads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workloads: { type: array, items: { $ref: "#/components/schemas/Workload" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Add a manual workload (an appliance or a service Varde cannot see)
+      operationId: createManual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ManualRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Workload" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "415": { $ref: "#/components/responses/BadRequest" }
+  /workloads/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+    get:
+      summary: Get one workload
+      operationId: getWorkload
+      responses:
+        "200":
+          description: Workload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Workload" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a manual workload
+      description: Observed workloads cannot be deleted; they disappear when they stop existing.
+      operationId: deleteManual
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /findings:
+    get:
+      summary: List findings
+      operationId: listFindings
+      parameters:
+        - { name: workload_id, in: query, schema: { type: string } }
+        - { name: include_resolved, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Findings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  findings: { type: array, items: { $ref: "#/components/schemas/Finding" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /vex:
+    get:
+      summary: Export the findings as an OpenVEX document
+      description: >-
+        OpenVEX 0.2.0. Each finding becomes a statement for its workload (package URL when known):
+        affected (with the update that fixes it), under_investigation for unverified findings, and
+        not_affected for findings the operator suppressed, with the reason as impact statement.
+        The document ID is derived from the statements, so an unchanged state gives the same ID.
+      operationId: exportVEX
+      responses:
+        "200":
+          description: OpenVEX document
+          content:
+            application/json:
+              schema:
+                type: object
+                required: ["@context", "@id", author, timestamp, version, statements]
+                properties:
+                  "@context": { type: string, const: "https://openvex.dev/ns/v0.2.0" }
+                  "@id": { type: string }
+                  author: { type: string }
+                  timestamp: { type: string, format: date-time }
+                  version: { type: integer }
+                  tooling: { type: string }
+                  statements:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        vulnerability: { type: object, properties: { name: { type: string }, aliases: { type: array, items: { type: string } } } }
+                        products: { type: array, items: { type: object } }
+                        status: { type: string, enum: [affected, not_affected, under_investigation] }
+                        status_notes: { type: string }
+                        impact_statement: { type: string }
+                        action_statement: { type: string }
+                        timestamp: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /findings/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+    get:
+      summary: Get one finding
+      operationId: getFinding
+      responses:
+        "200":
+          description: Finding
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Finding" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /findings/{id}/ack:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+    post:
+      summary: Acknowledge a finding
+      operationId: ackFinding
+      responses: &transition
+        "200":
+          description: Updated finding
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Finding" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /findings/{id}/reopen:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+    post:
+      summary: Reopen an acknowledged or snoozed finding
+      operationId: reopenFinding
+      responses: *transition
+  /findings/{id}/snooze:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+    post:
+      summary: Snooze a finding for 1-365 days or until a time
+      operationId: snoozeFinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                days: { type: integer, minimum: 1, maximum: 365 }
+                until: { type: string, format: date-time }
+      responses: *transition
+  /findings/{id}/suppress:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+    post:
+      summary: Suppress an advisory for this workload or for the whole app
+      operationId: suppressFinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 512 }
+                scope: { type: string, enum: [workload, app], default: workload }
+                expires_at: { type: string, format: date-time }
+      responses:
+        "201":
+          description: Suppression created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Suppression" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /suppressions:
+    get:
+      summary: List suppressions
+      operationId: listSuppressions
+      responses:
+        "200":
+          description: Suppressions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suppressions: { type: array, items: { $ref: "#/components/schemas/Suppression" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /paths:
+    get:
+      summary: List the attack paths of the last analysis, most dangerous first
+      operationId: listPaths
+      responses:
+        "200":
+          description: Attack paths (ADR 0034)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paths:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        entry: { type: string, enum: [internet, lan] }
+                        impact: { type: string }
+                        target: { type: string }
+                        target_name: { type: string }
+                        score: { type: integer }
+                        breaker: { type: string }
+                        cut: { type: string }
+                        findings: { type: array, items: { type: string } }
+                        steps:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              kind: { type: string, enum: [enter, exploit, escape, escalate, pivot] }
+                              label: { type: string }
+                              machine_id: { type: string }
+                              finding_id: { type: string }
+                              indirect: { type: boolean }
+                              more: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /suppressions/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/id" }
+    delete:
+      summary: Delete a suppression
+      operationId: deleteSuppression
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /sources:
+    get:
+      summary: State of the advisory sources
+      operationId: listSources
+      responses:
+        "200":
+          description: Sources
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sources: { type: array, items: { $ref: "#/components/schemas/Source" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /notifications/test:
+    post:
+      summary: Send a test notification to one or all channels
+      operationId: testNotification
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                channel: { type: string, description: "Channel name; empty means all channels." }
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { status: { const: sent } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "502":
+          description: Delivery failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  detail: { type: string }
+  /notifications:
+    get:
+      summary: Recent notification deliveries
+      operationId: listNotifications
+      responses:
+        "200":
+          description: Deliveries, newest first (at most 200)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /audit:
+    get:
+      summary: Audit log
+      operationId: listAudit
+      responses:
+        "200":
+          description: Entries, newest first (at most 500)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audit: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: API token with the `varde_` prefix, scope `read` or `write`.
+    session:
+      type: apiKey
+      in: cookie
+      name: varde_session
+      description: Browser session; state-changing requests need the X-CSRF-Token header.
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: Missing or invalid credentials
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Read-only token, or a session request without a valid CSRF token or from another origin
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: The request conflicts with the current state
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Counts:
+      type: object
+      properties:
+        P1: { type: integer }
+        P2: { type: integer }
+        P3: { type: integer }
+        unverified: { type: integer }
+    Status:
+      type: object
+      description: The same counts and state as the overview page.
+      properties:
+        status:
+          type: string
+          enum: [urgent, new, acknowledged, clear]
+          description: >-
+            urgent: a new P1 finding; new: new findings, none P1; acknowledged: open findings that
+            were all acknowledged or snoozed; clear: no open finding.
+        open:
+          description: Active findings (new plus acknowledged and snoozed).
+          allOf: [{ $ref: "#/components/schemas/Counts" }]
+        new:
+          description: Findings nobody acknowledged or snoozed yet.
+          allOf: [{ $ref: "#/components/schemas/Counts" }]
+        acknowledged:
+          description: Acknowledged or snoozed findings, still open.
+          allOf: [{ $ref: "#/components/schemas/Counts" }]
+        hosts:
+          type: object
+          description: Hosts merged from every source (ADR 0021).
+          properties:
+            hosts: { type: integer, description: Machines a platform knows }
+            inventoried: { type: integer, description: Hosts whose workloads Varde reads now }
+            stale: { type: integer }
+            paused: { type: integer, description: Hosts of a switched-off integration }
+            devices: { type: integer, description: Addresses only the network scan found }
+        last_inventory_sync:
+          type: string
+          format: date-time
+          description: Newest report of any source that reads workloads; absent before the first.
+        version: { type: string }
+    Host:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string }
+        source: { type: string }
+        last_contact: { type: string, format: date-time }
+    HostCounts:
+      type: object
+      properties:
+        hosts: { type: integer, description: Machines a platform knows }
+        inventoried: { type: integer, description: Hosts whose workloads Varde reads now }
+        stale: { type: integer }
+        paused: { type: integer, description: Hosts of a switched-off integration }
+        devices: { type: integer, description: Addresses only the network scan found }
+    Evidence:
+      type: object
+      properties:
+        source: { type: string, enum: [scan, proxmox, ssh, agent, local, manual] }
+        host_id: { type: string, description: Stored host record; absent for the scan }
+        integration_id: { type: string }
+        name: { type: string }
+        detail: { type: string }
+        addresses: { type: array, items: { type: string } }
+        last_seen: { type: string, format: date-time }
+        state: { type: string, enum: [active, stale, paused] }
+        reads_workloads: { type: boolean }
+    MergedHost:
+      type: object
+      properties:
+        id: { type: string, description: "Stable asset ID (a-...); the best source's host record ID until the asset refresh, at most a minute after the host first appears (ADR 0023)" }
+        name: { type: string }
+        kind: { type: string, enum: [vm, lxc, bare-metal, docker-host, appliance] }
+        os: { type: string }
+        addresses: { type: array, items: { type: string } }
+        evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
+        host_ids: { type: array, items: { type: string }, description: Stored host records merged here }
+        workloads: { type: integer }
+        state: { type: string, enum: [inventoried, stale, paused, seen] }
+        last_seen: { type: string, format: date-time }
+        self: { type: boolean, description: The machine Varde runs on }
+        macs: { type: array, items: { type: string }, description: MAC addresses reported by the sources }
+        machine_id: { type: string, description: /etc/machine-id when read over SSH }
+    Device:
+      type: object
+      properties:
+        address: { type: string }
+        hostname: { type: string }
+        kind: { type: string }
+        label: { type: string }
+        services: { type: array, items: { type: object, additionalProperties: true } }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        host_id: { type: string, description: Merged host the address belongs to; absent when only the scan knows it }
+    ScanRun:
+      type: object
+      properties:
+        trigger: { type: string, enum: [manual, schedule] }
+        networks: { type: string }
+        started: { type: string, format: date-time }
+        ended: { type: string, format: date-time }
+        addresses: { type: integer }
+        found: { type: integer }
+        intercepted: { type: array, items: { type: integer } }
+        error: { type: string }
+    Integration:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [proxmox, docker-ssh, ssh-inventory, proxmox-lxc, traefik, npm, fritzbox, opnsense] }
+        name: { type: string }
+        address: { type: string }
+        enabled: { type: boolean }
+        health: { type: string, enum: [ok, waiting, error, failing, off] }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        last_success: { type: string, format: date-time }
+        last_error: { type: string }
+        status: { type: object, additionalProperties: true, description: Last report of the platform (version, nodes, guests or containers) }
+    Workload:
+      type: object
+      description: >-
+        Inventory entry. Container, manual or other detail depends on kind. identification carries
+        trust (confirmed, reported, conflict), evidence (every observed version with its method) and
+        purl. A container may carry pulled_image_id (its tag points to a newer local image it does
+        not run) and changed_files (version evidence files changed inside it).
+      properties:
+        id: { type: string }
+        host_id: { type: string }
+        kind: { type: string }
+        name: { type: string }
+        identification: { type: object }
+      additionalProperties: true
+    ManualRequest:
+      type: object
+      additionalProperties: false
+      required: [name, app_id, version]
+      description: Exactly one of host_id and host_name is set.
+      properties:
+        host_id: { type: string }
+        host_name: { type: string }
+        name: { type: string }
+        app_id: { type: string, pattern: "^[a-z0-9][a-z0-9-]{0,63}$" }
+        version: { type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9.+_~-]{0,63}$" }
+        exposure: { type: string, enum: [public, lan, internal, unknown] }
+        note: { type: string }
+    Finding:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        path_class: { type: string, enum: [path-internet, path-lan, amplifier, noise, unclear] }
+        path_reason: { type: string }
+        workload_id: { type: string }
+        app_id: { type: string }
+        advisory_id: { type: string }
+        state: { type: string, enum: [open, acknowledged, snoozed, suppressed, resolved] }
+        match_state: { type: string, enum: [affected, unverified] }
+        priority: { type: string, enum: [P1, P2, P3] }
+        exposure: { type: string, enum: [public, lan, internal, unknown] }
+        fixed_in: { type: string }
+        detail: { type: object }
+        first_seen: { type: string, format: date-time }
+        last_changed: { type: string, format: date-time }
+    Suppression:
+      type: object
+      properties:
+        id: { type: string }
+        app_id: { type: string }
+        workload_id: { type: string }
+        advisory_id: { type: string }
+        reason: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    Source:
+      type: object
+      properties:
+        source: { type: string }
+        key: { type: string }
+        last_success: { type: string, format: date-time }
+        last_attempt: { type: string, format: date-time }
+        last_error: { type: string }
+        next_run: { type: string, format: date-time }
+    AuditEntry:
+      type: object
+      properties:
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        action: { type: string }
+        target: { type: string }
+        detail: { type: string }

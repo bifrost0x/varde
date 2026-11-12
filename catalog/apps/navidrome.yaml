@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+id: navidrome
+name: Navidrome
+homepage: https://www.navidrome.org
+tags: [music, media, streaming]
+images:
+  - match: deluan/navidrome
+  - match: ghcr.io/navidrome/navidrome
+oci_source:
+  - https://github.com/navidrome/navidrome
+version:
+  scheme: semver
+  probe:
+    http:
+      path: /rest/getOpenSubsonicExtensions?f=json
+      json_pointer: /subsonic-response/serverVersion
+      version_pattern: '^(?P<v>\d+\.\d+\.\d+) '
+      expect: {/subsonic-response/type: navidrome}
+advisories:
+  coverage: full
+  github_repos:
+    - navidrome/navidrome
+  osv_packages:
+    - {ecosystem: Go, name: github.com/navidrome/navidrome}
+  cpe:
+    - cpe:2.3:a:navidrome:navidrome
+  notes: develop and pr-* tags are development builds.
+exposure_hints:
+  default_ports: [4533]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09
