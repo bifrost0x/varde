@@ -39,22 +39,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0   # the release tags decide who owns "latest"
           persist-credentials: false
-      - name: version and tags
+      - name: version
         run: |
           set -euo pipefail
-          short="$(git rev-parse --short=12 HEAD)"
-          tags="${GHCR_IMAGE}:edge"
-          if [ -z "$(git tag --list 'v[0-9]*')" ]; then
-            tags="${tags},${GHCR_IMAGE}:latest"
-          fi
           {
             echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
-            echo "EDGE_VERSION=edge-${short}"
-            echo "EDGE_TAGS=${tags}"
+            echo "EDGE_VERSION=edge-$(git rev-parse --short=12 HEAD)"
           } >> "$GITHUB_ENV"
-          echo "tags: ${tags}" >> "$GITHUB_STEP_SUMMARY"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -68,7 +60,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.EDGE_TAGS }}
+          tags: ${{ env.GHCR_IMAGE }}:edge
           labels: |
             org.opencontainers.image.title=Varde
             org.opencontainers.image.licenses=Apache-2.0
@@ -88,4 +80,20 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           cosign sign --yes "${GHCR_IMAGE}@${DIGEST}"
-          echo "digest: ${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          echo "edge: ${GHCR_IMAGE}@${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+      - name: latest, until the first release
+        # Asked of the repository at the last moment, not of the checkout:
+        # a release tag pushed while this image was building must win. The
+        # release workflow publishes its own "latest" minutes after its tag
+        # exists, so a tag this step does not see yet is published after it.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          releases="$(git ls-remote --tags "https://github.com/${GITHUB_REPOSITORY}" 'v[0-9]*')"
+          if [ -n "${releases}" ]; then
+            echo "latest: left to the releases" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          docker buildx imagetools create --tag "${GHCR_IMAGE}:latest" "${GHCR_IMAGE}@${DIGEST}"
+          echo "latest: ${GHCR_IMAGE}@${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
