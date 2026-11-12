@@ -2,7 +2,7 @@
 
 // Package catgen generates catalog entries for the images of the
 // first-party index that no reviewed entry covers, inside the daily data
-// build (ADR 0039). Each entry is proved by machine checks (C1 to C5,
+// build (ADR 0039). Each entry is proved by machine checks (C1 to C6,
 // checks.go) against the live tags, the project's GitHub releases and NVD;
 // only an entry that passes every check ships, as origin "generated",
 // beneath the reviewed entries. A wrong entry is worse than none: a
@@ -26,6 +26,8 @@ import (
 
 	"github.com/bifrost0x/varde/internal/applists"
 	"github.com/bifrost0x/varde/internal/catalog"
+	"github.com/bifrost0x/varde/internal/eval"
+	"github.com/bifrost0x/varde/internal/identify"
 	"github.com/bifrost0x/varde/internal/store"
 )
 
@@ -60,6 +62,10 @@ type Generator struct {
 	// Deadline, when set, ends the build's network work: no project is
 	// started after it. What was checked by then is recorded and ships.
 	Deadline time.Time
+	// EvalCases are the container cases of the eval corpus (eval.Load);
+	// C6 compares an entry with the derived one on the cases of its
+	// images. None: that part of C6 holds.
+	EvalCases []eval.ContainerCase
 }
 
 // Report is the outcome of a build. Images name the candidates.
@@ -225,28 +231,53 @@ func (g *Generator) run(ctx context.Context, idx *applists.Table, reviewed *cata
 	}
 
 	p := planRun(open, rows, forced, now, g.budget())
-	work := append(append([]*group(nil), p.fresh...), p.due...)
+	// Due re-checks come first: their entries are aging or withheld, and
+	// one that a deadline keeps waiting expires as stale. Then the probes
+	// of the other shipped entries and the re-checks they call for, then
+	// the new candidates, which can wait a build.
+	check := func(grs []*group, prefetched map[string]fetched) (bool, error) {
+		for _, gr := range grs {
+			if g.past() {
+				l.stop(stopDeadline)
+				return false, nil
+			}
+			if err := g.checkAndRecord(ctx, gr, reviewed, rows, prefetched[gr.repo], now, &rep); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
+	}
+	more, err := check(p.due, nil)
+	if err != nil {
+		return rep, err
+	}
+	var changed []*group
 	prefetched := map[string]fetched{}
 	for _, gr := range p.probe {
-		if g.past() {
-			l.stop(stopDeadline)
+		if !more {
 			break
 		}
-		f, changed, err := g.probe(ctx, gr.repo)
+		if g.past() {
+			l.stop(stopDeadline)
+			more = false
+			break
+		}
+		f, ok, err := g.probe(ctx, gr.repo)
 		if err != nil {
 			return rep, err
 		}
-		if changed {
+		if ok {
 			prefetched[gr.repo] = f
-			work = append(work, gr)
+			changed = append(changed, gr)
 		}
 	}
-	for _, gr := range work {
-		if g.past() {
-			l.stop(stopDeadline)
-			break
+	if more {
+		if more, err = check(changed, prefetched); err != nil {
+			return rep, err
 		}
-		if err := g.checkAndRecord(ctx, gr, reviewed, rows, prefetched[gr.repo], now, &rep); err != nil {
+	}
+	if more {
+		if _, err = check(p.fresh, nil); err != nil {
 			return rep, err
 		}
 	}
@@ -328,13 +359,19 @@ func (g *Generator) checkAndRecord(ctx context.Context, gr *group, reviewed *cat
 		}
 		return nil
 	}
+	if err := g.record(ctx, gr, rows, o, now, rep); err != nil {
+		return err
+	}
+	// The ETag only after the outcome is stored: kept before, a store
+	// error in record would leave the project behind a "not modified"
+	// probe with part of its images recorded.
 	if o.etag != "" {
 		st := store.SourceState{Source: releasesSource, Key: gr.repo, ETag: o.etag, LastAttempt: now, LastSuccess: now}
 		if err := g.PutSourceState(ctx, st); err != nil {
 			return err
 		}
 	}
-	return g.record(ctx, gr, rows, o, now, rep)
+	return nil
 }
 
 // record stores the outcome of a group for each of its images.
@@ -418,7 +455,7 @@ type outcome struct {
 	failed           *failure
 }
 
-// checkGroup runs C1 to C5 on the entry for a project. A failed check is
+// checkGroup runs C1 to C6 on the entry for a project. A failed check is
 // an outcome; an error means a source did not answer.
 func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog.Catalog, f fetched, now time.Time) (o outcome, err error) {
 	verdict := func(err error) (outcome, error) {
@@ -473,10 +510,13 @@ func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog
 	if !ok {
 		return verdict(fail(CheckTags, "no template matches at least %d release tags and no floating tag of %s", minReleaseTags, strings.Join(images, ", ")))
 	}
+	newestDigest := make([]string, len(images))
 	for i, img := range images {
-		if err := g.checkStream(ctx, img, streams[i]); err != nil {
+		d, err := g.checkStream(ctx, img, streams[i])
+		if err != nil {
 			return verdict(err)
 		}
+		newestDigest[i] = d
 		fmt.Fprintf(h, "newest %s %s\n", img, streams[i].newest)
 	}
 	for _, s := range streams {
@@ -501,6 +541,23 @@ func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog
 	}
 	if app.Advisories.Coverage == catalog.CoverageFull {
 		return verdict(fail(CheckSchema, "a generated entry cannot claim full coverage"))
+	}
+
+	var newest []TagDigest
+	for i, img := range images {
+		known := map[string]string{streams[i].newest: newestDigest[i]}
+		tds, err := g.newestTags(ctx, app, img, tagLists[i], known)
+		if err != nil {
+			return verdict(err)
+		}
+		for _, td := range tds {
+			fmt.Fprintf(h, "digest %s %s %s\n", img, td.Tag, td.Digest)
+		}
+		newest = append(newest, tds...)
+	}
+	entry := catalog.Entry{Name: id + ".yaml", Data: string(data)}
+	if err := checkNoRegression(entry, derivedEntry(gr, id), cpe, newest, g.EvalCases); err != nil {
+		return verdict(err)
 	}
 	o.yaml = string(data)
 	return o, nil
@@ -565,7 +622,8 @@ type versionDoc struct {
 }
 
 type sourceDoc struct {
-	Tag string `yaml:"tag"`
+	Label string `yaml:"label,omitempty"`
+	Tag   string `yaml:"tag,omitempty"`
 }
 
 type advisoryDoc struct {
@@ -582,8 +640,12 @@ func entryYAML(id, repo string, images []string, tpl Template, cpe, date string)
 	checks := "C1 (schema, nothing a reviewed entry claims), C2 (first-party evidence for every image), C3 (tag rule from the fixed templates), C4 (newest tag on the newest release's line)"
 	doc := entryDoc{
 		ID: id, Name: name, Homepage: "https://github.com/" + repo,
-		OCISource:   []string{"https://github.com/" + repo},
-		Version:     versionDoc{Scheme: string(tpl.Scheme), Sources: []sourceDoc{{Tag: tpl.Pattern}}},
+		OCISource: []string{"https://github.com/" + repo},
+		// The image's version label first, as in the derived entry's
+		// chain (identify's default): the template only replaces the
+		// derived entry's tag pattern, so an image whose tag floats keeps
+		// the version its label states.
+		Version:     versionDoc{Scheme: string(tpl.Scheme), Sources: []sourceDoc{{Label: identify.LabelOCIVer}, {Tag: tpl.Pattern}}},
 		Advisories:  advisoryDoc{Coverage: catalog.CoveragePartial, GitHubRepos: []string{repo}},
 		Maintainers: []string{"generator"},
 		Verified:    date,
@@ -595,6 +657,7 @@ func entryYAML(id, repo string, images []string, tpl Template, cpe, date string)
 		doc.Advisories.CPE = []string{cpe}
 		checks += ", C5 (CPE in NVD, tied to the repository)"
 	}
+	checks += ", C6 (findings change only through the version and the checked CPE)"
 	doc.Advisories.Notes = "Generated by the package builder and checked by machine, not reviewed by a person. Passed " + checks + "."
 	var b bytes.Buffer
 	enc := yaml.NewEncoder(&b)

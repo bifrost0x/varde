@@ -301,6 +301,10 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 	if src := strings.TrimSpace(c.ImageLabels[LabelOCISource]); src != "" {
 		if app, ok := cat.ByOCISource(src); ok {
 			r := Result{AppID: app.ID, Confidence: Strong, Rule: LabelOCISource + " " + src}
+			if app.Origin == catalog.OriginGenerated {
+				labelOfGenerated(&r, app, src, labels, ref, refErr == nil, c)
+				return r
+			}
 			resolveContainerVersion(&r, app, labels, ref, refErr == nil, c)
 			return r
 		}
@@ -328,6 +332,25 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 		note = "unparsable image reference"
 	}
 	return Result{Confidence: None, Note: note}
+}
+
+// labelOfGenerated identifies an image that a generated entry knows only
+// through its source label, the way the derived entry the generated one
+// stands in for would (catalog.Derive, coverage.DeriveAppsWith): the
+// generator checked the entry's tag rule on the entry's own images, not on
+// this one, so the version comes from the derived chain (the image's
+// version label, then the default tag pattern); and the label confirms
+// the app only when the image is named like the project. An image that may
+// have inherited the label from its base image stays a report, as it would
+// with the derived entry, and does not alert.
+func labelOfGenerated(r *Result, app *catalog.App, src string, labels map[string]string, ref imageref.Ref, haveRef bool, c *inventory.Container) {
+	derived := *app
+	derived.Version = catalog.VersionSpec{Scheme: version.SemVer}
+	resolveContainerVersion(r, &derived, labels, ref, haveRef, c)
+	if _, tied := catalog.Derive(src, ref.Repository); !haveRef || !tied {
+		r.Derived = true
+		r.DerivedFrom = derivedFrom(nil)
+	}
 }
 
 // mergedLabels returns image labels overlaid with container labels. Docker

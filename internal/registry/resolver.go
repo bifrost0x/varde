@@ -25,10 +25,12 @@ type Store interface {
 }
 
 const (
-	// perRun bounds the images asked per run, tagLimit the HEAD requests
-	// per image: the newest matching tags are asked first.
-	perRun   = 10
-	tagLimit = 25
+	// perRun bounds the images asked per run.
+	perRun = 10
+	// TagLimit bounds the HEAD requests per image: the newest matching
+	// tags are asked first. The catalog generator reproduces the
+	// resolution with it.
+	TagLimit = 25
 	// retryAfter is how long a miss is kept before the image is asked
 	// again (new releases appear under new tags).
 	retryAfter = 24 * time.Hour
@@ -111,6 +113,30 @@ func Jobs(cat *catalog.Catalog, ws []inventory.Workload, ids map[string]identify
 	return out
 }
 
+// TagOrder is how the resolver reads the tags of an image of app: keep
+// accepts the tags the app's tag rule reads a version from, less orders
+// them newest first (tags whose version does not parse by name). The
+// catalog generator orders tags with it to know which tag the resolver
+// would give a digest (check C6).
+func TagOrder(app *catalog.App, repository string) (keep func(tag string) bool, less func(a, b string) bool) {
+	keep = func(tag string) bool {
+		_, ok := identify.TagVersion(app, repository, tag)
+		return ok
+	}
+	less = func(a, b string) bool {
+		va, _ := identify.TagVersion(app, repository, a)
+		vb, _ := identify.TagVersion(app, repository, b)
+		x, errA := version.Parse(app.Version.Scheme, va)
+		y, errB := version.Parse(app.Version.Scheme, vb)
+		if errA != nil || errB != nil {
+			return a > b
+		}
+		c, ok := x.Compare(y)
+		return ok && c > 0
+	}
+	return keep, less
+}
+
 // RepoDigest returns the registry digest of the image for the repository,
 // from the container's RepoDigests ("repo@sha256:...").
 func RepoDigest(c *inventory.Container, repository string) string {
@@ -150,23 +176,8 @@ func (r *Resolver) Once(ctx context.Context) (int, error) {
 		if err := ctx.Err(); err != nil {
 			return found, err
 		}
-		app := j.App
-		keep := func(tag string) bool {
-			_, ok := identify.TagVersion(app, j.Repository, tag)
-			return ok
-		}
-		less := func(a, b string) bool {
-			va, _ := identify.TagVersion(app, j.Repository, a)
-			vb, _ := identify.TagVersion(app, j.Repository, b)
-			x, errA := version.Parse(app.Version.Scheme, va)
-			y, errB := version.Parse(app.Version.Scheme, vb)
-			if errA != nil || errB != nil {
-				return a > b
-			}
-			c, ok := x.Compare(y)
-			return ok && c > 0
-		}
-		tag, rerr := r.Client.Resolve(ctx, j.Repository, j.Digest, keep, less, tagLimit)
+		keep, less := TagOrder(j.App, j.Repository)
+		tag, rerr := r.Client.Resolve(ctx, j.Repository, j.Digest, keep, less, TagLimit)
 		rec := store.ImageTag{Repository: j.Repository, Digest: j.Digest, Tag: tag, Checked: now}
 		if rerr != nil {
 			// One registry failing must not stop the others; the miss is

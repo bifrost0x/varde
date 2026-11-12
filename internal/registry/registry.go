@@ -395,18 +395,21 @@ func (c *Client) Resolve(ctx context.Context, repository, digest string, keep fu
 	if err != nil {
 		return "", err
 	}
+	return c.Match(ctx, repository, digest, Rank(tags, keep, less), limit)
+}
+
+// Rank returns the tags keep accepts, ordered with less (best first); tags
+// less does not order keep the order of the list. These are the candidates
+// Resolve asks in turn.
+func Rank(tags []string, keep func(tag string) bool, less func(a, b string) bool) []string {
 	var cands []string
 	for _, t := range tags {
 		if keep(t) {
 			cands = append(cands, t)
 		}
 	}
-	sortTags(cands, less)
-	return c.Match(ctx, repository, digest, cands, limit)
-}
-
-func sortTags(tags []string, less func(a, b string) bool) {
-	sort.SliceStable(tags, func(i, j int) bool { return less(tags[i], tags[j]) })
+	sort.SliceStable(cands, func(i, j int) bool { return less(cands[i], cands[j]) })
+	return cands
 }
 
 // realmTokenHosts are token services that live on another domain than their

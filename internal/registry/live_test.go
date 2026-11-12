@@ -15,10 +15,8 @@ import (
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/coverage"
 	"github.com/bifrost0x/varde/internal/httpx"
-	"github.com/bifrost0x/varde/internal/identify"
 	"github.com/bifrost0x/varde/internal/imageref"
 	"github.com/bifrost0x/varde/internal/inventory"
-	"github.com/bifrost0x/varde/internal/version"
 )
 
 // TestLiveResolve asks the real registries for the corpus images whose
@@ -86,19 +84,8 @@ func TestLiveResolve(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		keep := func(tag string) bool { _, ok := identify.TagVersion(app, ref.Repository, tag); return ok }
-		less := func(a, b string) bool {
-			va, _ := identify.TagVersion(app, ref.Repository, a)
-			vb, _ := identify.TagVersion(app, ref.Repository, b)
-			x, e1 := version.Parse(app.Version.Scheme, va)
-			y, e2 := version.Parse(app.Version.Scheme, vb)
-			if e1 != nil || e2 != nil {
-				return a > b
-			}
-			c, ok := x.Compare(y)
-			return ok && c > 0
-		}
-		tag, err := c.Resolve(t.Context(), ref.Repository, cs.Digest, keep, less, tagLimit)
+		keep, less := TagOrder(app, ref.Repository)
+		tag, err := c.Resolve(t.Context(), ref.Repository, cs.Digest, keep, less, TagLimit)
 		switch {
 		case err != nil:
 			t.Logf("%s: %v", cs.Image, err)

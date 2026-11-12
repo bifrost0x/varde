@@ -11,7 +11,12 @@ import (
 
 	"github.com/bifrost0x/varde/internal/applists"
 	"github.com/bifrost0x/varde/internal/catalog"
+	"github.com/bifrost0x/varde/internal/coverage"
+	"github.com/bifrost0x/varde/internal/eval"
+	"github.com/bifrost0x/varde/internal/identify"
 	"github.com/bifrost0x/varde/internal/imageref"
+	"github.com/bifrost0x/varde/internal/inventory"
+	"github.com/bifrost0x/varde/internal/registry"
 	"github.com/bifrost0x/varde/internal/version"
 )
 
@@ -33,6 +38,10 @@ const (
 	// CheckCPE (C5): the CPE exists in NVD and NVD ties it to the
 	// repository.
 	CheckCPE = "C5"
+	// CheckNoRegression (C6): the entry changes what an installation finds
+	// only through the version, which agrees with the registry resolution,
+	// and the CPE that passed C5; no eval case gets worse.
+	CheckNoRegression = "C6"
 	// CheckStale marks a shipped entry that no check could confirm for
 	// twice RecheckAfter (its sources kept failing): it stops shipping.
 	CheckStale = "stale"
@@ -339,7 +348,7 @@ func (g *Generator) checkReviewedTags(ctx context.Context, app *catalog.App, rep
 			continue
 		}
 		s := evaluate(rules, scheme, tags, releases)
-		if err := g.checkStream(ctx, image, s); err != nil {
+		if _, err := g.checkStream(ctx, image, s); err != nil {
 			var f *failure
 			if !errors.As(err, &f) {
 				out = append(out, Problem{Check: CheckUnchecked, Detail: app.ID + ": " + err.Error()})
@@ -386,27 +395,27 @@ func (g *Generator) tags(ctx context.Context, image string) ([]string, error) {
 }
 
 // checkStream is C3 on one image's stream: the tag part, then the digest
-// of the newest tag.
-func (g *Generator) checkStream(ctx context.Context, image string, s stream) error {
+// of the newest tag, which it returns.
+func (g *Generator) checkStream(ctx context.Context, image string, s stream) (string, error) {
 	switch {
 	case len(s.floating) > 0:
-		return fail(CheckTags, "the tag rule matches floating tags of %s (%s)", image, strings.Join(first(s.floating, 5), ", "))
+		return "", fail(CheckTags, "the tag rule matches floating tags of %s (%s)", image, strings.Join(first(s.floating, 5), ", "))
 	case s.released < minReleaseTags:
-		return fail(CheckTags, "the tag rule matches %d GitHub release versions in the tags of %s, fewer than %d", s.released, image, minReleaseTags)
+		return "", fail(CheckTags, "the tag rule matches %d GitHub release versions in the tags of %s, fewer than %d", s.released, image, minReleaseTags)
 	case s.newest == "":
-		return fail(CheckTags, "no tag of %s matched by the rule reads as a version", image)
+		return "", fail(CheckTags, "no tag of %s matched by the rule reads as a version", image)
 	}
 	d, err := g.Registry.Digest(ctx, image, s.newest)
 	if err != nil {
 		if notFound(err) {
-			return fail(CheckTags, "newest tag %s:%s does not resolve", image, s.newest)
+			return "", fail(CheckTags, "newest tag %s:%s does not resolve", image, s.newest)
 		}
-		return err
+		return "", err
 	}
 	if !strings.HasPrefix(d, "sha256:") {
-		return fail(CheckTags, "newest tag %s:%s resolves to no digest", image, s.newest)
+		return "", fail(CheckTags, "newest tag %s:%s resolves to no digest", image, s.newest)
 	}
-	return nil
+	return d, nil
 }
 
 func first(s []string, n int) []string {
@@ -428,4 +437,268 @@ func reviewedRepos(app *catalog.App) []string {
 		}
 	}
 	return nil
+}
+
+// maxRegressionTags is how many of an image's newest tags C6 compares
+// with the registry resolution.
+const maxRegressionTags = 5
+
+// TagDigest is one of the newest tags of an image that a generated rule
+// reads, and the digest the registry gives for it. C6 takes them per
+// image in the order the runtime resolver asks the tags (registry.Rank
+// with registry.TagOrder), best first, so the first one with a digest is
+// the tag the resolver gives that digest.
+type TagDigest struct{ Image, Tag, Digest string }
+
+// newestTags reads the digests of the newest tags of an image in the
+// resolver's order for the generated entry gen. known holds digests read
+// already (the newest tag's, from C3). A tag that does not resolve is
+// skipped, as the resolver skips it.
+func (g *Generator) newestTags(ctx context.Context, gen *catalog.App, image string, tags []string, known map[string]string) ([]TagDigest, error) {
+	keep, less := registry.TagOrder(gen, image)
+	cands := registry.Rank(tags, keep, less)
+	var out []TagDigest
+	for i, tag := range cands {
+		if i >= maxRegressionTags || i >= registry.TagLimit {
+			break
+		}
+		d, ok := known[tag]
+		if !ok {
+			var err error
+			if d, err = g.Registry.Digest(ctx, image, tag); err != nil {
+				if notFound(err) {
+					continue
+				}
+				return nil, err
+			}
+		}
+		out = append(out, TagDigest{Image: image, Tag: tag, Digest: d})
+	}
+	return out, nil
+}
+
+// derivedEntry is the entry an installation derives for the images of a
+// group from the index, without the generated one: what C6 compares with.
+// Nil when the installation would derive none.
+func derivedEntry(gr *group, id string) *catalog.App {
+	empty, err := catalog.Build(nil, catalog.OriginBuiltin, nil)
+	if err != nil {
+		return nil
+	}
+	rows := map[string]applists.Entry{}
+	ws := make([]inventory.Workload, 0, len(gr.entries))
+	for _, e := range gr.entries {
+		rows[e.Image] = e
+		ws = append(ws, inventory.Workload{ID: e.Image, Kind: inventory.KindContainer, Container: &inventory.Container{ImageRef: e.Image}})
+	}
+	index := func(image string) (string, []string, bool, bool) {
+		e, ok := rows[image]
+		return e.Repo, e.Lists, e.Confirmed(), ok
+	}
+	for _, a := range coverage.DeriveAppsWith(empty, coverage.Lookups{Index: index}, ws) {
+		if a.ID == id {
+			return a
+		}
+	}
+	return nil
+}
+
+// checkNoRegression is C6. A generated entry stands in for the entry an
+// installation derives (derived) and must not be less correct than it.
+// It may change what an installation finds only through:
+//
+//   - the version: for each of the newest tags, the version the entry's
+//     rule reads from the tag equals the version the runtime resolver
+//     gives the tag's digest (registry.TagOrder, identify.TagRelease);
+//     otherwise every container running that tag would see two versions;
+//   - one CPE, the one that passed C5 (cpe; empty for none).
+//
+// Everything else that decides findings (images, source, repositories,
+// packages) is the derived entry's, and every image is one the derived
+// entry confirms. Where eval cases name an image of the entry (by image
+// or source label), the entry scores no fewer correct and no more wrong
+// results on them than the derived entry.
+func checkNoRegression(entry catalog.Entry, derived *catalog.App, cpe string, tags []TagDigest, cases []eval.ContainerCase) error {
+	genCat, err := catalog.BuildLayered(nil, catalog.OriginBuiltin, []catalog.Entry{entry}, nil)
+	if err != nil {
+		return fail(CheckNoRegression, "%v", err)
+	}
+	if d := genCat.DroppedGenerated(); len(d) > 0 {
+		return fail(CheckNoRegression, "%s", strings.Join(d, "; "))
+	}
+	apps := genCat.Apps()
+	if len(apps) != 1 {
+		return fail(CheckNoRegression, "%s holds %d entries", entry.Name, len(apps))
+	}
+	gen := apps[0]
+	if derived == nil {
+		return fail(CheckNoRegression, "an installation derives no entry for %s to compare with", gen.ID)
+	}
+	if err := sameSources(gen, derived, cpe); err != nil {
+		return err
+	}
+	if err := resolvedVersions(gen, tags); err != nil {
+		return err
+	}
+	return noWorseEval(genCat, gen, derived, cases)
+}
+
+// sameSources is the part of C6 that compares what the entry matches and
+// where it reads advisories with the derived entry.
+func sameSources(gen, derived *catalog.App, cpe string) error {
+	if gen.ID != derived.ID {
+		return fail(CheckNoRegression, "id %s is not the derived id %s", gen.ID, derived.ID)
+	}
+	derivedImages := map[string]bool{}
+	for _, img := range derived.Images {
+		derivedImages[img.Match] = true
+	}
+	for _, img := range gen.Images {
+		d := derived.DerivationFor(img.Match)
+		switch {
+		case !derivedImages[img.Match]:
+			return fail(CheckNoRegression, "image %s is not matched by the derived entry", img.Match)
+		case d == nil || !d.Confirmed:
+			return fail(CheckNoRegression, "the derived entry does not confirm image %s; findings for it would alert", img.Match)
+		case img.Flavor != "":
+			return fail(CheckNoRegression, "image %s has flavor %s", img.Match, img.Flavor)
+		}
+	}
+	if len(gen.Images) != len(derived.Images) {
+		return fail(CheckNoRegression, "%d images, the derived entry %d", len(gen.Images), len(derived.Images))
+	}
+	if !sameFold(gen.OCISource, derived.OCISource) {
+		return fail(CheckNoRegression, "source %v is not the derived entry's %v", gen.OCISource, derived.OCISource)
+	}
+	if len(gen.Aliases)+len(gen.Packages)+len(gen.Services) > 0 || gen.EOL != "" {
+		return fail(CheckNoRegression, "aliases, packages, services or an EOL product the derived entry does not have")
+	}
+	ga, da := gen.Advisories, derived.Advisories
+	if !sameFold(ga.GitHubRepos, da.GitHubRepos) {
+		return fail(CheckNoRegression, "advisories from %v, the derived entry from %v", ga.GitHubRepos, da.GitHubRepos)
+	}
+	if len(ga.Packages) != len(da.Packages) || len(ga.OSVPackages) != len(da.OSVPackages) {
+		return fail(CheckNoRegression, "advisory packages the derived entry does not have")
+	}
+	var extra []string
+	for _, c := range ga.CPE {
+		if !containsFold(da.CPE, c) {
+			extra = append(extra, c)
+		}
+	}
+	switch {
+	case len(extra) > 1:
+		return fail(CheckNoRegression, "%d CPEs beyond the derived entry's (%s)", len(extra), strings.Join(extra, ", "))
+	case len(extra) == 1 && (cpe == "" || !strings.EqualFold(extra[0], cpe)):
+		return fail(CheckNoRegression, "CPE %s did not pass C5", extra[0])
+	}
+	for _, c := range da.CPE {
+		if !containsFold(ga.CPE, c) {
+			return fail(CheckNoRegression, "CPE %s of the derived entry is missing", c)
+		}
+	}
+	return nil
+}
+
+// resolvedVersions is the version part of C6: per image, the tag the
+// resolver gives a digest is the first of the newest tags with it.
+func resolvedVersions(gen *catalog.App, tags []TagDigest) error {
+	first := map[string]string{} // image + digest -> tag
+	for _, td := range tags {
+		key := td.Image + "@" + td.Digest
+		resolved, seen := first[key]
+		if !seen {
+			first[key], resolved = td.Tag, td.Tag
+		}
+		fromTag, ok := identify.TagVersion(gen, td.Image, td.Tag)
+		if !ok {
+			return fail(CheckNoRegression, "the rule reads no version from %s:%s", td.Image, td.Tag)
+		}
+		fromRegistry, ok := identify.TagRelease(gen, td.Image, resolved)
+		if !ok || fromRegistry != fromTag {
+			return fail(CheckNoRegression, "%s:%s reads %s, but the registry resolution of its digest gives tag %s (%s)", td.Image, td.Tag, fromTag, resolved, fromRegistry)
+		}
+	}
+	return nil
+}
+
+// noWorseEval is the eval part of C6, on the cases that name an image of
+// the entry or carry its source label. Without such a case it holds.
+func noWorseEval(genCat *catalog.Catalog, gen, derived *catalog.App, cases []eval.ContainerCase) error {
+	images := map[string]bool{}
+	for _, img := range gen.Images {
+		images[img.Match] = true
+	}
+	var mine []eval.ContainerCase
+	for _, cs := range cases {
+		ref, err := imageref.Parse(cs.Image)
+		_, labelled := genCat.ByOCISource(strings.TrimSpace(cs.ImageLabels[identify.LabelOCISource]))
+		if (err == nil && images[ref.Repository]) || labelled || cs.Truth.App == gen.ID {
+			mine = append(mine, cs)
+		}
+	}
+	if len(mine) == 0 {
+		return nil
+	}
+	empty, err := catalog.Build(nil, catalog.OriginBuiltin, nil)
+	if err != nil {
+		return err
+	}
+	derivedCat, err := empty.WithDerived([]*catalog.App{derived})
+	if err != nil {
+		return err
+	}
+	corpus := &eval.Corpus{Containers: mine}
+	withGen, err := eval.Run(corpus, genCat)
+	if err != nil {
+		return err
+	}
+	withDerived, err := eval.Run(corpus, derivedCat)
+	if err != nil {
+		return err
+	}
+	g, d := withGen.Counts, withDerived.Counts
+	good := func(c eval.Counts) int { return c.AppTP + c.VersionCorrect }
+	bad := func(c eval.Counts) int { return c.AppFP + c.VersionWrong + c.TrustWrong }
+	if good(g) < good(d) || bad(g) > bad(d) {
+		return fail(CheckNoRegression, "eval cases %s: %d right and %d wrong with the entry, %d and %d with the derived one",
+			caseNames(mine), good(g), bad(g), good(d), bad(d))
+	}
+	return nil
+}
+
+func caseNames(cases []eval.ContainerCase) string {
+	names := make([]string, 0, len(cases))
+	for _, c := range cases {
+		names = append(names, c.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+func containsFold(list []string, s string) bool {
+	for _, x := range list {
+		if strings.EqualFold(x, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameFold reports two lists with the same elements, ignoring case and
+// order.
+func sameFold(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, x := range a {
+		if !containsFold(b, x) {
+			return false
+		}
+	}
+	for _, x := range b {
+		if !containsFold(a, x) {
+			return false
+		}
+	}
+	return true
 }

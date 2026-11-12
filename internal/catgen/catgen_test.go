@@ -4,6 +4,7 @@ package catgen
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/bifrost0x/varde/internal/applists"
 	"github.com/bifrost0x/varde/internal/catalog"
+	"github.com/bifrost0x/varde/internal/eval"
 	"github.com/bifrost0x/varde/internal/httpx"
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/version"
@@ -51,10 +53,14 @@ func (f *fakeRegistry) Digest(_ context.Context, repository, tag string) (string
 type fakeGitHub struct {
 	releases map[string][]Release
 	calls    []string
+	onCall   func(etag string)
 }
 
 func (f *fakeGitHub) Releases(_ context.Context, repo, etag string) ([]Release, string, bool, error) {
 	f.calls = append(f.calls, repo+" "+etag)
+	if f.onCall != nil {
+		f.onCall(etag)
+	}
 	rels, ok := f.releases[repo]
 	if !ok {
 		return nil, "", false, fmt.Errorf("releases of %s: %w", repo, ErrNotFound)
@@ -569,11 +575,13 @@ func TestCoverageNeverFull(t *testing.T) {
 	if !strings.Contains(a.Advisories.Notes, "Generated") || !strings.Contains(a.Advisories.Notes, "C1") {
 		t.Errorf("notes %q", a.Advisories.Notes)
 	}
-	if len(a.Version.Sources) != 1 || a.Version.Sources[0].Tag != Templates()[0].Pattern {
-		t.Errorf("tag rule %+v", a.Version.Sources)
+	// The derived entry's chain with the template for its tag pattern:
+	// the image's version label, then the tag rule.
+	if len(a.Version.Sources) != 2 || a.Version.Sources[0].Label != "org.opencontainers.image.version" || a.Version.Sources[1].Tag != Templates()[0].Pattern {
+		t.Fatalf("tag rule %+v", a.Version.Sources)
 	}
 	// The rule extracts the version of the newest release tag.
-	re := a.Version.Sources[0].TagRegexp()
+	re := a.Version.Sources[1].TagRegexp()
 	if m := re.FindStringSubmatch("v1.2.0"); m == nil || m[re.SubexpIndex("v")] != "1.2.0" {
 		t.Errorf("rule does not read v1.2.0")
 	}
@@ -723,5 +731,262 @@ func TestClaimsCheckedEveryBuild(t *testing.T) {
 	e.app("ghcr.io/acme/weak", "acme/weak", "ghcr,readme")
 	if r = e.run(t, nil); len(r.Shipped) != 2 {
 		t.Fatalf("report %+v", r)
+	}
+}
+
+// widgetEntry is the generated entry of acme/widget on ghcr.io as Run
+// writes it, with a CPE when cpe is set.
+func widgetEntry(t *testing.T, cpe string) catalog.Entry {
+	t.Helper()
+	data, err := entryYAML("gh-acme-widget", "acme/widget", []string{"ghcr.io/acme/widget"}, Templates()[0], cpe, "2026-11-12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return catalog.Entry{Name: "gh-acme-widget.yaml", Data: string(data)}
+}
+
+// widgetDerived is the entry an installation derives for the image from
+// the index.
+func widgetDerived(t *testing.T) *catalog.App {
+	t.Helper()
+	d, ok := catalog.DeriveFor("github.com/acme/widget", "ghcr.io/acme/widget", catalog.Derivation{Basis: catalog.BasisIndex, Evidence: []string{"ghcr", "readme"}, Confirmed: true})
+	if !ok {
+		t.Fatal("not derived")
+	}
+	return d
+}
+
+func failedCheck(err error) string {
+	var f *failure
+	if errors.As(err, &f) {
+		return f.check
+	}
+	return ""
+}
+
+func TestC6VersionMismatchFails(t *testing.T) {
+	// v1.2.1 re-tags the image of v1.2.0. A container running v1.2.0 reads
+	// 1.2.0 from its tag, while the resolver gives its digest the newest
+	// tag, v1.2.1: the two would disagree on every such container.
+	tags := []TagDigest{
+		{Image: "ghcr.io/acme/widget", Tag: "v1.2.1", Digest: "sha256:a"},
+		{Image: "ghcr.io/acme/widget", Tag: "v1.2.0", Digest: "sha256:a"},
+		{Image: "ghcr.io/acme/widget", Tag: "v1.1.0", Digest: "sha256:b"},
+	}
+	if err := checkNoRegression(widgetEntry(t, ""), widgetDerived(t), "", tags, nil); failedCheck(err) != CheckNoRegression {
+		t.Fatalf("got %v", err)
+	}
+	if err := checkNoRegression(widgetEntry(t, ""), widgetDerived(t), "", []TagDigest{tags[0], tags[2]}, nil); err != nil {
+		t.Fatalf("distinct digests: %v", err)
+	}
+
+	// In a run: the shared digest is found among the newest tags.
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	img := "ghcr.io/acme/widget"
+	e.reg.tags[img] = append(e.reg.tags[img], "v1.2.1")
+	e.reg.digests[img+":v1.2.1"] = e.reg.digests[img+":v1.2.0"]
+	r := e.run(t, nil)
+	if len(r.Shipped) != 0 || r.Failed[img] != CheckNoRegression || !strings.Contains(r.Reasons[img], "v1.2.1") {
+		t.Fatalf("report %+v", r)
+	}
+	// Once v1.2.1 is its own image, the entry ships.
+	e.reg.digests[img+":v1.2.1"] = "sha256:" + strings.Repeat("c", 64)
+	e.now = e.now.Add(31 * 24 * time.Hour)
+	if r := e.run(t, nil); len(r.Shipped) != 1 {
+		t.Fatalf("report %+v", r)
+	}
+}
+
+func TestC6ExtraSourceFails(t *testing.T) {
+	cpe := "cpe:2.3:a:acme:widget"
+	plain, withCPE := widgetEntry(t, ""), widgetEntry(t, cpe)
+	edit := func(e catalog.Entry, old, repl string) catalog.Entry {
+		if !strings.Contains(e.Data, old) {
+			t.Fatalf("%q not in\n%s", old, e.Data)
+		}
+		e.Data = strings.Replace(e.Data, old, repl, 1)
+		return e
+	}
+	for _, c := range []struct {
+		name  string
+		entry catalog.Entry
+		cpe   string
+		fails bool
+	}{
+		{"as derived", plain, "", false},
+		{"the checked CPE", withCPE, cpe, false},
+		{"a CPE that did not pass C5", withCPE, "", true},
+		{"another CPE than the checked one", withCPE, "cpe:2.3:a:acme:widget_server", true},
+		{"two CPEs", edit(withCPE, "cpe: ['cpe:2.3:a:acme:widget']", "cpe: ['cpe:2.3:a:acme:widget', 'cpe:2.3:a:acme:gadget']"), cpe, true},
+		{"another repository", edit(plain, "github_repos: [acme/widget]", "github_repos: [acme/widget, acme/gadget]"), "", true},
+		{"an OSV package", edit(plain, "  github_repos:", "  osv_packages: [{ecosystem: npm, name: widget}]\n  github_repos:"), "", true},
+		{"a package matcher", edit(plain, "oci_source:", "packages: [{manager: dpkg, name: widget, versioning: upstream}]\noci_source:"), "", true},
+		{"an image the derived entry lacks", edit(plain, "  - match: ghcr.io/acme/widget\n", "  - match: ghcr.io/acme/widget\n  - match: docker.io/acme/widget\n"), "", true},
+		{"another source", edit(plain, "  - https://github.com/acme/widget\n", "  - https://github.com/acme/widget-base\n"), "", true},
+	} {
+		err := checkNoRegression(c.entry, widgetDerived(t), c.cpe, nil, nil)
+		if got := failedCheck(err) == CheckNoRegression; got != c.fails || (!c.fails && err != nil) {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+	// An image the derived entry has but does not confirm would alert
+	// through the generated one.
+	weak, _ := catalog.DeriveFor("github.com/acme/widget", "ghcr.io/acme/widget", catalog.Derivation{Basis: catalog.BasisIndex, Evidence: []string{"readme"}})
+	if err := checkNoRegression(plain, weak, "", nil, nil); failedCheck(err) != CheckNoRegression {
+		t.Errorf("unconfirmed derived image: %v", err)
+	}
+	if err := checkNoRegression(plain, nil, "", nil, nil); failedCheck(err) != CheckNoRegression {
+		t.Errorf("no derived entry: %v", err)
+	}
+}
+
+// widgetCase is an eval case of acme/widget's image.
+func widgetCase(name, ref, version string) eval.ContainerCase {
+	return eval.ContainerCase{Name: name, Image: ref, Truth: eval.Truth{App: "gh-acme-widget", Version: version, Basis: "tag"}}
+}
+
+func TestC6EvalWorseFails(t *testing.T) {
+	// The derived entry's default pattern reads a four-part version; the
+	// generated rule reads none from it.
+	worse := widgetCase("four parts", "ghcr.io/acme/widget:1.2.0.7", "1.2.0.7")
+	if err := checkNoRegression(widgetEntry(t, ""), widgetDerived(t), "", nil, []eval.ContainerCase{worse}); failedCheck(err) != CheckNoRegression {
+		t.Fatalf("got %v", err)
+	}
+	// A variant tag: the derived entry reads "1.2.0-alpine", the generated
+	// rule the release. Better is no regression, and neither is a case
+	// of another image.
+	better := widgetCase("variant", "ghcr.io/acme/widget:v1.2.0-alpine", "1.2.0")
+	other := eval.ContainerCase{Name: "other", Image: "ghcr.io/acme/gadget:1.2.0.7", Truth: eval.Truth{App: "gh-acme-gadget", Version: "1.2.0.7"}}
+	if err := checkNoRegression(widgetEntry(t, ""), widgetDerived(t), "", nil, []eval.ContainerCase{better, other}); err != nil {
+		t.Fatalf("better: %v", err)
+	}
+	// An image with the project's source label only counts too.
+	labelled := worse
+	labelled.Image = "docker.io/acme/widget-worker:1.2.0.7"
+	labelled.ImageLabels = map[string]string{"org.opencontainers.image.source": "https://github.com/acme/widget"}
+	if err := checkNoRegression(widgetEntry(t, ""), widgetDerived(t), "", nil, []eval.ContainerCase{labelled}); err != nil {
+		t.Fatalf("label-only image read as derived: %v", err)
+	}
+
+	// In a run, with the corpus cases the builder loads.
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	e.g.EvalCases = []eval.ContainerCase{worse}
+	if r := e.run(t, nil); len(r.Shipped) != 0 || r.Failed["ghcr.io/acme/widget"] != CheckNoRegression {
+		t.Fatalf("report %+v", r)
+	}
+}
+
+func TestC6PassesWithCPE(t *testing.T) {
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	img := "ghcr.io/acme/widget"
+	// Every tag resolves, two of them to one image under one version.
+	e.reg.tags[img] = append(e.reg.tags[img], "v1.2.0-alpine")
+	e.reg.digests[img+":v1.1.0"] = "sha256:" + strings.Repeat("b", 64)
+	e.reg.digests[img+":v1.0.0"] = "sha256:" + strings.Repeat("c", 64)
+	e.reg.digests[img+":v1.2.0-alpine"] = e.reg.digests[img+":v1.2.0"]
+	widget := CPEProduct{Name: "cpe:2.3:a:acme:widget:1.0.0:*:*:*:*:*:*:*", Refs: []string{"https://github.com/acme/widget"}}
+	e.nvd.search["widget"] = []CPEProduct{widget}
+	e.nvd.byCPE["cpe:2.3:a:acme:widget"] = []CPEProduct{widget}
+	e.g.EvalCases = []eval.ContainerCase{
+		widgetCase("tag", img+":v1.1.0", "1.1.0"),
+		widgetCase("variant", img+":v1.2.0-alpine", "1.2.0"),
+		{Name: "floating", Image: img + ":latest", RegistryTag: "v1.2.0", Truth: eval.Truth{App: "gh-acme-widget", Version: "1.2.0", Basis: "tag"}},
+	}
+	r := e.run(t, nil)
+	apps := parseShipped(t, r)
+	if len(apps) != 1 || len(r.Failed) != 0 || len(apps[0].Advisories.CPE) != 1 || apps[0].Advisories.CPE[0] != "cpe:2.3:a:acme:widget" {
+		t.Fatalf("report %+v", r)
+	}
+	if !strings.Contains(r.Shipped[0].Data, "C6") {
+		t.Errorf("notes do not name C6:\n%s", r.Shipped[0].Data)
+	}
+	// The newest tags were asked once each, the rule's order kept.
+	var heads []string
+	for _, c := range e.reg.calls {
+		if strings.HasPrefix(c, "digest ") {
+			heads = append(heads, strings.TrimPrefix(c, "digest "+img+":"))
+		}
+	}
+	if strings.Join(heads, ",") != "v1.2.0,v1.2.0-alpine,v1.1.0,v1.0.0" {
+		t.Errorf("digests asked: %v", heads)
+	}
+}
+
+// failingStore fails UpsertCandidate after n successful calls.
+type failingStore struct {
+	*store.Store
+	n int
+}
+
+func (f *failingStore) UpsertCandidate(ctx context.Context, c store.Candidate) error {
+	if f.n == 0 {
+		return errors.New("disk full")
+	}
+	f.n--
+	return f.Store.UpsertCandidate(ctx, c)
+}
+
+func TestReleaseETagAfterRecord(t *testing.T) {
+	// The store fails while the outcome of a two-image project is
+	// recorded. Its release ETag must not be kept: the next build's probe
+	// would answer "not modified" and the project would wait for
+	// RecheckAfter with one image recorded.
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	e.app("docker.io/acme/widget", "acme/widget", "hub,readme")
+	e.hub.pulls["acme/widget"] = 5
+	// Two candidate rows, then one image of the outcome.
+	e.g.Store = &failingStore{Store: e.st, n: 3}
+	if _, err := e.g.Run(t.Context(), e.table(t), reviewedCatalog(t)); err == nil {
+		t.Fatal("no store error")
+	}
+	st, err := e.st.SourceState(t.Context(), releasesSource, "acme/widget")
+	if err != nil || st.ETag != "" {
+		t.Fatalf("etag %q kept after a failed record: %v", st.ETag, err)
+	}
+	e.g.Store = e.st
+	if r := e.run(t, nil); len(r.Shipped) != 1 {
+		t.Fatalf("report %+v", r)
+	}
+	if st, _ := e.st.SourceState(t.Context(), releasesSource, "acme/widget"); st.ETag == "" {
+		t.Error("etag not kept after the record")
+	}
+}
+
+func TestDueChecksBeforeProbes(t *testing.T) {
+	e := newEnv(t)
+	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
+	e.run(t, nil)
+	e.now = day0.Add(20 * 24 * time.Hour)
+	e.app("ghcr.io/acme/gizmo", "acme/gizmo", "ghcr,readme")
+	e.app("ghcr.io/acme/gadget", "acme/gadget", "ghcr,readme")
+	if r := e.run(t, nil); len(r.Shipped) != 3 {
+		t.Fatalf("report %+v", r)
+	}
+	// Day 31: widget is due, gizmo and gadget only probed. The first
+	// probe uses up the time; the due re-check must have run before it.
+	e.now = day0.Add(31 * 24 * time.Hour)
+	checkAt := e.now
+	e.g.Deadline = e.now.Add(30 * time.Minute)
+	e.gh.onCall = func(etag string) {
+		if etag != "" {
+			e.now = e.now.Add(time.Hour)
+		}
+	}
+	r := e.run(t, nil)
+	rows, err := e.st.AllCandidates(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range rows {
+		if c.Image == "ghcr.io/acme/widget" && !c.CheckedAt.Equal(checkAt) {
+			t.Fatalf("due re-check did not run (checked %v), report %+v", c.CheckedAt, r)
+		}
+	}
+	if len(r.Stopped) != 1 || r.Stopped[0] != "deadline" {
+		t.Errorf("stopped %v", r.Stopped)
 	}
 }
