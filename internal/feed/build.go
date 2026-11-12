@@ -138,6 +138,9 @@ type Snapshot struct {
 	// Index is the first-party index table (applists.Table.Marshal);
 	// empty leaves the blob out.
 	Index []byte
+	// MaxUnpacked caps the total uncompressed size of the blobs (default
+	// DefaultMaxUnpacked, the limit of the readers).
+	MaxUnpacked int64
 	// Shards splits advisories by app ID (default 64).
 	Shards int
 }
@@ -226,6 +229,19 @@ func WriteSnapshot(dir string, s Snapshot, signers ...ed25519.PrivateKey) ([]byt
 		}{MediaEPSS, data}
 	}
 
+	// Readers refuse a manifest whose blobs unpack to more than their
+	// limit (DefaultMaxUnpacked); the builder refuses to write one.
+	var total int64
+	for _, b := range blobs {
+		total += int64(len(b.data))
+	}
+	limit := s.MaxUnpacked
+	if limit <= 0 {
+		limit = DefaultMaxUnpacked
+	}
+	if total > limit {
+		return nil, fmt.Errorf("snapshot: %d bytes unpacked exceed the limit of %d", total, limit)
+	}
 	enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
 	if err != nil {
 		return nil, err

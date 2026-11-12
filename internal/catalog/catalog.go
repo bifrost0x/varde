@@ -375,9 +375,10 @@ func reviewedApps(base []Entry, origin Origin, local fs.FS) (map[string]*App, er
 // BuildLayered is Build with generated entries beneath the reviewed ones.
 // A reviewed entry always wins: a generated entry whose ID, alias, image,
 // source, package or unit a reviewed entry (or an earlier generated one)
-// already claims is dropped, and so is one that does not parse or claims
-// full coverage. Dropping one costs that app; refusing the set would cost
-// the installation the whole package. DroppedGenerated lists the drops.
+// already claims is dropped, and so is one that does not parse, claims
+// full coverage or repeats a key of its own. Dropping one costs that app;
+// refusing the set would cost the installation the whole package.
+// DroppedGenerated lists the drops.
 func BuildLayered(reviewed []Entry, reviewedOrigin Origin, generated []Entry, local fs.FS) (*Catalog, error) {
 	if len(generated) > maxGenerated {
 		return nil, fmt.Errorf("%s catalog: more than %d entries", OriginGenerated, maxGenerated)
@@ -386,11 +387,14 @@ func BuildLayered(reviewed []Entry, reviewedOrigin Origin, generated []Entry, lo
 	if err != nil {
 		return nil, err
 	}
+	layered := make(map[string]*App, len(apps)+len(generated))
 	claimed := claims{}
-	for _, a := range apps {
+	for id, a := range apps {
+		layered[id] = a
 		claimed.add(a)
 	}
 	var dropped []string
+	added := 0
 	for _, e := range generated {
 		app, err := Parse(e.Name, []byte(e.Data))
 		switch {
@@ -403,20 +407,50 @@ func BuildLayered(reviewed []Entry, reviewedOrigin Origin, generated []Entry, lo
 			dropped = append(dropped, e.Name+": generated entry claims full coverage")
 			continue
 		}
+		if what, repeated := ownRepeat(app); repeated {
+			// Validation lets a reviewed entry repeat some keys (and
+			// newCatalog refuses it then); a generated one must not
+			// fail the set that way.
+			dropped = append(dropped, fmt.Sprintf("%s: %s listed twice", e.Name, what))
+			continue
+		}
 		if what, taken := claimed.taken(app); taken {
 			dropped = append(dropped, fmt.Sprintf("%s: %s already claimed", e.Name, what))
 			continue
 		}
 		app.Origin = OriginGenerated
 		claimed.add(app)
-		apps[app.ID] = app
+		layered[app.ID] = app
+		added++
 	}
-	c, err := newCatalog(apps)
+	c, err := newCatalog(layered)
+	if err != nil && added > 0 {
+		// The checks above should leave nothing for newCatalog to refuse.
+		// Should one slip through, the reviewed catalog still loads
+		// without any generated entry.
+		c, err = newCatalog(apps)
+		if err == nil {
+			dropped = append(dropped, fmt.Sprintf("all %d generated entries: the layered catalog was refused", added))
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
 	c.dropped = dropped
 	return c, nil
+}
+
+// ownRepeat names a key an entry lists twice itself; a variable so a test
+// can switch it off and reach the last guard of BuildLayered.
+var ownRepeat = func(a *App) (string, bool) {
+	seen := map[string]bool{}
+	for _, k := range (claims{}).keys(a) {
+		if seen[k] {
+			return claimKey(k), true
+		}
+		seen[k] = true
+	}
+	return "", false
 }
 
 // DroppedGenerated says which generated entries BuildLayered dropped and
@@ -438,7 +472,8 @@ func (c claims) keys(a *App) []string {
 		keys = append(keys, "oci_source\x00"+normaliseSource(src))
 	}
 	for _, p := range a.Packages {
-		keys = append(keys, "package\x00"+p.Manager+" "+p.Name)
+		// The same key newCatalog's byPackage uses.
+		keys = append(keys, "package\x00"+p.Manager+"\x00"+p.Name)
 	}
 	for _, s := range a.Services {
 		keys = append(keys, "service\x00"+s.Unit)
@@ -457,11 +492,14 @@ func (c claims) add(a *App) {
 func (c claims) taken(a *App) (string, bool) {
 	for _, k := range c.keys(a) {
 		if c[k] {
-			return strings.Replace(k, "\x00", " ", 1), true
+			return claimKey(k), true
 		}
 	}
 	return "", false
 }
+
+// claimKey makes a claim key readable for the log.
+func claimKey(k string) string { return strings.ReplaceAll(k, "\x00", " ") }
 
 func addEntries(apps map[string]*App, entries []Entry, origin Origin) error {
 	seen := map[string]string{}

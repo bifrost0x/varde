@@ -216,6 +216,7 @@ func TestCatalogBlobStaysUnder2000(t *testing.T) {
 	}
 	current := knownName
 	knownName = oldKnownName
+	t.Cleanup(func() { knownName = current })
 	if _, err := f.update(); err != nil {
 		t.Fatalf("old reader: %v", err)
 	}

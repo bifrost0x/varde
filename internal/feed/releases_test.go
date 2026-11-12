@@ -27,7 +27,7 @@ var (
 
 func testRelease(appID string, arch string) ReleaseLine {
 	return ReleaseLine{AppID: appID, Image: "ghcr.io/immich-app/immich-server", Tag: "v1.120.0", Version: "1.120.0",
-		IndexDigest: testIndexDigest, Platform: registry.Platform{OS: "linux", Arch: arch}, ManifestDigest: testManifestDigest,
+		IndexDigest: testIndexDigest, Platform: ReleasePlatform{OS: "linux", Arch: arch}, ManifestDigest: testManifestDigest,
 		Read: time.Date(2026, 11, 12, 3, 0, 0, 0, time.UTC), Distro: "debian-12", OS: "Debian GNU/Linux 12 (bookworm)",
 		Packages: []inventory.Package{{Manager: "dpkg", Name: "openssl", Version: "3.0.15-1~deb12u1", Distro: "debian-12", Source: "openssl"}}}
 }
@@ -54,10 +54,12 @@ func TestReleaseLineValidation(t *testing.T) {
 		"bad tag":             func(l *ReleaseLine) { l.Tag = "v1 rm" },
 		"empty version":       func(l *ReleaseLine) { l.Version = "" },
 		"long version":        func(l *ReleaseLine) { l.Version = strings.Repeat("1", 129) },
+		"version charset":     func(l *ReleaseLine) { l.Version = "1.0 <b>" },
+		"long source version": func(l *ReleaseLine) { l.Packages[0].SourceVersion = strings.Repeat("1", 129) },
 		"bad index digest":    func(l *ReleaseLine) { l.IndexDigest = "sha256:abc" },
 		"bad manifest digest": func(l *ReleaseLine) { l.ManifestDigest = "md5:" + strings.Repeat("b", 64) },
 		"no manifest digest":  func(l *ReleaseLine) { l.ManifestDigest = "" },
-		"no platform":         func(l *ReleaseLine) { l.Platform = registry.Platform{} },
+		"no platform":         func(l *ReleaseLine) { l.Platform = ReleasePlatform{} },
 		"bad variant":         func(l *ReleaseLine) { l.Platform.Variant = "V8;" },
 		"no read time":        func(l *ReleaseLine) { l.Read = time.Time{} },
 		"bad distro":          func(l *ReleaseLine) { l.Distro = "Debian 12; rm" },
@@ -202,6 +204,67 @@ func TestBadReleasesRefusesUpdate(t *testing.T) {
 	}
 	if rel := f.client.Releases(); len(rel) != 1 {
 		t.Fatalf("releases = %d, want the previous 1", len(rel))
+	}
+}
+
+// The line format is frozen once shipped: this pins its exact encoding.
+func TestReleaseLineGolden(t *testing.T) {
+	l := testRelease("immich", "arm64")
+	l.Platform.Variant = "v8"
+	l.Partial = true
+	got, err := marshalReleases([]ReleaseLine{l})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"app_id":"immich","image":"ghcr.io/immich-app/immich-server","tag":"v1.120.0","version":"1.120.0",` +
+		`"index_digest":"sha256:` + strings.Repeat("a", 64) + `","platform":{"os":"linux","architecture":"arm64","variant":"v8"},` +
+		`"manifest_digest":"sha256:` + strings.Repeat("b", 64) + `","read":"2026-11-12T03:00:00Z","distro":"debian-12",` +
+		`"os_name":"Debian GNU/Linux 12 (bookworm)","partial":true,"packages":[{"manager":"dpkg","name":"openssl",` +
+		`"version":"3.0.15-1~deb12u1","distro":"debian-12","source":"openssl"}]}` + "\n"
+	if string(got) != want {
+		t.Fatalf("encoding changed:\n got %s\nwant %s", got, want)
+	}
+	p := registry.Platform{OS: "linux", Arch: "arm64", Variant: "v8"}
+	if PlatformOf(p).Registry() != p {
+		t.Fatal("platform conversion loses a field")
+	}
+}
+
+// One package list per app, image and platform: the builder and the
+// reader refuse a second.
+func TestReleasesDuplicateRefused(t *testing.T) {
+	a := testRelease("immich", "amd64")
+	if _, err := marshalReleases([]ReleaseLine{a, a}); err == nil || !strings.Contains(err.Error(), "twice") {
+		t.Fatalf("builder: err = %v", err)
+	}
+	one, err := marshalReleases([]ReleaseLine{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseReleases(append(one, one...)); err == nil || !strings.Contains(err.Error(), "line 2") {
+		t.Fatalf("reader: err = %v", err)
+	}
+	// Another platform of the same image is a line of its own.
+	if _, err := marshalReleases([]ReleaseLine{a, testRelease("immich", "arm64")}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The builder refuses a snapshot every reader would refuse for its size.
+func TestSnapshotUnpackedLimit(t *testing.T) {
+	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	key, err := NewKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Snapshot{Sequence: 1, CreatedAt: now, ExpiresAt: now.Add(time.Hour), MaxUnpacked: 1 << 10,
+		Catalog: []catalog.Entry{{Name: "immich.yaml", Data: immichEntry}}}
+	if _, err := WriteSnapshot(t.TempDir(), s, key); err != nil {
+		t.Fatalf("small snapshot: %v", err)
+	}
+	s.Releases = []ReleaseLine{testRelease("immich", "amd64"), testRelease("immich", "arm64"), testRelease("authelia", "amd64")}
+	if _, err := WriteSnapshot(t.TempDir(), s, key); err == nil || !strings.Contains(err.Error(), "exceed the limit") {
+		t.Fatalf("err = %v, want the unpacked limit", err)
 	}
 }
 

@@ -235,7 +235,7 @@ func CheckImagePackages(distro, os string, pkgs []Package) error {
 		return errors.New("too many packages")
 	}
 	for _, pkg := range pkgs {
-		if len(pkg.Name) > 256 || len(pkg.Version) > 128 || len(pkg.Manager) > 16 || len(pkg.Source) > 256 || len(pkg.Distro) > 64 || len(pkg.Path) > 512 || pkg.System {
+		if len(pkg.Name) > 256 || len(pkg.Version) > 128 || len(pkg.SourceVersion) > 128 || len(pkg.Manager) > 16 || len(pkg.Source) > 256 || len(pkg.Distro) > 64 || len(pkg.Path) > 512 || pkg.System {
 			return errors.New("an invalid package")
 		}
 	}

@@ -282,3 +282,48 @@ func TestReviewedLimitUnchanged(t *testing.T) {
 		t.Fatal("more than the reviewed limit accepted")
 	}
 }
+
+// A generated entry that repeats a key of its own is dropped; the rest of
+// the set loads. Validation lets these repeats through (newCatalog would
+// refuse the whole set over them).
+func TestGeneratedOwnRepeatDropped(t *testing.T) {
+	aliases := generatedEntry("gh-x-a", "docker.io/x/a")
+	aliases.Data += "aliases: [zz, zz]\n"
+	pkgs := generatedEntry("gh-x-b", "docker.io/x/b")
+	pkgs.Data += "packages: [{manager: dpkg, name: foo}, {manager: dpkg, name: foo}]\n"
+	units := generatedEntry("gh-x-c", "docker.io/x/c")
+	units.Data += "services: [{unit: c.service}, {unit: c.service}]\n"
+	sources := generatedEntry("gh-x-d", "docker.io/x/d")
+	sources.Data += "oci_source: [https://github.com/x/d, https://github.com/x/d]\n"
+	c, err := BuildLayered(nil, OriginFeed, []Entry{aliases, pkgs, units, sources, generatedEntry("gh-x-kept", "docker.io/x/kept")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Len() != 1 || len(c.DroppedGenerated()) != 4 {
+		t.Fatalf("apps = %d, dropped = %v", c.Len(), c.DroppedGenerated())
+	}
+	if _, ok := c.App("gh-x-kept"); !ok {
+		t.Fatal("unrelated generated entry lost")
+	}
+}
+
+// Should a generated entry get past the checks and make newCatalog refuse
+// the set, the reviewed catalog still loads, without generated entries.
+func TestGeneratedLastGuard(t *testing.T) {
+	check := ownRepeat
+	ownRepeat = func(*App) (string, bool) { return "", false }
+	t.Cleanup(func() { ownRepeat = check })
+	bad := generatedEntry("gh-x-a", "docker.io/x/a")
+	bad.Data += "aliases: [zz, zz]\n"
+	c, err := BuildLayered([]Entry{{Name: "immich.yaml", Data: validEntry}}, OriginFeed,
+		[]Entry{bad, generatedEntry("gh-x-kept", "docker.io/x/kept")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := c.App("immich"); !ok || c.Len() != 1 {
+		t.Fatalf("apps = %d, want the reviewed one only", c.Len())
+	}
+	if d := c.DroppedGenerated(); len(d) != 1 || !strings.Contains(d[0], "all 2 generated entries") {
+		t.Fatalf("dropped = %v", d)
+	}
+}
