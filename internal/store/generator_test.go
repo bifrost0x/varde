@@ -15,9 +15,9 @@ func TestCandidatesOrderAndDue(t *testing.T) {
 	for _, c := range []Candidate{
 		{Image: "light", Repo: "r", Weight: 1},
 		{Image: "heavy", Repo: "r", Weight: 100},
-		{Image: "old", Repo: "r", Weight: 500, Status: "shipped", EntryYAML: "id: old", InputsHash: "h", CheckedAt: now.Add(-60 * 24 * time.Hour), ShippedAt: now.Add(-60 * 24 * time.Hour)},
-		{Image: "older", Repo: "r", Weight: 5, Status: "shipped", CheckedAt: now.Add(-90 * 24 * time.Hour)},
-		{Image: "fresh", Repo: "r", Weight: 900, Status: "shipped", CheckedAt: now.Add(-2 * 24 * time.Hour)},
+		{Image: "old", Repo: "r", Weight: 500, Status: CandidateShipped, EntryYAML: "id: old", InputsHash: "h", CheckedAt: now.Add(-60 * 24 * time.Hour), ShippedAt: now.Add(-60 * 24 * time.Hour)},
+		{Image: "older", Repo: "r", Weight: 5, Status: CandidateShipped, CheckedAt: now.Add(-90 * 24 * time.Hour)},
+		{Image: "fresh", Repo: "r", Weight: 900, Status: CandidateShipped, CheckedAt: now.Add(-2 * 24 * time.Hour)},
 		{Image: "failed", Repo: "r", Weight: 900, Status: "failed", FailedCheck: "x", CheckedAt: now.Add(-90 * 24 * time.Hour)},
 	} {
 		if err := s.UpsertCandidate(ctx, c); err != nil {
@@ -66,21 +66,22 @@ func TestCandidatesOrderAndDue(t *testing.T) {
 func TestLayerReadRoundTrip(t *testing.T) {
 	s, _ := openTest(t)
 	ctx := t.Context()
-	if _, ok, err := s.LayerRead(ctx, "sha256:a"); err != nil || ok {
+	at := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	if _, _, ok, err := s.LayerRead(ctx, "sha256:a"); err != nil || ok {
 		t.Fatalf("missing: %v %v", ok, err)
 	}
-	if err := s.PutLayerRead(ctx, "sha256:a", []byte{0x1f, 0x8b, 0}, true); err != nil {
+	if err := s.PutLayerRead(ctx, "sha256:a", []byte{0x1f, 0x8b, 0}, true, at); err != nil {
 		t.Fatal(err)
 	}
-	files, ok, err := s.LayerRead(ctx, "sha256:a")
-	if err != nil || !ok || !bytes.Equal(files, []byte{0x1f, 0x8b, 0}) {
-		t.Fatalf("read: %v %v %v", files, ok, err)
+	files, partial, ok, err := s.LayerRead(ctx, "sha256:a")
+	if err != nil || !ok || !partial || !bytes.Equal(files, []byte{0x1f, 0x8b, 0}) {
+		t.Fatalf("read: %v %v %v %v", files, partial, ok, err)
 	}
-	if err := s.PutLayerRead(ctx, "sha256:a", []byte("x"), false); err != nil {
+	if err := s.PutLayerRead(ctx, "sha256:a", []byte("x"), false, at); err != nil {
 		t.Fatal(err)
 	}
-	if files, _, _ := s.LayerRead(ctx, "sha256:a"); string(files) != "x" {
-		t.Errorf("replace: %q", files)
+	if files, partial, ok, _ := s.LayerRead(ctx, "sha256:a"); string(files) != "x" || partial || !ok {
+		t.Errorf("replace: %q %v %v", files, partial, ok)
 	}
 }
 

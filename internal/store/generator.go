@@ -14,6 +14,10 @@ import (
 // builder checks it again.
 const recheckAfter = 30 * 24 * time.Hour
 
+// CandidateShipped is the status of a candidate whose entry was shipped; only
+// such candidates are checked again after recheckAfter.
+const CandidateShipped = "shipped"
+
 // Candidate is an image the catalog generator considers. CheckedAt and
 // ShippedAt are zero while the candidate was not checked or shipped.
 type Candidate struct {
@@ -71,8 +75,8 @@ func (s *Store) Candidates(ctx context.Context, limit int, now time.Time) ([]Can
 	if len(out) >= limit {
 		return out, nil
 	}
-	due, err := s.queryCandidates(ctx, cols+`WHERE status = 'shipped' AND checked_at < ? ORDER BY checked_at, image LIMIT ?`,
-		millis(now.Add(-recheckAfter)), limit-len(out))
+	due, err := s.queryCandidates(ctx, cols+`WHERE status = ? AND checked_at < ? ORDER BY checked_at, image LIMIT ?`,
+		CandidateShipped, millis(now.Add(-recheckAfter)), limit-len(out))
 	if err != nil {
 		return nil, err
 	}
@@ -98,26 +102,25 @@ func (s *Store) queryCandidates(ctx context.Context, query string, args ...any) 
 	return out, rows.Err()
 }
 
-// LayerRead returns the cached files of a layer digest (gzip JSON) and
-// whether the layer was read at all. A partial read is a stored read too:
-// the caller decides from its own bounds whether to read the layer again.
-func (s *Store) LayerRead(ctx context.Context, digest string) (files []byte, ok bool, err error) {
-	err = s.db.QueryRowContext(ctx, `SELECT files FROM layer_reads WHERE digest = ?`, digest).Scan(&files)
+// LayerRead returns the cached files of a layer digest (gzip JSON), whether
+// that read was cut off by a bound, and whether the layer was read at all.
+func (s *Store) LayerRead(ctx context.Context, digest string) (files []byte, partial, ok bool, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT files, partial FROM layer_reads WHERE digest = ?`, digest).Scan(&files, &partial)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("query layer read: %w", err)
+		return nil, false, false, fmt.Errorf("query layer read: %w", err)
 	}
-	return files, true, nil
+	return files, partial, true, nil
 }
 
 // PutLayerRead stores what was read from a layer, replacing an earlier read
 // of the same digest. files is gzip-compressed JSON.
-func (s *Store) PutLayerRead(ctx context.Context, digest string, files []byte, partial bool) error {
+func (s *Store) PutLayerRead(ctx context.Context, digest string, files []byte, partial bool, readAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO layer_reads (digest, files, partial, read_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT (digest) DO UPDATE SET files = excluded.files, partial = excluded.partial, read_at = excluded.read_at`,
-		digest, files, partial, millis(time.Now()))
+		digest, files, partial, millis(readAt))
 	if err != nil {
 		return fmt.Errorf("put layer read: %w", err)
 	}
