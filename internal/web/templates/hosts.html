@@ -11,7 +11,11 @@
 
 <section class="panel" aria-labelledby="systems-title">
   <h2 id="systems-title" class="visually-hidden">Systems</h2>
-  <p class="small">Varde knows what is installed on {{$d.Read}} of {{plural $d.Counts.Hosts "system"}}{{if $d.Counts.Stale}}; {{$d.Counts.Stale}} not reporting{{end}}{{if $d.Counts.Paused}}; {{$d.Counts.Paused}} switched off{{end}}.{{if $d.Counts.Devices}} {{plural $d.Counts.Devices "further device"}} only seen by the network scan: <a href="/connections#devices">Connections</a>.{{end}}</p>
+  <p class="small">Varde knows what is installed on {{$d.Read}} of {{plural $d.Counts.Hosts "system"}}{{if $d.Counts.Stale}}; {{$d.Counts.Stale}} not reporting{{end}}{{if $d.Counts.Paused}}; {{$d.Counts.Paused}} switched off{{end}}.{{if gt $d.Counts.Hosts $d.Read}} The others are listed with <span class="badge badge--muted">unknown</span> and the step that reads them.{{end}}</p>
+  {{if $d.Counts.Devices}}<p class="small"><strong>{{plural $d.Counts.Devices "further device"}} answered the network scan, and Varde does not know what runs on {{if eq $d.Counts.Devices 1}}it{{else}}them{{end}}.</strong> A scan only sees which ports answer, not what is installed behind them. <a href="/connections#devices">Connect {{if eq $d.Counts.Devices 1}}it{{else}}them{{end}}</a> to have {{if eq $d.Counts.Devices 1}}it{{else}}them{{end}} read and checked.</p>{{end}}
+  <details class="small"><summary>How a machine gets onto this list</summary>
+    <p>A machine is listed once Varde can read something on it. That happens in four ways: Docker on this server; the agent on a host (every package and container); a platform you connect, such as Proxmox, UniFi or a NAS (its guests and its own version); or an app that tells its version to anyone who asks, the way Nextcloud does. The last one needs nothing from you, which is why a machine can appear after a scan alone while others do not.</p>
+  </details>
   <table class="table">
     <thead><tr><th scope="col">System</th><th scope="col">Installed</th><th scope="col">Affected</th><th scope="col">Known through</th><th scope="col">Last report</th></tr></thead>
     <tbody>

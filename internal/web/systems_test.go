@@ -430,3 +430,26 @@ func TestCatchingUpNotice(t *testing.T) {
 		t.Error("the notice stays after the data is complete")
 	}
 }
+
+// The advisory data page says per app what it is compared with and how
+// much is known, instead of leaving one line "feed" for the whole package.
+func TestAdvisoryDataPerApp(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "immich", Container: &inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.120.0"}},
+	}, now)
+	wid := inventory.WorkloadID("local", inventory.KindContainer, "c1")
+	if err := h.store.ReplaceIdentifications(ctx, []identify.Result{{WorkloadID: wid, AppID: "immich", Confidence: identify.Exact, Version: "1.120.0"}}, now); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/settings/sources", nil, nil)
+	body = html.UnescapeString(body)
+	for _, want := range []string{"What Varde knows for your apps", "Immich", "advisories of github.com/immich-app/immich", "none published", "Requests Varde sends"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("advisory data page lacks %q", want)
+		}
+	}
+}

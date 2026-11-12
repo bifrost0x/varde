@@ -72,6 +72,30 @@ func insertAdvisories(ctx context.Context, tx *sql.Tx, source string, recs []Adv
 	return nil
 }
 
+// AdvisoryCounts returns how many advisories are stored per app and source.
+// It reads no advisory text, so it is cheap for a page that only says what
+// is known.
+func (s *Store) AdvisoryCounts(ctx context.Context) (map[string]map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT app_id, source, COUNT(*) FROM advisories GROUP BY app_id, source`)
+	if err != nil {
+		return nil, fmt.Errorf("count advisories: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]map[string]int{}
+	for rows.Next() {
+		var app, source string
+		var n int
+		if err := rows.Scan(&app, &source, &n); err != nil {
+			return nil, fmt.Errorf("scan advisory count: %w", err)
+		}
+		if out[app] == nil {
+			out[app] = map[string]int{}
+		}
+		out[app][source] = n
+	}
+	return out, rows.Err()
+}
+
 // Advisories returns all advisories stored for appID, from every source.
 func (s *Store) Advisories(ctx context.Context, appID string) ([]AdvisoryRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `

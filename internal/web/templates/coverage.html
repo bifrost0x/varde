@@ -5,8 +5,8 @@
   <div><h1>Gaps</h1><p>What Varde cannot assess yet: apps it does not recognise, versions it cannot read, routes it cannot check. Every gap comes with the step that closes it.</p></div>
 </div>
 <section class="panel">
-  <p>{{$d.Summary.Assessable}} of {{plural $d.Summary.Total "workload"}} checked against advisories · {{$d.Summary.Identified}} identified · {{len $d.Summary.VersionUnknown}} with unknown version · {{plural (len $d.Summary.PublicRoutes) "public route"}} Varde cannot check</p>
-  {{if $d.Summary.NotApps}}<p class="small">These numbers count apps. <a href="#not-apps">{{plural (len $d.Summary.NotApps) "supporting container"}}</a> (socket proxies, update helpers) {{if eq (len $d.Summary.NotApps) 1}}is{{else}}are{{end}} listed apart; their packages are checked all the same.</p>{{end}}
+  <p>Of {{plural $d.Summary.Total "app"}} on your systems, Varde recognises {{$d.Summary.Identified}} and compares {{$d.Summary.Assessable}} with advisories · {{len $d.Summary.VersionUnknown}} with unknown version · {{plural (len $d.Summary.PublicRoutes) "public route"}} Varde cannot check</p>
+  {{if $d.Summary.NotApps}}<p class="small">These numbers count apps: containers and entries that are an app of their own. The Systems page counts every container. <a href="#not-apps">{{plural (len $d.Summary.NotApps) "supporting container"}}</a> (socket proxies, update helpers) {{if eq (len $d.Summary.NotApps) 1}}is{{else}}are{{end}} listed apart; their packages are checked all the same.</p>{{end}}
   <div class="meter" role="img" aria-label="{{$d.Summary.Percent}} percent identified"><span class="meter__fill {{meterClass $d.Summary.Percent}}"></span></div>
   <p class="small">{{if $d.Machines.Hosts}}Varde knows what is installed on <a href="/systems">{{$d.Machines.Read}} of {{plural $d.Machines.Hosts "system"}}</a>{{if $d.Machines.Devices}} · {{plural $d.Machines.Devices "further device"}} found in the network{{end}}.{{else}}No host known yet.{{end}}</p>
 </section>

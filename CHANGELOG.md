@@ -8,6 +8,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Installing the agent on a host that had an agent of another Varde server, or one revoked
+  here, reported it as updated while it never connected. The installer now replaces an
+  enrollment this server does not know, so installing again repairs it.
+- The address offered for the agent port was the name the browser used, which behind a reverse
+  proxy is the proxy's; the configured `VARDE_HOST_ADDRESS` comes first.
+- A finding in a package of a container's image named the container with the package's fixed
+  version as if it were the app's ("Update cyberchef to 1.2.1-r0"). The page now says that the
+  image is affected, that the version is the package's, and what an update does.
+- Every page says so while advisory data is still being fetched; early results looked like all
+  there is, and the Gaps page asked for a version label while the registry was still being asked.
+- Tables with long image references or versions left their panel.
 - The Compose examples start on hosts without IPv6: the socket proxy binds IPv4 only
   (`DISABLE_IPV6`). It exited in a loop where the kernel has IPv6 switched off.
 - The network scan no longer shows more than 100 percent: probes that are tried again count
@@ -36,6 +47,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Attack paths: a flaw in a library of an image or of a service opens a path only when it is
+  known or likely to be exploited (CISA KEV, or EPSS from 0.10) and its attack vector is known.
+  Before, any such flaw with a remote or unknown vector did, which put a path on nearly every
+  container. The others are listed as unclear, with the reason. Paths are named by what they end
+  on, and paths with one way in and one fix share a card.
+- PostgreSQL, Redis, Valkey, MariaDB, MySQL, MongoDB and Memcached in their official images, and
+  CyberChef, are catalog entries: they are compared with their own advisories. Before, the
+  databases were helpers and only the packages of their images were checked. The entries are
+  written from known facts and say so; they await a review against the live sources.
+- The overview shows the setup guide in full only while Varde knows nothing. After that it is
+  one line under the numbers that opens on a click and can be hidden.
+- The Gaps page says what is checked for supporting containers, for apps with partial or limited
+  advisory data and for versions Varde is still finding out; the Advisory data page lists per
+  app what it is compared with and how many advisories are known; the Systems page says what a
+  network scan can tell and how a machine gets listed; a connected Proxmox names the step that
+  reads its guests.
 - `deploy/compose.yaml` starts without any edit and publishes the web interface on port 8080 for
   the local network (before: `127.0.0.1` only). The reverse-proxy settings are one marked block.
   On a machine that is reachable from the internet, bind the port to `127.0.0.1`.

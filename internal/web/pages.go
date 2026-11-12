@@ -804,8 +804,86 @@ func (a *app) coverage(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	a.page(w, r, cur, http.StatusOK, "coverage", view{Title: "Gaps", Nav: "systems", Tabs: tabs("systems", "/systems/gaps"), Data: c})
 }
 
+// appSources says, for one app Varde recognised, what it is compared with
+// and how much is known: the answer to "is this app checked at all".
+type appSources struct {
+	Name string
+	// Known counts the advisories stored for the app, From names where
+	// they came from (data package, GitHub, NVD, osv.dev).
+	Known int
+	From  []string
+	// Asked names what the catalog says to ask about the app.
+	Asked []string
+	// NoSource is set when nothing is asked about the app at all.
+	NoSource bool
+}
+
+// sourceNames are the stored source names in words.
+var sourceNames = map[string]string{"feed": "data package", "github": "GitHub", "nvd": "NVD", "osv": "osv.dev", "local": "local catalog"}
+
+func (a *app) appSources(ctx context.Context) ([]appSources, int, int, error) {
+	s, err := a.load(ctx, false)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	counts, err := a.d.Store.AdvisoryCounts(ctx)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	total, apps := 0, 0
+	for id, by := range counts {
+		if _, system := distro.SystemName(id); system {
+			continue
+		}
+		apps++
+		for _, n := range by {
+			total += n
+		}
+	}
+	seen := map[string]bool{}
+	var out []appSources
+	for _, wl := range s.workloads {
+		id := s.ids[wl.ID]
+		if id.AppID == "" || seen[id.AppID] {
+			continue
+		}
+		app, ok := a.d.Catalog.Current().App(id.AppID)
+		if !ok {
+			continue
+		}
+		seen[id.AppID] = true
+		row := appSources{Name: app.Name, NoSource: a.d.Package != nil && a.d.Package.NoSource(app)}
+		for src, n := range counts[app.ID] {
+			row.Known += n
+			name := sourceNames[src]
+			if name == "" {
+				name = src
+			}
+			row.From = append(row.From, name)
+		}
+		sort.Strings(row.From)
+		for _, repo := range app.Advisories.GitHubRepos {
+			row.Asked = append(row.Asked, "advisories of github.com/"+repo)
+		}
+		for _, p := range app.Advisories.OSVPackages {
+			row.Asked = append(row.Asked, "osv.dev package "+p.Name)
+		}
+		for _, c := range app.Advisories.CPE {
+			row.Asked = append(row.Asked, "NVD product "+strings.TrimPrefix(c, "cpe:2.3:a:"))
+		}
+		out = append(out, row)
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out, total, apps, nil
+}
+
 func (a *app) sources(w http.ResponseWriter, r *http.Request, cur *auth.Current) {
 	states, err := a.d.Store.SourceStates(r.Context())
+	if err != nil {
+		a.fail(w, r, cur, err)
+		return
+	}
+	apps, total, known, err := a.appSources(r.Context())
 	if err != nil {
 		a.fail(w, r, cur, err)
 		return
@@ -817,7 +895,11 @@ func (a *app) sources(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		GitHubToken bool
 		Mode        string
 		Direct      bool
-	}{states, eff.DirectOSV, eff.DirectNVD, a.d.GitHubToken, a.mode(), eff.DirectQueries}})
+		// Apps says per recognised app what is known; Total and KnownApps
+		// count every advisory Varde holds and the apps they are about.
+		Apps             []appSources
+		Total, KnownApps int
+	}{states, eff.DirectOSV, eff.DirectNVD, a.d.GitHubToken, a.mode(), eff.DirectQueries, apps, total, known}})
 }
 
 func (a *app) fail(w http.ResponseWriter, r *http.Request, cur *auth.Current, err error) {
