@@ -329,7 +329,7 @@ func (p *Pipeline) assess(ctx context.Context, ws []inventory.Workload) error {
 			Affected: f.MatchState == string(match.Affected), KEV: m.KEV, CVSS: m.CVSS, EPSS: m.EPSS, Exposure: e.Exposure,
 		})
 		pl := res.Placements[f.ID]
-		prio, reason = pathPriority(prio, reason, pl, m)
+		prio, reason = pathPriority(prio, reason, pl, m, e.Exposure)
 		as = append(as, store.Assessment{ID: f.ID, Priority: string(prio), Reason: reason, Exposure: string(e.Exposure), ExposureEvidence: e.Evidence,
 			PathClass: string(pl.Class), PathReason: pl.Reason})
 	}

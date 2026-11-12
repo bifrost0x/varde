@@ -121,7 +121,7 @@ func TestPathPriority(t *testing.T) {
 		{policy.P1, paths.Unclear, match.Finding{CVSS: 9, Image: true, KEV: true}, policy.P1},
 		{policy.None, paths.OnPathInternet, match.Finding{CVSS: 9}, policy.None},
 	} {
-		if got, _ := pathPriority(c.prio, "r", paths.Placement{Class: c.class, Reason: "x"}, c.m); got != c.want {
+		if got, _ := pathPriority(c.prio, "r", paths.Placement{Class: c.class, Reason: "x"}, c.m, inventory.ExposureLAN); got != c.want {
 			t.Errorf("%s %s: got %s, want %s", c.prio, c.class, got, c.want)
 		}
 	}
@@ -186,8 +186,16 @@ func TestContainerExposuresSharedNetwork(t *testing.T) {
 }
 
 func TestPathPriorityKeepsPublicImagePackages(t *testing.T) {
-	m := match.Finding{CVSS: 9.8, Image: true}
-	if got, _ := pathPriority(policy.P1, "critical severity and publicly exposed", paths.Placement{Class: paths.Unclear, Reason: "x"}, m); got != policy.P1 {
-		t.Errorf("public container: got %s, want P1", got)
+	// The exposure decides, not the wording of the policy's reason: a P2
+	// "high severity" on a public container stays P2.
+	for _, c := range []struct {
+		prio   policy.Priority
+		reason string
+		cvss   float64
+	}{{policy.P1, "critical severity and publicly exposed", 9.8}, {policy.P2, "high severity", 8.0}} {
+		m := match.Finding{CVSS: c.cvss, Image: true}
+		if got, _ := pathPriority(c.prio, c.reason, paths.Placement{Class: paths.Unclear, Reason: "x"}, m, inventory.ExposurePublic); got != c.prio {
+			t.Errorf("public container, %s: got %s, want %s", c.reason, got, c.prio)
+		}
 	}
 }

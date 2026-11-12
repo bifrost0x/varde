@@ -612,3 +612,18 @@ func TestAttackPathLine(t *testing.T) {
 		t.Fatalf("digest:\n%s", d.Body)
 	}
 }
+
+// An update is a container or the system packages of a host. Packages of
+// images belong to their container, not to the host's package update.
+func TestUpdatesCountContainersAndHosts(t *testing.T) {
+	items := []Item{
+		{WorkloadName: "a", HostName: "h", AppID: "os:Alpine:v3.24/zlib", Image: true},
+		{WorkloadName: "a", HostName: "h", AppID: "immich"},
+		{WorkloadName: "b", HostName: "h", AppID: "os:Alpine:v3.24/zlib", Image: true},
+		{WorkloadName: "openssl", HostName: "h", AppID: "os:Debian:13/openssl"},
+		{WorkloadName: "glibc", HostName: "h", AppID: "os:Debian:13/glibc"},
+	}
+	if n := updates(items); n != 3 {
+		t.Errorf("updates = %d, want 3 (container a, container b, the host's packages)", n)
+	}
+}

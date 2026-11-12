@@ -417,7 +417,7 @@ func escapeOf(c *inventory.Container) string {
 // paths: on a path from the internet it is urgent, an amplifier or a path
 // from the LAN at least P2, background noise at most P3 (P2 when known to
 // be exploited). Unclear findings keep the matrix's priority.
-func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m match.Finding) (policy.Priority, string) {
+func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m match.Finding, exposure inventory.Exposure) (policy.Priority, string) {
 	if prio == policy.None {
 		return prio, reason
 	}
@@ -444,7 +444,7 @@ func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m mat
 		// one in the daily digest would bury what matters. It is fixed
 		// with the image's next regular update. On a container reachable
 		// from the internet the priority stays as the policy set it.
-		if m.Image && !m.KEV && m.EPSS < libraryEPSS && prio.Rank() > policy.P3.Rank() && !publicExposure(reason) {
+		if m.Image && !m.KEV && m.EPSS < libraryEPSS && prio.Rank() > policy.P3.Rank() && exposure != inventory.ExposurePublic {
 			return policy.P3, "a package inside the image; nothing says it is exploited, and no known attack path uses it"
 		}
 	}
@@ -454,10 +454,6 @@ func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m mat
 // libraryEPSS is the probability of exploitation from which a library flaw
 // counts as being used (internal/paths uses the same threshold).
 const libraryEPSS = 0.10
-
-// publicExposure reports whether the policy's reason rests on the container
-// being reachable from the internet.
-func publicExposure(reason string) bool { return strings.Contains(reason, "publicly exposed") }
 
 func maxPrio(a, b policy.Priority) policy.Priority {
 	if b.Rank() > a.Rank() {

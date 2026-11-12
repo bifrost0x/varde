@@ -184,7 +184,8 @@ type updateCounts struct {
 	// yet: there is nothing to install.
 	NoFix int
 	// Unconfirmed counts the containers and systems with findings Varde
-	// cannot confirm, because it does not know the version that runs.
+	// cannot confirm: the version that runs is unknown, or the advisory
+	// does not say which versions it affects.
 	Unconfirmed int
 	// Findings is the number of open findings behind them, for the link
 	// to the full list.

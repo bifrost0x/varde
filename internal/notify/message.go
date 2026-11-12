@@ -332,7 +332,9 @@ func updates(items []Item) int {
 	seen := map[string]bool{}
 	for _, it := range items {
 		key := it.WorkloadName + "\x00" + it.HostName
-		if strings.HasPrefix(it.AppID, "os:") {
+		if strings.HasPrefix(it.AppID, "os:") && !it.Image {
+			// A host's own packages: one package update for all of them.
+			// A package of a container's image belongs to that container.
 			key = "os\x00" + it.HostName
 		}
 		seen[key] = true
