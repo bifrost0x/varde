@@ -18,16 +18,21 @@ import (
 )
 
 // fakeRegistry serves one tag list for every image; every tag resolves.
+// perImage, when it names an image, replaces the list for it.
 type fakeRegistry struct {
-	tags  []string
-	err   error
-	calls int
+	tags     []string
+	perImage map[string][]string
+	err      error
+	calls    int
 }
 
-func (f *fakeRegistry) AllTags(context.Context, string) ([]string, bool, error) {
+func (f *fakeRegistry) AllTags(_ context.Context, repository string) ([]string, bool, error) {
 	f.calls++
 	if f.err != nil {
 		return nil, false, f.err
+	}
+	if t, ok := f.perImage[repository]; ok {
+		return t, true, nil
 	}
 	return f.tags, true, nil
 }
@@ -242,7 +247,7 @@ func TestNoChangesNoOutput(t *testing.T) {
 	if got := outputs(t, out); len(got) != 0 {
 		t.Fatalf("outputs %v for an entry that passes every check", got)
 	}
-	if res.Changed != 0 || res.Reported {
+	if res.Changed != 0 || res.Reported || !res.Complete() {
 		t.Errorf("result %+v", res)
 	}
 }
@@ -254,7 +259,7 @@ func TestTagFixWritten(t *testing.T) {
 	if got := outputs(t, out); len(got) != 2 || got[0] != "apps/widget.yaml" || got[1] != "report.md" {
 		t.Fatalf("outputs %v", got)
 	}
-	if res.Changed != 1 || !res.Reported {
+	if res.Changed != 1 || !res.Reported || !res.Complete() {
 		t.Errorf("result %+v", res)
 	}
 	fixed := read(t, filepath.Join(out, "apps", "widget.yaml"))
@@ -346,15 +351,118 @@ func TestRateLimitStopsAsking(t *testing.T) {
 	files := map[string]string{"widget.yaml": widget(semverRule), "cyberchef.yaml": cyberchefShape}
 	out, res := check(t, g, files)
 	// The first refusal stops the registry for the run; nothing is
-	// changed and, with nothing but sources not answering, nothing is
-	// written: a person has nothing to act on.
+	// changed, the report says what was not checked, and the run is not
+	// complete: the workflow leaves an earlier pull request alone.
 	if reg.calls != 1 {
 		t.Errorf("registry asked %d times after it refused", reg.calls)
 	}
-	if got := outputs(t, out); len(got) != 0 || res.Changed != 0 {
+	if got := outputs(t, out); len(got) != 1 || got[0] != "report.md" || res.Changed != 0 {
 		t.Fatalf("outputs %v, result %+v", got, res)
 	}
-	if len(res.Stopped) != 1 || res.Stopped[0] != "registry" || res.Unchecked == 0 {
+	if len(res.Stopped) != 1 || res.Stopped[0] != "registry" || res.Unchecked == 0 || res.Complete() {
 		t.Errorf("result %+v", res)
+	}
+	if r := read(t, filepath.Join(out, "report.md")); !strings.Contains(r, "rate limit: registry") {
+		t.Errorf("report:\n%s", r)
+	}
+	status := filepath.Join(t.TempDir(), "status")
+	if err := writeStatus(status, res); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, status); got != "corrected=false\ncomplete=false\n" {
+		t.Errorf("status %q", got)
+	}
+}
+
+func TestDifferentFixesLeftToAPerson(t *testing.T) {
+	// The two images' tags fit different templates: no rule fits both,
+	// so the rule is not written and a person decides.
+	g, reg := generator()
+	reg.perImage = map[string][]string{
+		"ghcr.io/acme/widget":   {"v1.0.0", "v1.1.0", "v1.2.0", "v1.3.0-rc.1"},
+		"docker.io/acme/widget": {"1.0.0", "1.1.0", "1.2.0", "1.3.0-rc.1"},
+	}
+	src := strings.Replace(widget(`'^v?(?P<v>\d+\.\d+\.\d+(?:-rc\.\d+)?)$'`),
+		"  - match: ghcr.io/acme/widget\n", "  - match: ghcr.io/acme/widget\n  - match: acme/widget\n", 1)
+	out, res := check(t, g, map[string]string{"widget.yaml": src})
+	if got := outputs(t, out); len(got) != 1 || got[0] != "report.md" || res.Changed != 0 {
+		t.Fatalf("outputs %v, result %+v", got, res)
+	}
+	if r := read(t, filepath.Join(out, "report.md")); !strings.Contains(r, "different templates") {
+		t.Errorf("report:\n%s", r)
+	}
+}
+
+func TestHoldsRejectsOtherChanges(t *testing.T) {
+	before := widget(semverRule)
+	rule := catgen.Templates()[1].Pattern
+	after, err := setTagRule(before, rule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (expected{tag: &rule}).holds(before, after); err != nil {
+		t.Errorf("the rule change alone: %v", err)
+	}
+	// Anything beyond the three fields, or a field reading otherwise than
+	// intended, refuses the correction.
+	other := strings.Replace(after, "coverage: partial", "coverage: full", 1)
+	if err := (expected{tag: &rule}).holds(before, other); err == nil {
+		t.Error("a changed coverage passed")
+	}
+	wrong := catgen.Templates()[0].Pattern
+	if err := (expected{tag: &wrong}).holds(before, after); err == nil {
+		t.Error("a rule other than the intended one passed")
+	}
+	if err := (expected{}).holds(before, "id: [broken"); err == nil {
+		t.Error("an invalid entry passed")
+	}
+}
+
+func TestTagCommentSpacingKept(t *testing.T) {
+	before := strings.Replace(widget(semverRule), semverRule, semverRule+"   # pinned forms only", 1)
+	rule := catgen.Templates()[1].Pattern
+	after, err := setTagRule(before, rule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "    - tag: '" + rule + "'   # pinned forms only"
+	if d := changedLines(before, after); len(d) != 1 || d[0] != want {
+		t.Errorf("changed lines %q, want %q", d, want)
+	}
+}
+
+func TestUnverifiedSentenceVariants(t *testing.T) {
+	// The sentence in the middle of the notes, wrapped differently: it
+	// goes, the text after it stays.
+	mid := strings.Replace(cyberchefShape, "    review of this entry.\n",
+		"    review of this entry. Tags v10.19 and v10 are floating.\n", 1)
+	s, notes, err := dropUnverified(mid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(notes, "latest is floating. Tags v10.19 and v10 are floating.") {
+		t.Errorf("notes %q", notes)
+	}
+	if err := (expected{notes: &notes}).holds(mid, s); err != nil {
+		t.Error(err)
+	}
+	// A sentence worded otherwise (a period before its end) is not the
+	// known one and stays.
+	other := strings.Replace(cyberchefShape, "the advisory repository", "the advisory repo. and", 1)
+	if _, _, err := dropUnverified(other); err == nil {
+		t.Error("a different sentence was removed")
+	}
+}
+
+func TestReportDetailsInert(t *testing.T) {
+	r := report([]entryCheck{{file: "widget.yaml", problems: []catgen.Problem{
+		{Check: "C5", Detail: "widget: ping @someone `rm -rf` [x](https://evil.example)\n## injected"},
+	}}}, nil, "2026-11-16")
+	want := "- `widget.yaml` C5: `widget: ping @someone 'rm -rf' [x](https://evil.example) ## injected`"
+	if !strings.Contains(r, want+"\n") {
+		t.Errorf("report:\n%s\nwant line %q", r, want)
+	}
+	if strings.Contains(r, "\n## injected") {
+		t.Error("a detail started a heading")
 	}
 }

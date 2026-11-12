@@ -12,8 +12,14 @@
 // sources, that note and the verified date once every check passed. The
 // edits are textual and leave comments and formatting alone. Corrected
 // files go to <out>/apps/<name>.yaml and the findings to <out>/report.md;
-// with nothing for a person to act on, nothing is written. Sources that
-// refuse because of their rate limit are not asked again in the run.
+// with nothing to report, nothing is written. Sources that refuse because
+// of their rate limit are not asked again in the run.
+//
+// With -status the run's outcome is appended to a file as key=value lines
+// ($GITHUB_OUTPUT in the workflow): corrected (true when entries were
+// corrected) and complete (true when every source answered for every
+// entry). Only corrections lead to a pull request; problems without one
+// stay in the run's summary and artifact.
 package main
 
 import (
@@ -54,6 +60,7 @@ func realMain() int {
 	dir := flag.String("catalog", "catalog/apps", "directory of the reviewed catalog entries")
 	out := flag.String("out", "", "directory for the corrected entries (apps/) and report.md")
 	timeout := flag.Duration("timeout", 40*time.Minute, "time for the whole check")
+	status := flag.String("status", "", "append corrected=... and complete=... to this file")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "catalogcheck: -out is required")
@@ -81,9 +88,28 @@ func realMain() int {
 	}
 	fmt.Println()
 	if !res.Reported {
-		fmt.Println("catalogcheck: nothing for the maintainer to act on")
+		fmt.Println("catalogcheck: nothing to report")
+	}
+	if *status != "" {
+		if err := writeStatus(*status, res); err != nil {
+			fmt.Fprintln(os.Stderr, "catalogcheck:", err)
+			return 1
+		}
 	}
 	return 0
+}
+
+// writeStatus appends the outcome for the workflow.
+func writeStatus(path string, res result) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // path from the command line ($GITHUB_OUTPUT)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(f, "corrected=%t\ncomplete=%t\n", res.Changed > 0, res.Complete())
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // result sums up a run.
@@ -94,6 +120,11 @@ type result struct {
 	// Stopped names the sources not asked again after a rate limit.
 	Stopped []string
 }
+
+// Complete reports that every source answered for every entry. Only then
+// does the absence of a correction say there is none: a source that did
+// not answer may have hidden one.
+func (r result) Complete() bool { return r.Unchecked == 0 && len(r.Stopped) == 0 }
 
 // entryCheck is the outcome for one entry.
 type entryCheck struct {
@@ -142,17 +173,16 @@ func run(ctx context.Context, g *catgen.Generator, dir, out string, now time.Tim
 	}
 	res.Stopped = stopped()
 
-	act := false
+	act := len(res.Stopped) > 0
 	for _, c := range checks {
 		for _, p := range c.problems {
 			if p.Check == catgen.CheckUnchecked {
 				res.Unchecked++
 			} else {
 				res.Problems++
-				act = true
 			}
 		}
-		if len(c.notes) > 0 {
+		if len(c.problems) > 0 || len(c.notes) > 0 {
 			act = true
 		}
 	}
@@ -181,8 +211,12 @@ func run(ctx context.Context, g *catgen.Generator, dir, out string, now time.Tim
 
 // unverified is the sentence the entries written without a look at the
 // live sources carry in their notes (catalog/apps/postgresql.yaml and
-// seven more, 2026-11-12).
-var unverified = regexp.MustCompile(`\s*Written on \d{4}-\d{2}-\d{2} from the project's public facts without a fresh look at the\s+live\s+sources;[^.]*\.`)
+// seven more, 2026-11-12), matched to its final period with the line
+// breaks of the folded block anywhere. A sentence worded otherwise is not
+// touched.
+var unverified = regexp.MustCompile(`\s*Written\s+on\s+\d{4}-\d{2}-\d{2}\s+` + strings.Join(strings.Fields(regexp.QuoteMeta(
+	"from the project's public facts without a fresh look at the live sources; the CPE, the advisory "+
+		"repository and the tag forms are to be confirmed on the next review of this entry.")), `\s+`))
 
 // correct makes the corrections the checks prove and records what is left
 // for a person. It returns the corrected text, if any.
@@ -349,10 +383,16 @@ func replaceScalar(data string, n *yaml.Node, text string) (string, error) {
 	if err := yaml.Unmarshal([]byte(rest), &v); err != nil || v != n.Value {
 		return "", errors.New("the value spans more than its line")
 	}
-	line := lines[i][:col] + text
+	// What follows the value (the spacing and a line comment) stays.
+	suffix := ""
 	if n.LineComment != "" {
-		line += " " + n.LineComment
+		at := strings.LastIndex(rest, n.LineComment)
+		if at < 0 {
+			return "", errors.New("the line comment is not where the parser put it")
+		}
+		suffix = rest[len(strings.TrimRight(rest[:at], " \t")):]
 	}
+	line := lines[i][:col] + text + suffix
 	lines[i] = line
 	return strings.Join(lines, "\n"), nil
 }
