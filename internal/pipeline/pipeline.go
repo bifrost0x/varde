@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -470,11 +471,16 @@ func (p *Pipeline) match(ctx context.Context, in matchInput) ([]store.FindingInp
 			continue
 		}
 		system := strings.HasPrefix(app.ID, distro.SystemPrefix)
-		// An image a generated entry knows only as its derived entry
-		// would is compared under the derived entry's scheme, as it was
-		// identified (identify.AppForImage).
-		app = identify.AppForImage(app, in.repos[r.WorkloadID])
-		for _, f := range match.Match(match.Input{App: app, Version: r.Version, VersionSource: r.VersionSource, Doubt: r.Doubt(), Distro: r.DistroPackage}, advisories[app.ID], enr) {
+		// A container image a generated entry knows only as its derived
+		// entry would is compared under the derived entry's scheme, as it
+		// was identified, and with the derived entry's advisory sources
+		// (identify.AppForImage). Other workloads have no repository and
+		// keep the entry as it is.
+		stored := advisories[app.ID]
+		if view := identify.AppForImage(app, in.repos[r.WorkloadID]); view != app {
+			app, stored = view, withoutForeignCPEs(stored, view)
+		}
+		for _, f := range match.Match(match.Input{App: app, Version: r.Version, VersionSource: r.VersionSource, Doubt: r.Doubt(), Distro: r.DistroPackage}, stored, enr) {
 			// A system package is reported when an update fixes it: the
 			// distribution's unfixed and minor issues would bury the
 			// actionable ones (ADR 0032).
@@ -607,6 +613,24 @@ func (p *Pipeline) Catalog() *catalog.Live { return p.cat }
 // and keep findings open.
 func feedAlone(app *catalog.App, source string) bool {
 	return app != nil && app.Origin == catalog.OriginFeed && source != store.FeedSource
+}
+
+// nvdSourcePrefix starts the source of advisories the NVD source stored
+// for one CPE of an app ("nvd:" + CPE, sources.NVD).
+const nvdSourcePrefix = "nvd:"
+
+// withoutForeignCPEs drops the advisories stored for a CPE that app does
+// not carry: those of a generated entry's CPE, for an image read as its
+// derived entry (identify.AppForImage). The other sources stay.
+func withoutForeignCPEs(stored []match.Advisory, app *catalog.App) []match.Advisory {
+	out := make([]match.Advisory, 0, len(stored))
+	for _, a := range stored {
+		if cpe, ok := strings.CutPrefix(a.Source, nvdSourcePrefix); ok && !slices.ContainsFunc(app.Advisories.CPE, func(c string) bool { return strings.EqualFold(c, cpe) }) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // advisoriesFor are the stored advisories that count for app: all but

@@ -243,17 +243,22 @@ func (c *Catalog) WithDerived(derived []*App) (*Catalog, error) {
 
 // withGeneratedImages returns a copy of the generated entry g with the
 // images of d, the entry derived for the same project, that no entry
-// claims yet. They are kept in DerivedImages with how d tied them, so
-// DerivationFor confirms them as for d, and the generated entry's
-// checked images stay apart (identify reads the others with the derived
-// entry's version chain). Images d only recorded for its source label are
-// recorded, not matched by name, as in d.
+// claims yet. They are marked as joined (JoinedImage), so they stay apart
+// from the images the generator checked (identify reads them with the
+// derived entry's version chain), and keep d's record of how they were
+// tied (DerivationFor), so they are confirmed exactly as with d. Images d
+// only recorded for its source label are recorded, not matched by name,
+// as in d.
 func (c *Catalog) withGeneratedImages(g, d *App, images map[string]bool) *App {
 	cp := *g
 	cp.Images = append([]Image(nil), g.Images...)
 	cp.DerivedImages = make(map[string]Derivation, len(g.DerivedImages)+len(d.DerivedImages))
 	for repo, how := range g.DerivedImages {
 		cp.DerivedImages[repo] = how
+	}
+	cp.joined = make(map[string]bool, len(g.joined)+len(d.Images))
+	for repo := range g.joined {
+		cp.joined[repo] = true
 	}
 	own := map[string]bool{}
 	for _, img := range g.Images {
@@ -265,10 +270,9 @@ func (c *Catalog) withGeneratedImages(g, d *App, images map[string]bool) *App {
 		}
 		images[img.repo] = true
 		cp.Images = append(cp.Images, img)
+		cp.joined[img.repo] = true
 		if how, ok := d.DerivedImages[img.repo]; ok {
 			cp.DerivedImages[img.repo] = how
-		} else {
-			cp.DerivedImages[img.repo] = Derivation{Basis: BasisLabel}
 		}
 	}
 	for repo, how := range d.DerivedImages {
@@ -282,6 +286,10 @@ func (c *Catalog) withGeneratedImages(g, d *App, images map[string]bool) *App {
 	}
 	return &cp
 }
+
+// JoinedImage reports an image a generated entry took over from the entry
+// derived for its project: one the generator did not check.
+func (a *App) JoinedImage(repo string) bool { return a.joined[repo] }
 
 // HasImage reports whether the entry matches the image repository by name.
 func (a *App) HasImage(repo string) bool {

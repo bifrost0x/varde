@@ -334,32 +334,37 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 	return Result{Confidence: None, Note: note}
 }
 
-// ReadsAsDerived reports an image of a generated entry that the
-// generator did not check: one the entry knows through its source label,
-// one it took over from the entry derived for its project, or one named
-// by the user's varde.app label. The generated entry stands in for the
-// derived entry there, so such an image is read as the derived entry
-// would read it: its version chain and scheme (AppForImage), confirmed
-// only as the derivation of the image says (DerivationFor).
+// ReadsAsDerived reports a container image (repository) of a generated
+// entry that the generator did not check: one the entry knows through its
+// source label, one it took over from the entry derived for its project,
+// or one named by the user's varde.app label. The generated entry stands
+// in for the derived entry there, so such an image is read as the derived
+// entry would read it: its version chain and scheme and its advisory
+// sources (AppForImage), confirmed only as the derivation of the image
+// says (DerivationFor). Without a repository (a manual entry, a package,
+// an unparsable reference) the entry is read as it is.
 func ReadsAsDerived(app *catalog.App, repository string) bool {
-	if app == nil || app.Origin != catalog.OriginGenerated {
+	if app == nil || app.Origin != catalog.OriginGenerated || repository == "" {
 		return false
 	}
-	return repository == "" || !app.HasImage(repository) || app.DerivationFor(repository) != nil
+	return !app.HasImage(repository) || app.JoinedImage(repository)
 }
 
-// AppForImage returns app as Varde reads an image repository of it: a
-// generated entry with the derived entry's version (semver, the default
-// chain of label and tag pattern) for an image the generator did not
-// check (ReadsAsDerived), app itself otherwise. Identification, the
-// registry resolver, matching and update suggestions use it, so they
-// all read such an image the same way.
+// AppForImage returns app as Varde reads an image repository of it: for
+// an image the generator did not check (ReadsAsDerived), a generated
+// entry with the derived entry's version (semver, the default chain of
+// label and tag pattern) and without its CPE, which C5 checked for the
+// entry's own images only, so the image gets the derived entry's advisory
+// sources; app itself otherwise. Identification, the registry resolver,
+// matching and update suggestions use it, so they all read such an image
+// the same way.
 func AppForImage(app *catalog.App, repository string) *catalog.App {
 	if !ReadsAsDerived(app, repository) {
 		return app
 	}
 	derived := *app
 	derived.Version = catalog.VersionSpec{Scheme: version.SemVer}
+	derived.Advisories.CPE = nil
 	return &derived
 }
 

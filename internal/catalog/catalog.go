@@ -79,6 +79,10 @@ type App struct {
 	// DerivedImages holds, per image repository, how that image was tied
 	// to the derived entry.
 	DerivedImages map[string]Derivation `yaml:"-" json:"derived_images,omitempty"`
+	// joined holds the images a generated entry took over from the entry
+	// derived for its project (Catalog.WithDerived); the generator did not
+	// check them.
+	joined map[string]bool
 }
 
 // Image matches an image repository.

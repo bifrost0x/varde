@@ -179,7 +179,7 @@ func DeriveAppsWith(cat *catalog.Catalog, lookups Lookups, ws []inventory.Worklo
 		// checked, is decided; the images a generated entry took over
 		// from its derived entry are derived again, as derived ones are.
 		if a, ok := cat.ByImage(ref.Repository); ok &&
-			(a.Origin.Reviewed() || (a.Origin == catalog.OriginGenerated && a.DerivationFor(ref.Repository) == nil)) {
+			(a.Origin.Reviewed() || (a.Origin == catalog.OriginGenerated && !identify.ReadsAsDerived(a, ref.Repository))) {
 			continue
 		}
 		label := strings.TrimSpace(c.ImageLabels[identify.LabelOCISource])
