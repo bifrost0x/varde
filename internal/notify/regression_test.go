@@ -116,3 +116,28 @@ func TestFirstWeeklyDigestFailureRetriesAfterMidnight(t *testing.T) {
 		t.Fatalf("first weekly failure lost across weekday change: sent=%v notified=%v", ch.sent, ms.notified)
 	}
 }
+
+// A digest that reached a channel is not repeated by the minute when the
+// database cannot record it: the recipient would get it until the write
+// works again.
+func TestDeliveredDigestIsNotRepeatedWhenRecordingFails(t *testing.T) {
+	ms := newMemStore()
+	ms.markErr = errors.New("database is read-only")
+	ch := &fakeChannel{}
+	now := time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC)
+	ms.states["notifydaily"] = store.SourceState{Source: "notify", Key: "daily", LastSuccess: now.Add(-24 * time.Hour)}
+	base := []Candidate{{Item: item("daily", policy.P2), State: store.StateOpen}}
+	svc := NewService(Config{Channels: []Channel{ch}, Store: ms, Log: slog.New(slog.DiscardHandler),
+		DigestHour: 8, DigestWeekday: time.Sunday, Location: time.UTC, Now: func() time.Time { return now },
+		Candidates: candidates(ms, base)})
+	ms.queued["daily"] = "P2"
+	svc.digestsDue(t.Context())
+	now = now.Add(time.Minute)
+	svc.digestsDue(t.Context())
+	if ch.count() != 1 {
+		t.Fatalf("digest sent %d times, want once", ch.count())
+	}
+	if ms.queued["daily"] != "P2" {
+		t.Error("the unrecorded finding left the queue; it must stay for the next digest")
+	}
+}

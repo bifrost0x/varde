@@ -374,8 +374,9 @@ func (s *Service) RunDigests(ctx context.Context) bool {
 			keys = append(keys, n.Key)
 		}
 		if err := s.cfg.NoticesSent(ctx, keys); err != nil {
+			// Delivered already: a retry would send the digest again every
+			// minute for as long as the write fails.
 			s.cfg.Log.Error("digest: recording notices failed", "err", err)
-			success = false
 		}
 	}
 	_, weekday := s.schedule()
@@ -422,8 +423,10 @@ func (s *Service) weeklyDue(now time.Time, weekday time.Weekday, last time.Time)
 }
 
 // sendDigest renders and sends a digest. sent is false for an empty digest;
-// delivered reports whether at least one channel accepted it and its
-// findings were recorded as notified. Only the
+// delivered reports whether at least one channel accepted it. A digest
+// that went out but could not be recorded counts as delivered: its items
+// stay queued for the next digest, and it is not sent again every minute
+// while the database refuses writes. Only the
 // prioritised items are recorded as notified: attention items are
 // unverified and stay eligible if they later become affected.
 func (s *Service) sendDigest(ctx context.Context, kind string, items, attention []Item, notices []Notice, resolved []Item) (sent, delivered bool) {
@@ -452,7 +455,6 @@ func (s *Service) sendDigest(ctx context.Context, kind string, items, attention 
 	if ids := (Message{Items: items}).FindingIDs(); len(ids) > 0 {
 		if err := s.cfg.Store.MarkNotified(ctx, ids, string(p), s.cfg.Now()); err != nil {
 			s.cfg.Log.Error("recording digest failed", "err", err)
-			return true, false
 		}
 	}
 	return true, true
