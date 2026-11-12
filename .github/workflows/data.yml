@@ -79,11 +79,25 @@ jobs:
               exit 1
               ;;
           esac
-          for f in builder.db builder.db.sig; do
-            if [[ -f "published/cache/${f}" && ! -L "published/cache/${f}" ]]; then
-              cp "published/cache/${f}" "work/cache/${f}"
+          # The store is published compressed (scripts/publish-data.sh). It
+          # is unpacked before its signature can be checked, so the size is
+          # capped: a store beyond the cap is dropped and the builder starts
+          # cold. A branch from before the compression holds builder.db.
+          store_limit=$((2 * 1024 * 1024 * 1024))
+          if [[ -f published/cache/builder.db.gz && ! -L published/cache/builder.db.gz ]]; then
+            if gzip -dc published/cache/builder.db.gz | head -c "$((store_limit + 1))" > work/cache/builder.db \
+              && [[ "$(stat -c %s work/cache/builder.db)" -le "${store_limit}" ]]; then
+              :
+            else
+              echo "the published store does not unpack or is larger than ${store_limit} bytes: starting cold" >&2
+              rm -f work/cache/builder.db
             fi
-          done
+          elif [[ -f published/cache/builder.db && ! -L published/cache/builder.db ]]; then
+            cp published/cache/builder.db work/cache/builder.db
+          fi
+          if [[ -f work/cache/builder.db && -f published/cache/builder.db.sig && ! -L published/cache/builder.db.sig ]]; then
+            cp published/cache/builder.db.sig work/cache/builder.db.sig
+          fi
       - name: Build, check and sign
         env:
           VARDE_FEED_KEY: ${{ secrets.VARDE_FEED_KEY }}

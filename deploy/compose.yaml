@@ -1,16 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Varde server with a read-only Docker socket proxy. Set VARDE_VERSION to a
-# release; pinning the digest is better still.
+# Varde server with a read-only Docker socket proxy.
+#
+#   docker compose up -d
+#   docker compose logs varde | grep setup_token   # first login
+#
+# The image comes from GHCR. Without further settings it is "latest": the
+# newest release, and the state of the branch main while no release exists
+# (docs/releasing.md). To stay on one version, pin it in a .env next to this
+# file; pinning the digest is better still:
 #
 #   echo VARDE_VERSION=X.Y.Z > .env
-#   docker compose up -d
 #
-# The state of the branch main, before or between releases, is on GHCR only
-# (docs/releasing.md):
-#
-#   printf 'VARDE_IMAGE=ghcr.io/bifrost0x/varde\nVARDE_VERSION=edge\n' > .env
-#   docker compose logs varde | grep setup_token   # first login
+# VARDE_IMAGE names another registry, for example docker.io/bifrost0x/varde
+# (releases only).
 name: varde
 
 services:
@@ -34,7 +37,7 @@ services:
     restart: unless-stopped
 
   varde:
-    image: ${VARDE_IMAGE:-bifrost0x/varde}:${VARDE_VERSION:?set VARDE_VERSION to a release, e.g. in .env}
+    image: ${VARDE_IMAGE:-ghcr.io/bifrost0x/varde}:${VARDE_VERSION:-latest}
     command: ["server"]
     environment:
       VARDE_DOCKER_HOST: tcp://socket-proxy:2375

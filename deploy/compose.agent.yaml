@@ -5,8 +5,11 @@
 #
 #   1. Create an enrollment token under Connections > Agents on the server.
 #   2. Save it:   printf '%s' 'varde-enroll-v1....' > enroll_token && chmod 600 enroll_token
-#   3. Set VARDE_SERVER_URL below and VARDE_VERSION (same release as the
-#      server) in .env, then run:   docker compose -f compose.agent.yaml up -d
+#   3. Set VARDE_SERVER_URL below, then run:
+#        docker compose -f compose.agent.yaml up -d
+#      The image is the one of deploy/compose.yaml (GHCR, "latest"). When the
+#      server is pinned with VARDE_VERSION in .env, pin the agent to the same
+#      version here.
 #
 # After the first successful start the token is used up; it can be deleted.
 name: varde-agent
@@ -31,7 +34,7 @@ services:
     restart: unless-stopped
 
   agent:
-    image: ${VARDE_IMAGE:-bifrost0x/varde}:${VARDE_VERSION:?set VARDE_VERSION to a release, e.g. in .env}
+    image: ${VARDE_IMAGE:-ghcr.io/bifrost0x/varde}:${VARDE_VERSION:-latest}
     command: ["agent"]
     environment:
       VARDE_SERVER_URL: https://varde.lan:8443

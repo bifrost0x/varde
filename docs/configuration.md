@@ -459,8 +459,9 @@ losing the keys makes stored integration secrets unreadable.
   copied consistently (SQLite `VACUUM INTO`); a plain copy of a running database can be broken.
   The archive holds the CA and keys: store it like the data directory.
 - **Restore:** stop Varde, then unpack into an empty volume, for example
-  `docker run --rm -v varde-data-new:/data -v "$PWD/varde-backup.tar:/backup.tar:ro" bifrost0x/varde:<version> restore /backup.tar`,
+  `docker run --rm -v varde-data-new:/data -v "$PWD/varde-backup.tar:/backup.tar:ro" ghcr.io/bifrost0x/varde:<version> restore /backup.tar`,
   and start Varde with that volume. Restore refuses a data directory that already holds a database.
-- **Upgrade:** take a backup, change `VARDE_VERSION`, `docker compose up -d`. Migrations run at
+- **Upgrade:** take a backup, change `VARDE_VERSION` (or, on `latest`, `docker compose pull`),
+  `docker compose up -d`. Migrations run at
   start and only add to the schema. A newer database is refused by an older Varde, so a downgrade
   is a restore of the backup taken before the upgrade.

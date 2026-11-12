@@ -2,13 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Publishes a built data package: one commit that holds exactly feed/,
-# cache/builder.db and its signature, pushed over the branch "data". The branch never grows:
-# every build replaces it. Run from inside a checkout of the repository.
+# the builder's store and its signature, pushed over the branch "data". The
+# branch never grows: every build replaces it. Run from inside a checkout of
+# the repository.
 #
 #   scripts/publish-data.sh <work-dir>
 #
 # <work-dir> holds feed/ (written by cmd/packagebuilder) and
 # cache/builder.db (the builder's store, kept for the next build).
+#
+# The store is published compressed, as cache/builder.db.gz. It holds the
+# full text of public advisories, and those quote example and leaked
+# credentials in their proofs of concept; as plain text on a branch they
+# raise a secret-scanning alert with every build. The signature stays the
+# one over the uncompressed store.
 # PUBLISH_REMOTE (default origin) and PUBLISH_BRANCH (default data) name
 # the destination.
 set -euo pipefail
@@ -41,8 +48,11 @@ export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-41898282+github-actions[bot]@users.
 export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-${GIT_AUTHOR_NAME}}"
 export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-${GIT_AUTHOR_EMAIL}}"
 
+# -n: no name and no timestamp, the same store gives the same file.
+gzip -9 -n -c "${work}/cache/builder.db" > "${work}/cache/builder.db.gz"
+
 # -f: the repository's .gitignore is about the source tree, not about this.
-git --work-tree="${work}" add -f -- feed cache/builder.db cache/builder.db.sig
+git --work-tree="${work}" add -f -- feed cache/builder.db.gz cache/builder.db.sig
 tree="$(git write-tree)"
 sequence="$(sed -n 's/^ *"sequence": *\([0-9][0-9]*\).*/\1/p' "${work}/feed/stats.json" | head -n 1)"
 commit="$(git commit-tree "${tree}" -m "data: package ${sequence:-unknown}")"

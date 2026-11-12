@@ -61,10 +61,11 @@ account.
 
 A deployment is two containers, a read-only Docker socket proxy and Varde:
 
-1. Download [`deploy/compose.yaml`](deploy/compose.yaml) into an empty directory and create a
-   `.env` next to it with the release to run, for example `VARDE_VERSION=0.1.0`. Set
+1. Download [`deploy/compose.yaml`](deploy/compose.yaml) into an empty directory. Set
    `VARDE_HOST_ADDRESS` in the file to this machine's address in your network, and `TZ` for the
-   digest time.
+   digest time. The image is `ghcr.io/bifrost0x/varde:latest`: the newest release, and the state
+   of the branch `main` while no release exists. To stay on one version, put it in a `.env` next
+   to the file, for example `VARDE_VERSION=0.1.0`.
 2. `docker compose up -d`, then read the one-time setup token:
    `docker compose logs varde | grep setup_token` (on Windows: `findstr setup_token`).
 3. Open `http://127.0.0.1:8080` on that machine, create the account with the token and follow the
