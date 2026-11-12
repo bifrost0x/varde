@@ -214,16 +214,18 @@ func TestBlobRedirectDropsCredentials(t *testing.T) {
 	r, c, host := newImageRegistry(t)
 	var cdnAuth string
 	var cdnHits int
+	var cdnHeaders http.Header
 	cdn := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		cdnHits++
 		cdnAuth = req.Header.Get("Authorization")
+		cdnHeaders = req.Header.Clone()
 		_, _ = io.WriteString(w, "layer")
 	}))
 	t.Cleanup(cdn.Close)
 	pool := x509.NewCertPool()
 	pool.AddCert(r.srv.Certificate())
 	pool.AddCert(cdn.Certificate())
-	c = New(httpx.New(httpx.Options{RootCAs: pool, Timeout: 5 * time.Second}))
+	c = New(httpx.New(httpx.Options{RootCAs: pool, Timeout: 5 * time.Second, AllowInternalRedirects: true}), WithCredentials(host, "user", "tok"))
 	r.redirect = cdn.URL
 	d := sum("layer")
 	rc, err := c.Blob(t.Context(), host+"/org/app", d, 1<<20)
@@ -233,6 +235,9 @@ func TestBlobRedirectDropsCredentials(t *testing.T) {
 	defer func() { _ = rc.Close() }()
 	if b, err := io.ReadAll(rc); err != nil || string(b) != "layer" {
 		t.Fatalf("%q %v", b, err)
+	}
+	if cdnHeaders.Get("Authorization") != "" || cdnHeaders.Get("Proxy-Authorization") != "" {
+		t.Errorf("credentials reached the cdn: %v", cdnHeaders)
 	}
 	if cdnHits != 1 || cdnAuth != "" {
 		t.Errorf("cdn hits %d, authorization %q", cdnHits, cdnAuth)
@@ -301,5 +306,36 @@ func TestBudgetCountsManifestGETs(t *testing.T) {
 	u2 := c.Budget()
 	if u2.ManifestRequests != 2 || u2.Bytes != u.Bytes+3 {
 		t.Errorf("usage after blob %+v (before %+v)", u2, u)
+	}
+}
+
+func TestBlobRedirectToHTTPRefused(t *testing.T) {
+	r, c, host := newImageRegistry(t)
+	r.redirect = "http://cdn.example"
+	if _, err := c.Blob(t.Context(), host+"/org/app", sum("x"), 10); err == nil {
+		t.Error("redirect to http followed")
+	}
+}
+
+func TestImageIndexEntries(t *testing.T) {
+	r, c, host := newImageRegistry(t)
+	v6, _ := platformManifest(sum("v6"))
+	v7, _ := platformManifest(sum("v7"))
+	d6, d7 := r.addManifest("", v6), r.addManifest("", v7)
+	r.addManifest("arm", fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[
+{"digest":%q,"platform":{"os":"linux","architecture":"arm","variant":"v6"}},
+{"digest":%q,"platform":{"os":"linux","architecture":"arm","variant":"v7"}}]}`, d6, d7))
+	ms, _, err := c.Image(t.Context(), host+"/org/app", "arm", []Platform{{"linux", "arm", ""}})
+	if err != nil || len(ms) != 2 {
+		t.Fatalf("variants: %+v %v", ms, err)
+	}
+	r.addManifest("bad", `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[
+{"digest":"sha256:zz","platform":{"os":"linux","architecture":"amd64"}}]}`)
+	if _, _, err := c.Image(t.Context(), host+"/org/app", "bad", []Platform{{"linux", "amd64", ""}}); err == nil {
+		t.Error("malformed digest of a wanted platform skipped silently")
+	}
+	// An unwanted platform with a bad digest is irrelevant.
+	if ms, _, err := c.Image(t.Context(), host+"/org/app", "bad", []Platform{{"linux", "arm64", ""}}); err != nil || len(ms) != 0 {
+		t.Errorf("%+v %v", ms, err)
 	}
 }

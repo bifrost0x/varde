@@ -3,8 +3,10 @@
 // Package registry asks container registries which tag points to a digest,
 // so a container started from a floating tag ("latest") gets the version
 // tag the publisher gave the same image. It uses the OCI distribution API
-// read-only and anonymously: tag lists and HEAD requests for manifests,
-// which Docker Hub does not count as pulls.
+// read-only: anonymously, or with an access token for one configured
+// registry. It reads tag lists and HEAD requests for manifests (which Docker
+// Hub does not count as pulls), and for the release reader manifests and
+// layer blobs.
 package registry
 
 import (
@@ -25,7 +27,7 @@ import (
 	"github.com/bifrost0x/varde/internal/httpx"
 )
 
-// manifestTypes are the media types a HEAD request accepts, so the
+// manifestTypes are the media types a manifest request accepts, so the
 // registry answers with the digest of the index or manifest the tag names.
 var manifestTypes = strings.Join([]string{
 	"application/vnd.oci.image.index.v1+json",
@@ -198,7 +200,8 @@ func (s *session) open(ctx context.Context, path string) (*httpx.Stream, error) 
 	return st, err
 }
 
-// authenticate follows a Bearer challenge anonymously (read scope only).
+// authenticate follows a Bearer challenge (read scope only), anonymously or,
+// for the configured registry, with Basic credentials.
 func (s *session) authenticate(ctx context.Context, challenge string) error {
 	if !strings.HasPrefix(challenge, "Bearer ") {
 		return errors.New("registry: unsupported authentication challenge")
@@ -227,9 +230,10 @@ func (s *session) authenticate(ctx context.Context, challenge string) error {
 	realm.RawQuery = q.Encode()
 	treq := httpx.Request{URL: realm.String(), MaxBytes: 64 << 10}
 	if s.c.credUser != "" && strings.EqualFold(s.host, s.c.credHost) {
-		// The realm passed realmAllowed above, and the credentials belong to
-		// exactly this registry; httpx refuses redirects to other hosts, so
-		// they cannot travel further.
+		// The credentials belong to exactly this registry. The token realm
+		// may be another host of the same registrable domain (auth.docker.io
+		// for registry-1.docker.io); realmAllowed vetted it above, and httpx
+		// refuses redirects to other hosts, so they cannot travel further.
 		treq.Header = http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(s.c.credUser+":"+s.c.credToken))}}
 	}
 	resp, err := s.c.http.Do(ctx, treq)

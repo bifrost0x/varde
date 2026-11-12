@@ -158,7 +158,12 @@ func TestOpenFollowsCrossHostHTTPSRedirectWithoutAuthorization(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
 	pool.AddCert(cdn.Certificate())
-	c := New(Options{RootCAs: pool, Timeout: 5 * time.Second})
+	// An IP-literal target is refused by default.
+	strict := New(Options{RootCAs: pool, Timeout: 5 * time.Second})
+	if _, err := strict.Open(t.Context(), Request{URL: srv.URL}); err == nil || !strings.Contains(err.Error(), "internal host") {
+		t.Errorf("redirect to an IP literal followed: %v", err)
+	}
+	c := New(Options{RootCAs: pool, Timeout: 5 * time.Second, AllowInternalRedirects: true})
 	st, err := c.Open(t.Context(), Request{URL: srv.URL, Header: http.Header{"Authorization": {"Bearer x"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -171,5 +176,22 @@ func TestOpenFollowsCrossHostHTTPSRedirectWithoutAuthorization(t *testing.T) {
 	blocked := New(Options{RootCAs: pool, AllowHosts: []string{"127.0.0.1"}, Timeout: 5 * time.Second})
 	if _, err := blocked.Open(t.Context(), Request{URL: "https://example.invalid/x"}); !errors.Is(err, ErrHostNotAllowed) {
 		t.Errorf("allowlist ignored: %v", err)
+	}
+}
+
+func TestOpenRefusesRedirectToHTTP(t *testing.T) {
+	srv, c := tlsServer(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://cdn.example/blob", http.StatusFound)
+	})
+	if _, err := c.Open(t.Context(), Request{URL: srv.URL}); err == nil || !strings.Contains(err.Error(), "refusing redirect") {
+		t.Errorf("http redirect followed: %v", err)
+	}
+}
+
+func TestInternalHost(t *testing.T) {
+	for h, want := range map[string]bool{"127.0.0.1": true, "::1": true, "10.0.0.1": true, "localhost": true, "a.localhost": true, "cdn.example.com": false} {
+		if internalHost(h) != want {
+			t.Errorf("%s: %v", h, !want)
+		}
 	}
 }

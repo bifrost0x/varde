@@ -119,16 +119,19 @@ func (c *Client) Image(ctx context.Context, repository, tag string, platforms []
 		return []ImageManifest{*m}, digest, nil
 	}
 	var out []ImageManifest
-	seen := map[string]bool{}
+	seen := map[Platform]bool{}
 	for _, d := range doc.Manifests {
 		if d.Platform == nil || d.Platform.OS == "" || d.Platform.OS == "unknown" || d.Platform.Architecture == "unknown" {
 			continue
 		}
 		p := Platform{OS: d.Platform.OS, Arch: d.Platform.Architecture, Variant: d.Platform.Variant}
-		if !wants(platforms, p) || seen[p.OS+"/"+p.Arch] || !validDigest(d.Digest) {
+		if !wants(platforms, p) || seen[p] {
 			continue
 		}
-		seen[p.OS+"/"+p.Arch] = true
+		if !validDigest(d.Digest) {
+			return nil, digest, fmt.Errorf("registry: index entry for %s/%s has an invalid digest %q", p.OS, p.Arch, d.Digest)
+		}
+		seen[p] = true
 		mbody, mt, md, err := s.manifest(ctx, d.Digest)
 		if err != nil {
 			return nil, digest, err

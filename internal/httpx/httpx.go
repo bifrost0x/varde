@@ -44,14 +44,18 @@ type Options struct {
 	// configured explicitly (self-hosted notification services in the LAN);
 	// never for advisory sources.
 	AllowHTTP bool
+	// AllowInternalRedirects lets Open follow a redirect to an IP literal or
+	// localhost. Only for tests, whose servers have no DNS name.
+	AllowInternalRedirects bool
 }
 
 // Client is a hardened HTTP client.
 type Client struct {
-	hc        *http.Client
-	allow     map[string]bool
-	timeout   time.Duration
-	allowHTTP bool
+	hc            *http.Client
+	allow         map[string]bool
+	timeout       time.Duration
+	allowHTTP     bool
+	allowInternal bool
 }
 
 // ErrHostNotAllowed is returned for hosts outside the allowlist.
@@ -59,7 +63,7 @@ var ErrHostNotAllowed = errors.New("httpx: host not in egress allowlist")
 
 // New returns a Client.
 func New(o Options) *Client {
-	c := &Client{timeout: o.Timeout, allowHTTP: o.AllowHTTP}
+	c := &Client{timeout: o.Timeout, allowHTTP: o.AllowHTTP, allowInternal: o.AllowInternalRedirects}
 	if c.timeout <= 0 {
 		c.timeout = defaultTimeout
 	}
@@ -313,6 +317,10 @@ func (c *Client) Open(ctx context.Context, r Request) (*Stream, error) {
 		if !c.hostAllowed(req.URL.Hostname()) {
 			return fmt.Errorf("%w: %s", ErrHostNotAllowed, req.URL.Hostname())
 		}
+		if !strings.EqualFold(req.URL.Host, via[0].URL.Host) && !c.allowInternal && internalHost(req.URL.Hostname()) {
+			// A registry must not make Varde fetch from internal services.
+			return fmt.Errorf("httpx: refusing redirect to internal host %s", req.URL.Hostname())
+		}
 		if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
 			req.Header.Del("Authorization")
 		}
@@ -333,4 +341,11 @@ func (c *Client) Open(ctx context.Context, r Request) (*Stream, error) {
 
 func (c *Client) hostAllowed(host string) bool {
 	return c.allow == nil || c.allow[strings.ToLower(host)]
+}
+
+// internalHost reports IP literals and localhost names; a CDN is always
+// named by a DNS name.
+func internalHost(h string) bool {
+	h = strings.ToLower(strings.TrimSuffix(h, "."))
+	return net.ParseIP(h) != nil || h == "localhost" || strings.HasSuffix(h, ".localhost")
 }
