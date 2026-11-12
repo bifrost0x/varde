@@ -5,8 +5,57 @@ package match
 import (
 	"testing"
 
+	"github.com/bifrost0x/varde/internal/advisory"
+	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/version"
 )
+
+func TestTargetRequiresComparableAliasData(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		affected []advisory.Affected
+	}{
+		{"invalid range", []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "0"}, {Fixed: "unknown"}}}}}}},
+		{"git range", []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeGit, Events: []advisory.Event{{Introduced: "0"}, {Fixed: "abcdef"}}}}}}},
+		{"invalid version", []advisory.Affected{{Versions: []string{"unknown"}}}},
+		{"empty entry", []advisory.Affected{{}}},
+		{"no entries", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			known := ghsa("GHSA-known", []string{"CVE-2026-99999"}, "< 2.0.0", "2.0.0")
+			unknown := Advisory{Source: "osv", Vuln: advisory.Vulnerability{
+				ID: "OSV-unknown", Aliases: []string{"CVE-2026-99999"}, Affected: tc.affected,
+			}}
+			tg := targetOf(t, Match(Input{App: app(version.SemVer), Version: "1.0.0"}, []Advisory{known, unknown}, Enrichment{}))
+			if tg == nil || tg.Fixes != 0 || tg.Version != "" || tg.Total != 1 {
+				t.Fatalf("uncertain alias must not count as a confirmed fix: %+v", tg)
+			}
+		})
+	}
+}
+
+func TestTargetDistinguishesMissingAndIrrelevantAliasData(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		affected []advisory.Affected
+		fixes    int
+	}{
+		{"missing data", nil, 0},
+		{"other package", []advisory.Affected{{Package: advisory.Package{Name: "other"}}}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := app(version.SemVer, catalog.PackageFilter{Name: "app"})
+			known := ghsa("GHSA-known", []string{"CVE-2026-99999"}, "< 2.0.0", "2.0.0")
+			alias := Advisory{Source: "osv", Vuln: advisory.Vulnerability{
+				ID: "OSV-alias", Aliases: []string{"CVE-2026-99999"}, Affected: tc.affected,
+			}}
+			tg := targetOf(t, Match(Input{App: a, Version: "1.0.0"}, []Advisory{known, alias}, Enrichment{}))
+			if tg == nil || tg.Fixes != tc.fixes {
+				t.Fatalf("target %+v, want %d confirmed fixes", tg, tc.fixes)
+			}
+		})
+	}
+}
 
 func targetOf(t *testing.T, fs []Finding) *Target {
 	t.Helper()

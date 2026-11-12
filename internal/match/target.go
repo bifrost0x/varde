@@ -5,7 +5,6 @@ package match
 import (
 	"sort"
 
-	"github.com/bifrost0x/varde/internal/advisory"
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/version"
 )
@@ -35,14 +34,13 @@ func target(app *catalog.App, running version.Version, groups [][]Advisory) *Tar
 	if len(groups) == 0 || running.IsZero() {
 		return nil
 	}
-	scheme := app.Version.Scheme
 	cands := candidates(app, running, groups)
 	best := &Target{Total: len(groups)}
 	var line *Target
 	for _, c := range cands {
 		n := 0
 		for _, g := range groups {
-			if !affectsAny(app, scheme, c, g) {
+			if !affectsAny(app, c, g) {
 				n++
 			}
 		}
@@ -92,24 +90,17 @@ func candidates(app *catalog.App, running version.Version, groups [][]Advisory) 
 // affectsAny reports whether any advisory of the alias group still applies
 // to v. Ambiguous ranges count as affected: a target must not be claimed to
 // fix something the data cannot confirm.
-func affectsAny(app *catalog.App, scheme version.Scheme, v version.Version, group []Advisory) bool {
+func affectsAny(app *catalog.App, v version.Version, group []Advisory) bool {
 	for i := range group {
-		for _, aff := range relevantEntries(app, group[i].Vuln.Affected) {
-			for _, raw := range aff.Versions {
-				if lv, err := version.Parse(scheme, raw); err == nil {
-					if c, ok := v.Compare(lv); ok && c == 0 {
-						return true
-					}
-				}
-			}
-			for _, r := range aff.Ranges {
-				if r.Type == advisory.RangeGit {
-					continue
-				}
-				if in, ok, _ := inRange(scheme, v, r); ok && in {
-					return true
-				}
-			}
+		if len(group[i].Vuln.Affected) == 0 {
+			// A package filter cannot establish irrelevance when the
+			// advisory names no packages or versions at all.
+			return true
+		}
+		// Use the same three-state evaluation as matching: only an
+		// explicit notAffected result confirms that the update fixes it.
+		if e := evaluate(Input{App: app}, &group[i], v, ""); e != nil && e.state != notAffected {
+			return true
 		}
 	}
 	return false
