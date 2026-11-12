@@ -216,19 +216,27 @@ func (a *app) unmarkNotAnApp(w http.ResponseWriter, r *http.Request, cur *auth.C
 	http.Redirect(w, r, "/systems/gaps?ok=is-an-app#unidentified", http.StatusSeeOther)
 }
 
-// setupCookie remembers that the user hid the setup reminder on the
-// overview. It holds no data about the installation and is kept per
-// browser: hiding is a matter of the person looking, not of Varde.
-const setupCookie = "varde_setup"
+// setupHiddenKey is the stored mark that the setup reminder on the
+// overview is hidden. It is kept with the settings, on the server: Varde
+// has one operator, and a mark in the browser would need a cookie of its
+// own. The settings service does not know the key and leaves it alone.
+const setupHiddenKey = "UI_SETUP_HIDDEN"
 
 // setupGuide hides or shows the setup reminder of the overview.
-func (a *app) setupGuide(w http.ResponseWriter, r *http.Request, _ *auth.Current) {
-	c := &http.Cookie{Name: setupCookie, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: a.d.Sessions.Secure(r)} //nolint:gosec // Secure follows the session cookie, see Sessions.Secure
+func (a *app) setupGuide(w http.ResponseWriter, r *http.Request, cur *auth.Current) {
+	value := ""
 	if r.PathValue("action") == "hide" {
-		c.Value, c.MaxAge = "hidden", 365*24*3600
-	} else {
-		c.MaxAge = -1
+		value = "true"
 	}
-	http.SetCookie(w, c)
+	if err := a.d.Store.PutSettings(r.Context(), map[string]string{setupHiddenKey: value}, cur.User.Username, a.d.Now()); err != nil {
+		a.fail(w, r, cur, err)
+		return
+	}
 	http.Redirect(w, r, "/#get-started", http.StatusSeeOther)
+}
+
+// setupHidden reports whether the setup reminder is hidden.
+func (a *app) setupHidden(ctx context.Context) bool {
+	stored, err := a.d.Store.Settings(ctx)
+	return err == nil && stored[setupHiddenKey] == "true"
 }

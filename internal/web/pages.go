@@ -218,7 +218,7 @@ type overviewData struct {
 	// and HTTPS state the overview shows instead of banners.
 	Guide guide
 	// SetupLeft counts the guide's steps that are not done; SetupHidden is
-	// set when the user hid the setup reminder in this browser.
+	// set when the user hid the setup reminder.
 	SetupLeft   int
 	SetupHidden bool
 	// SystemChecked is the number of system packages checked against
@@ -384,9 +384,7 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 			d.SetupLeft++
 		}
 	}
-	if c, err := r.Cookie(setupCookie); err == nil && c.Value == "hidden" {
-		d.SetupHidden = true
-	}
+	d.SetupHidden = a.setupHidden(ctx)
 	// Notifications and HTTPS are steps of the guide here, not banners.
 	v := view{Title: "Overview", Nav: "overview", Data: d, OwnSecurityNote: true}
 	a.page(w, r, cur, http.StatusOK, "overview", v)
