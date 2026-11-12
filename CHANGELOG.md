@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A page failed with "internal error" when the database was too busy to record the visit, for
+  example while a large inventory was being stored. The visit is recorded by a later request.
+- New catalog entries reached installations only with the next daily data package, since an
+  installation uses the package's catalog in place of its built-in one. A package is now built
+  whenever the catalog or the index changes on `main`.
+- The Gaps page shows the share of recognised apps as a number and counts each section; the
+  supporting containers name their machine.
 - Installing the agent on a host that had an agent of another Varde server, or one revoked
   here, reported it as updated while it never connected. The installer now replaces an
   enrollment this server does not know, so installing again repairs it.
