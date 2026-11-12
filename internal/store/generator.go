@@ -83,6 +83,13 @@ func (s *Store) Candidates(ctx context.Context, limit int, now time.Time) ([]Can
 	return append(out, due...), nil
 }
 
+// AllCandidates returns every candidate ordered by image. The generator
+// needs the whole set: the package carries every shipped entry, and an image
+// that left the index or got a reviewed entry has to be retired.
+func (s *Store) AllCandidates(ctx context.Context) ([]Candidate, error) {
+	return s.queryCandidates(ctx, `SELECT image, repo, weight, status, failed_check, entry_yaml, inputs_hash, checked_at, shipped_at FROM gen_candidates ORDER BY image`)
+}
+
 func (s *Store) queryCandidates(ctx context.Context, query string, args ...any) ([]Candidate, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {

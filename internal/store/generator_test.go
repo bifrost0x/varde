@@ -63,6 +63,27 @@ func TestCandidatesOrderAndDue(t *testing.T) {
 	}
 }
 
+func TestAllCandidates(t *testing.T) {
+	s, _ := openTest(t)
+	ctx := t.Context()
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	for _, c := range []Candidate{
+		{Image: "b", Repo: "r", Weight: 1},
+		{Image: "a", Repo: "r", Weight: 2, Status: CandidateShipped, EntryYAML: "id: a", CheckedAt: now, ShippedAt: now},
+	} {
+		if err := s.UpsertCandidate(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.AllCandidates(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Image != "a" || got[1].Image != "b" || !got[0].ShippedAt.Equal(now) || !got[1].CheckedAt.IsZero() {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestLayerReadRoundTrip(t *testing.T) {
 	s, _ := openTest(t)
 	ctx := t.Context()

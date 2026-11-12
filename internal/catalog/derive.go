@@ -75,6 +75,11 @@ func Derive(source, imageRepository string) (*App, bool) {
 	}, true
 }
 
+// DerivedID is the ID of the entry derived for a GitHub repository. The
+// catalog generator gives its entries the same ID, so findings an
+// installation stored under the derived entry keep their app.
+func DerivedID(owner, repo string) string { return derivedID(owner, repo) }
+
 // derivedID is the ID of the entry derived for a GitHub repository.
 func derivedID(owner, repo string) string {
 	id := strings.Trim(idUnsafe.ReplaceAllString("gh-"+owner+"-"+repo, "-"), "-")

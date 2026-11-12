@@ -340,6 +340,17 @@ func (s *session) digest(ctx context.Context, tag string) (string, error) {
 	return d, nil
 }
 
+// Digest returns the digest a tag of a repository points to. It asks with
+// a HEAD request, which Docker Hub does not count as a pull.
+func (c *Client) Digest(ctx context.Context, repository, tag string) (string, error) {
+	host, name, err := endpoint(repository)
+	if err != nil {
+		return "", err
+	}
+	s := &session{c: c, host: host, name: name}
+	return s.digest(ctx, tag)
+}
+
 // Match returns the first of the candidate tags (in the given order, best
 // first) whose manifest has the digest; at most limit tags are asked. An
 // empty tag means none matched.

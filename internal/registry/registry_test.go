@@ -87,6 +87,22 @@ func TestResolveFindsTheTagOfTheDigest(t *testing.T) {
 	}
 }
 
+func TestDigestAsksWithHead(t *testing.T) {
+	c, host, reqs := fakeRegistry(t, map[string]string{"1.3.0": "sha256:new"})
+	d, err := c.Digest(t.Context(), host+"/org/app", "1.3.0")
+	if err != nil || d != "sha256:new" {
+		t.Fatalf("digest %q %v", d, err)
+	}
+	for _, r := range *reqs {
+		if strings.HasPrefix(r, "GET /v2/org/app/manifests/") {
+			t.Errorf("manifest fetched with GET (counts as a pull): %s", r)
+		}
+	}
+	if _, err := c.Digest(t.Context(), host+"/org/app", "9.9.9"); err == nil {
+		t.Error("a missing tag resolved")
+	}
+}
+
 func TestNextLinkStaysOnRegistry(t *testing.T) {
 	if p := nextLink(`<https://evil.example/v2/x/tags/list?last=a>; rel="next"`); p != "" {
 		t.Errorf("followed a foreign link: %q", p)
