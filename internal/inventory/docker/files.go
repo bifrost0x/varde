@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/bifrost0x/varde/internal/inventory"
@@ -58,6 +59,69 @@ func allowedFile(file string) bool {
 	return cleanAbs(file) && (base == ManifestFile || base == pkgdb.LockFile)
 }
 
+// FileUse says how ReadPackages uses one path of an image.
+type FileUse int
+
+// The uses of a path.
+const (
+	Unread       FileUse = iota
+	WholeFile            // read whole through ReadFile
+	StatusFile           // a file of StatusDir
+	Program              // a program scanned for its build information
+	LanguageMeta         // language package metadata (or a JAR) in a language root
+)
+
+// Use reports how ReadPackages uses the file at p of an image with cfg,
+// and the most bytes of it read. A source that copies an image's files
+// ahead of the read, such as the squashed layers of a release, keeps
+// exactly these, so it serves the same files with the same limits as a
+// container.
+func Use(cfg ImageConfig, p string) (FileUse, int64) {
+	if !cleanAbs(p) {
+		return Unread, 0
+	}
+	if slices.Contains(PackageFiles, p) {
+		return WholeFile, limitFor(p)
+	}
+	for _, m := range manifestPaths(cfg.WorkingDir) {
+		if p == m || p == path.Join(path.Dir(m), pkgdb.LockFile) {
+			return WholeFile, fileLimit
+		}
+	}
+	if path.Dir(p) == ProgramDir || slices.Contains(binaryPaths(cfg), p) {
+		return Program, binaryLimit
+	}
+	if path.Dir(p) == StatusDir {
+		return StatusFile, statusDirBytes
+	}
+	for _, root := range languageRoots(cfg.WorkingDir) {
+		if !strings.HasPrefix(p, root+"/") {
+			continue
+		}
+		switch languageFile(p) {
+		case "":
+		case "jar":
+			return LanguageMeta, languageArchiveMax
+		default:
+			return LanguageMeta, languageMetaMax
+		}
+	}
+	return Unread, 0
+}
+
+// ReadLocations are the files and directories ReadPackages reads of an
+// image with cfg: the paths of WholeFile and Program files, and the
+// directories holding StatusFile, Program and LanguageMeta files.
+func ReadLocations(cfg ImageConfig) []string {
+	out := append([]string(nil), PackageFiles...)
+	for _, m := range manifestPaths(cfg.WorkingDir) {
+		out = append(out, m, path.Join(path.Dir(m), pkgdb.LockFile))
+	}
+	out = append(out, binaryPaths(cfg)...)
+	out = append(out, StatusDir, ProgramDir)
+	return append(out, languageRoots(cfg.WorkingDir)...)
+}
+
 func cleanAbs(file string) bool {
 	return path.IsAbs(file) && path.Clean(file) == file && len(file) <= 512
 }
@@ -94,8 +158,12 @@ func (c *Client) ReadGoBuildInfo(ctx context.Context, id, file string) (pkgdb.Go
 // like the one the image runs.
 const ProgramDir = "/usr/local/bin"
 
-// maxPrograms bounds the files read from ProgramDir.
-const maxPrograms = 32
+// MaxPrograms bounds the files read from ProgramDir, in name order;
+// MinProgramSize is the smallest file counted as a program.
+const (
+	MaxPrograms    = 32
+	MinProgramSize = 1024
+)
 
 // GoProgram is the build information of one Go program in a container.
 type GoProgram struct {
@@ -111,6 +179,34 @@ type GoProgram struct {
 // information.
 const programInMemory = 64 << 20
 
+// ScanProgram reads one program of size bytes and returns its Go build
+// information, or the crates.io dependencies of a Rust program built with
+// cargo-auditable; pkgdb.ErrNotGo when it has neither. Path is left to the
+// caller.
+func ScanProgram(r io.Reader, size int64) (GoProgram, error) {
+	if size > programInMemory {
+		bi, err := pkgdb.ScanGoBinary(io.LimitReader(r, size))
+		if err != nil {
+			return GoProgram{}, err
+		}
+		return GoProgram{Info: bi}, nil
+	}
+	b, err := io.ReadAll(io.LimitReader(r, size))
+	if err != nil {
+		return GoProgram{}, err
+	}
+	bi, err := pkgdb.ScanGoBinary(bytes.NewReader(b))
+	if errors.Is(err, pkgdb.ErrNotGo) {
+		if crates := pkgdb.ParseCargoAuditable(bytes.NewReader(b)); len(crates) > 0 {
+			return GoProgram{Crates: crates}, nil
+		}
+	}
+	if err != nil {
+		return GoProgram{}, err
+	}
+	return GoProgram{Info: bi}, nil
+}
+
 // ReadGoPrograms streams ProgramDir of a container and returns the Go
 // programs in it, at most maxPrograms files and binaryLimit bytes in all.
 // Nothing but their build information is kept; symlinks and other files
@@ -123,7 +219,7 @@ func (c *Client) ReadGoPrograms(ctx context.Context, id string) ([]GoProgram, er
 	defer cancel()
 	var out []GoProgram
 	err := c.archiveTar(ctx, id, ProgramDir, binaryLimit, func(tr *tar.Reader) error {
-		for files := 0; files < maxPrograms; {
+		for files := 0; files < MaxPrograms; {
 			hdr, err := tr.Next()
 			if errors.Is(err, io.EOF) {
 				return nil
@@ -131,36 +227,18 @@ func (c *Client) ReadGoPrograms(ctx context.Context, id string) ([]GoProgram, er
 			if err != nil {
 				return fmt.Errorf("docker archive: %w", err)
 			}
-			if hdr.Typeflag != tar.TypeReg || hdr.Size < 1024 {
+			if hdr.Typeflag != tar.TypeReg || hdr.Size < MinProgramSize {
 				continue
 			}
 			files++
-			name := path.Join(ProgramDir, path.Base(hdr.Name))
-			if hdr.Size > programInMemory {
-				bi, err := pkgdb.ScanGoBinary(io.LimitReader(tr, hdr.Size))
-				switch {
-				case errors.Is(err, pkgdb.ErrNotGo):
-				case err != nil:
-					return err
-				default:
-					out = append(out, GoProgram{Path: name, Info: bi})
-				}
-				continue
-			}
-			b, err := io.ReadAll(io.LimitReader(tr, hdr.Size))
-			if err != nil {
-				return err
-			}
-			bi, err := pkgdb.ScanGoBinary(bytes.NewReader(b))
+			prog, err := ScanProgram(io.LimitReader(tr, hdr.Size), hdr.Size)
 			switch {
 			case errors.Is(err, pkgdb.ErrNotGo):
-				if crates := pkgdb.ParseCargoAuditable(bytes.NewReader(b)); len(crates) > 0 {
-					out = append(out, GoProgram{Path: name, Crates: crates})
-				}
 			case err != nil:
 				return err
 			default:
-				out = append(out, GoProgram{Path: name, Info: bi})
+				prog.Path = path.Join(ProgramDir, path.Base(hdr.Name))
+				out = append(out, prog)
 			}
 		}
 		return nil
@@ -189,28 +267,38 @@ func (c *Client) ReadStatusDir(ctx context.Context, id string) ([][]byte, error)
 	defer cancel()
 	var out [][]byte
 	err := c.archiveTar(ctx, id, StatusDir, statusDirBytes, func(tr *tar.Reader) error {
-		total := 0
-		for len(out) < statusDirFiles {
-			hdr, err := tr.Next()
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			if err != nil {
-				return fmt.Errorf("docker archive: %w", err)
-			}
-			if hdr.Typeflag != tar.TypeReg || hdr.Size > statusDirBytes-int64(total) {
-				continue
-			}
-			b, err := io.ReadAll(io.LimitReader(tr, hdr.Size))
-			if err != nil {
-				return err
-			}
-			total += len(b)
-			out = append(out, b)
-		}
-		return nil
+		var err error
+		out, err = ReadStatusTar(tr)
+		return err
 	})
 	return out, err
+}
+
+// ReadStatusTar reads the regular files of an archive of StatusDir, at
+// most statusDirFiles of them and statusDirBytes in all; symlinks and
+// anything else are skipped.
+func ReadStatusTar(tr *tar.Reader) ([][]byte, error) {
+	var out [][]byte
+	total := 0
+	for len(out) < statusDirFiles {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return out, nil
+		}
+		if err != nil {
+			return out, fmt.Errorf("docker archive: %w", err)
+		}
+		if hdr.Typeflag != tar.TypeReg || hdr.Size > statusDirBytes-int64(total) {
+			continue
+		}
+		b, err := io.ReadAll(io.LimitReader(tr, hdr.Size))
+		if err != nil {
+			return out, err
+		}
+		total += len(b)
+		out = append(out, b)
+	}
+	return out, nil
 }
 
 // archive streams the regular file at file of a container to read.

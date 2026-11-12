@@ -433,3 +433,40 @@ func TestReadGoPrograms(t *testing.T) {
 		t.Fatalf("gosu's modules not read: %+v", got.Packages)
 	}
 }
+
+// Use names exactly the files ReadPackages reads, with their limits, so a
+// source that copies them ahead of the read serves the same files.
+func TestUse(t *testing.T) {
+	cfg := ImageConfig{WorkingDir: "/srv/app/web", Entrypoint: []string{"server"}}
+	cases := []struct {
+		path  string
+		use   FileUse
+		limit int64
+	}{
+		{"/etc/os-release", WholeFile, fileLimit},
+		{"/var/lib/rpm/rpmdb.sqlite", WholeFile, rpmFileLimit},
+		{"/srv/app/web/package.json", WholeFile, fileLimit},
+		{"/srv/app/package-lock.json", WholeFile, fileLimit},
+		{"/srv/package.json", Unread, 0},
+		{"/usr/local/bin/gosu", Program, binaryLimit},
+		{"/usr/bin/server", Program, binaryLimit},
+		{"/usr/bin/other", Unread, 0},
+		{"/var/lib/dpkg/status.d/bash", StatusFile, statusDirBytes},
+		{"/usr/local/lib/python3.11/site-packages/x-1.dist-info/METADATA", LanguageMeta, languageMetaMax},
+		{"/opt/app/lib/x.jar", LanguageMeta, languageArchiveMax},
+		{"/opt/app/lib/x.class", Unread, 0},
+		{"/etc/../etc/os-release", Unread, 0},
+		{"/etc/shadow", Unread, 0},
+	}
+	for _, c := range cases {
+		if use, limit := Use(cfg, c.path); use != c.use || limit != c.limit {
+			t.Errorf("Use(%s) = %d, %d; want %d, %d", c.path, use, limit, c.use, c.limit)
+		}
+	}
+	locs := strings.Join(ReadLocations(cfg), " ")
+	for _, want := range []string{"/etc/os-release", "/srv/app/package.json", "/usr/local/bin/server", StatusDir, ProgramDir, "/usr/local/lib"} {
+		if !strings.Contains(" "+locs+" ", " "+want+" ") {
+			t.Errorf("ReadLocations misses %s: %s", want, locs)
+		}
+	}
+}

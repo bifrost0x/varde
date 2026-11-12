@@ -72,10 +72,7 @@ func (c *Client) ReadLanguagePackages(ctx context.Context, id, workDir string) (
 // them), the byte and file bounds across all roots, and when a result is
 // Partial. The caller sets any timeout on ctx.
 func WalkLanguageRoots(ctx context.Context, workDir string, walk func(root string, budget int64, read func(*tar.Reader) error) error) (LanguageRead, error) {
-	roots := append([]string(nil), LanguageRoots...)
-	if wd := path.Clean(workDir); workDir != "" && path.IsAbs(wd) && wd != "/" && !under(wd, roots) {
-		roots = append(roots, wd)
-	}
+	roots := languageRoots(workDir)
 	var out LanguageRead
 	budget := int64(languageBytes)
 	files := 0
@@ -106,6 +103,16 @@ func WalkLanguageRoots(ctx context.Context, workDir string, walk func(root strin
 		}
 	}
 	return out, nil
+}
+
+// languageRoots are LanguageRoots plus the working directory when it lies
+// outside them.
+func languageRoots(workDir string) []string {
+	roots := append([]string(nil), LanguageRoots...)
+	if wd := path.Clean(workDir); workDir != "" && path.IsAbs(wd) && wd != "/" && !under(wd, roots) {
+		roots = append(roots, wd)
+	}
+	return roots
 }
 
 // under reports whether dir lies inside one of roots.
