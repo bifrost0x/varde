@@ -110,6 +110,10 @@ func WriteRoot(dir string, version int64, data []byte) error {
 	return fsutil.WriteFileAtomic(filepath.Join(dir, "v1", "root.json"), data, 0o644)
 }
 
+// maxCatalogBlobEntries is the limit every installation, also one released
+// before the generated blob, puts on the catalog blob (catalog.Build).
+const maxCatalogBlobEntries = 2000
+
 // Snapshot is the content of one manifest to publish.
 type Snapshot struct {
 	// Channel is the channel the snapshot is published on
@@ -119,10 +123,18 @@ type Snapshot struct {
 	CreatedAt      time.Time
 	ExpiresAt      time.Time
 	CatalogVersion string
-	Catalog        []catalog.Entry
-	Advisories     []AdvisoryLine
-	KEV            []KEVLine
-	EPSS           []EPSSLine
+	// Catalog are the reviewed entries; at most 2000, the limit of the
+	// installations released before the generated blob.
+	Catalog []catalog.Entry
+	// Generated are the generated entries, written to a blob of their own;
+	// nil leaves the blob out.
+	Generated  []catalog.Entry
+	Advisories []AdvisoryLine
+	KEV        []KEVLine
+	EPSS       []EPSSLine
+	// Releases are the package lists of the newest releases; nil leaves
+	// the blob out.
+	Releases []ReleaseLine
 	// Index is the first-party index table (applists.Table.Marshal);
 	// empty leaves the blob out.
 	Index []byte
@@ -139,6 +151,9 @@ func WriteSnapshot(dir string, s Snapshot, signers ...ed25519.PrivateKey) ([]byt
 		media string
 		data  []byte
 	}{}
+	if len(s.Catalog) > maxCatalogBlobEntries {
+		return nil, fmt.Errorf("catalog blob: %d entries, installations read at most %d", len(s.Catalog), maxCatalogBlobEntries)
+	}
 	cat, err := json.Marshal(catalogDoc{SchemaVersion: SpecVersion, Entries: s.Catalog})
 	if err != nil {
 		return nil, err
@@ -147,6 +162,26 @@ func WriteSnapshot(dir string, s Snapshot, signers ...ed25519.PrivateKey) ([]byt
 		media string
 		data  []byte
 	}{MediaCatalog, cat}
+	if s.Generated != nil {
+		data, err := json.Marshal(catalogDoc{SchemaVersion: SpecVersion, Entries: s.Generated})
+		if err != nil {
+			return nil, err
+		}
+		blobs["generated"] = struct {
+			media string
+			data  []byte
+		}{MediaGenerated, data}
+	}
+	if s.Releases != nil {
+		data, err := marshalReleases(s.Releases)
+		if err != nil {
+			return nil, err
+		}
+		blobs["releases"] = struct {
+			media string
+			data  []byte
+		}{MediaReleases, data}
+	}
 	shards := map[int][]AdvisoryLine{}
 	for _, a := range s.Advisories {
 		h := fnv.New32a()

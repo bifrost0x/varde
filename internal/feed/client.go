@@ -81,6 +81,8 @@ type Client struct {
 	etag map[string]string // per mirror
 	// index is the first-party index of the active package.
 	index atomic.Pointer[applists.Table]
+	// releases are the release package lists of the active package.
+	releases atomic.Pointer[[]ReleaseLine]
 }
 
 // Files inside Dir.
@@ -181,12 +183,13 @@ func (c *Client) LoadActive(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("installed feed: %w", err)
 	}
-	cat, err := catalog.Build(content.Catalog, catalog.OriginFeed, c.LocalDir)
+	cat, err := c.buildCatalog(content)
 	if err != nil {
 		return fmt.Errorf("installed feed catalog: %w", err)
 	}
 	c.Catalog.Set(cat)
 	c.index.Store(content.Index)
+	c.setReleases(content.Releases)
 	if !c.now().Before(m.ExpiresAt) {
 		c.Log.Warn("installed feed has expired; using it until a fresh one verifies", "sequence", m.Sequence, "expired", m.ExpiresAt)
 	}
@@ -209,6 +212,7 @@ func (c *Client) Deactivate(ctx context.Context, base *catalog.Catalog) error {
 	}
 	c.etag = nil
 	c.index.Store(nil)
+	c.releases.Store(nil)
 	// The catalog first: even when the database refuses, analysis must not
 	// go on with the feed's catalog. The caller repeats a failed leave.
 	c.Catalog.Set(base)
@@ -230,6 +234,38 @@ func (c *Client) ActiveChannel(ctx context.Context) string {
 // Index returns the first-party index of the active package, or nil when
 // no package is active or it carries none. Safe for concurrent use.
 func (c *Client) Index() *applists.Table { return c.index.Load() }
+
+// Releases returns the release package lists of the active package, or
+// nil when no package is active or it carries none. The slice is shared:
+// callers must not change it. Safe for concurrent use.
+func (c *Client) Releases() []ReleaseLine {
+	if p := c.releases.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+func (c *Client) setReleases(lines []ReleaseLine) {
+	if lines == nil {
+		c.releases.Store(nil)
+		return
+	}
+	c.releases.Store(&lines)
+}
+
+// buildCatalog makes the catalog of a package: the reviewed entries over
+// the generated ones, and the local directory over both. Generated entries
+// that collide with reviewed ones are dropped, not refused.
+func (c *Client) buildCatalog(content *Content) (*catalog.Catalog, error) {
+	cat, err := catalog.BuildLayered(content.Catalog, catalog.OriginFeed, content.Generated, c.LocalDir)
+	if err != nil {
+		return nil, err
+	}
+	if dropped := cat.DroppedGenerated(); len(dropped) > 0 {
+		c.Log.Info("generated catalog entries left out", "count", len(dropped), "first", dropped[0])
+	}
+	return cat, nil
+}
 
 // Forget removes the installed manifest from dir, the feed directory of a
 // client that is not running, so that a later client installs afresh. The
@@ -373,7 +409,7 @@ func (c *Client) updateFrom(ctx context.Context, channel string, f Fetcher) (Res
 	if err != nil {
 		return Result{}, err
 	}
-	cat, err := catalog.Build(content.Catalog, catalog.OriginFeed, c.LocalDir)
+	cat, err := c.buildCatalog(content)
 	if err != nil {
 		return Result{}, fmt.Errorf("feed catalog: %w", err)
 	}
@@ -382,6 +418,7 @@ func (c *Client) updateFrom(ctx context.Context, channel string, f Fetcher) (Res
 	}
 	c.Catalog.Set(cat)
 	c.index.Store(content.Index)
+	c.setReleases(content.Releases)
 	c.etag[f.String()] = newETag
 	c.gc(m)
 	c.Log.Info("feed applied", "channel", channel, "sequence", m.Sequence, "catalog", m.CatalogVersion, "advisories", len(content.Advisories), "mirror", f.String())

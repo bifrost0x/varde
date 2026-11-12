@@ -181,7 +181,8 @@ func (c *Catalog) ByGitHubRepo(repo string) (*App, bool) {
 
 // WithDerived returns the catalog with the derived entries added. Entries
 // whose ID or source the catalog already has are skipped: a reviewed entry
-// always wins.
+// always wins. So is an entry for an image a generated entry matches
+// (withoutGenerated): generated entries rank above derived ones.
 func (c *Catalog) WithDerived(derived []*App) (*Catalog, error) {
 	apps := make(map[string]*App, len(c.apps)+len(derived))
 	for id, a := range c.apps {
@@ -197,6 +198,9 @@ func (c *Catalog) WithDerived(derived []*App) (*Catalog, error) {
 		}
 		src := normaliseSource(d.OCISource[0])
 		if _, known := c.ByOCISource(d.OCISource[0]); known || sources[src] {
+			continue
+		}
+		if d = c.withoutGenerated(d); d == nil {
 			continue
 		}
 		kept := d.Images[:0:0]
@@ -216,6 +220,44 @@ func (c *Catalog) WithDerived(derived []*App) (*Catalog, error) {
 		apps[d.ID] = d
 	}
 	return newCatalog(apps)
+}
+
+// withoutGenerated returns d without the images a generated entry
+// matches, by name or as recorded for its source label, and nil when no
+// image is left. The generated entry stands for those images: a derived
+// entry for them would only compete with it for the image's source label.
+func (c *Catalog) withoutGenerated(d *App) *App {
+	claimed := func(repo string) bool {
+		a, ok := c.byImage[repo]
+		return ok && a.Origin == OriginGenerated
+	}
+	hit := false
+	for _, img := range d.Images {
+		hit = hit || claimed(img.repo)
+	}
+	for repo := range d.DerivedImages {
+		hit = hit || claimed(repo)
+	}
+	if !hit {
+		return d
+	}
+	cp := *d
+	cp.Images = nil
+	for _, img := range d.Images {
+		if !claimed(img.repo) {
+			cp.Images = append(cp.Images, img)
+		}
+	}
+	cp.DerivedImages = map[string]Derivation{}
+	for repo, how := range d.DerivedImages {
+		if !claimed(repo) {
+			cp.DerivedImages[repo] = how
+		}
+	}
+	if len(cp.Images) == 0 && len(cp.DerivedImages) == 0 {
+		return nil
+	}
+	return &cp
 }
 
 // SetDerived replaces the derived entries of the live catalog. The base set

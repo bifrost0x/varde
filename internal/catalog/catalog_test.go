@@ -181,3 +181,104 @@ func FuzzParse(f *testing.F) {
 		_, _ = Parse("fuzz.yaml", data)
 	})
 }
+
+// generatedEntry is a machine-made entry: partial coverage, the generator
+// as maintainer, an image and no source label.
+func generatedEntry(id, image string) Entry {
+	return Entry{Name: id + ".yaml", Data: `id: ` + id + `
+name: ` + id + `
+homepage: https://github.com/x/` + id + `
+images: [{match: ` + image + `}]
+version: {scheme: semver}
+advisories: {coverage: partial, github_repos: [x/` + id + `]}
+maintainers_of_entry: [generator]
+verified: 2026-11-12
+`}
+}
+
+// A reviewed entry always wins: a generated entry with its ID, one of its
+// aliases or one of its images is dropped, and the package still loads.
+func TestGeneratedLosesToReviewed(t *testing.T) {
+	reviewed := []Entry{{Name: "immich.yaml", Data: strings.Replace(validEntry, "tags: [photos]", "tags: [photos]\naliases: [immich-old]", 1)}}
+	generated := []Entry{
+		generatedEntry("immich", "docker.io/someone/immich"),                       // same id
+		generatedEntry("immich-old", "docker.io/someone/old"),                      // a reviewed alias
+		generatedEntry("gh-immich-app-immich", "ghcr.io/immich-app/immich-server"), // same image
+		generatedEntry("gh-x-kept", "docker.io/x/kept"),
+	}
+	c, err := BuildLayered(reviewed, OriginFeed, generated, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, ok := c.App("immich"); !ok || a.Origin != OriginFeed || len(a.Images) != 1 {
+		t.Fatalf("immich = %+v", a)
+	}
+	if a, ok := c.App("immich-old"); !ok || a.ID != "immich" {
+		t.Fatalf("alias = %+v", a)
+	}
+	if a, ok := c.ByImage("ghcr.io/immich-app/immich-server"); !ok || a.ID != "immich" {
+		t.Fatalf("image = %+v", a)
+	}
+	if _, ok := c.App("gh-immich-app-immich"); ok {
+		t.Fatal("generated entry with a reviewed image kept")
+	}
+	if _, ok := c.ByImage("docker.io/someone/immich"); ok {
+		t.Fatal("generated entry with a reviewed id kept")
+	}
+	if a, ok := c.App("gh-x-kept"); !ok || a.Origin != OriginGenerated {
+		t.Fatalf("kept = %+v", a)
+	}
+	if got := c.DroppedGenerated(); len(got) != 3 {
+		t.Fatalf("dropped = %v", got)
+	}
+}
+
+// A local entry counts as reviewed too.
+func TestGeneratedLosesToLocal(t *testing.T) {
+	local := fstest.MapFS{"x.yaml": {Data: []byte(entry("mine", "docker.io/x/kept"))}}
+	c, err := BuildLayered(nil, OriginFeed, []Entry{generatedEntry("gh-x-kept", "docker.io/x/kept")}, local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, ok := c.ByImage("docker.io/x/kept"); !ok || a.Origin != OriginLocal {
+		t.Fatalf("image = %+v", a)
+	}
+}
+
+// Generated entries are checked like reviewed ones, but one that does not
+// parse, claims full coverage or repeats an earlier generated claim is
+// dropped: it must not cost the installation the whole package.
+func TestGeneratedInvalidDropped(t *testing.T) {
+	full := generatedEntry("gh-x-full", "docker.io/x/full")
+	full.Data = strings.Replace(full.Data, "coverage: partial", "coverage: full", 1)
+	c, err := BuildLayered(nil, OriginFeed, []Entry{
+		{Name: "bad.yaml", Data: "id: Bad!\n"},
+		full,
+		generatedEntry("gh-x-a", "docker.io/x/a"),
+		generatedEntry("gh-x-a", "docker.io/x/other"),
+		generatedEntry("gh-x-b", "docker.io/x/a"),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Len() != 1 {
+		t.Fatalf("apps = %d, want 1", c.Len())
+	}
+	if len(c.DroppedGenerated()) != 4 {
+		t.Fatalf("dropped = %v", c.DroppedGenerated())
+	}
+}
+
+func TestGeneratedCap(t *testing.T) {
+	if _, err := BuildLayered(nil, OriginFeed, make([]Entry, maxGenerated+1), nil); err == nil {
+		t.Fatal("more than the generated cap accepted")
+	}
+}
+
+// The reviewed catalog keeps its limit: generated entries do not count
+// toward it.
+func TestReviewedLimitUnchanged(t *testing.T) {
+	if _, err := BuildLayered(make([]Entry, maxEntries+1), OriginFeed, nil, nil); err == nil {
+		t.Fatal("more than the reviewed limit accepted")
+	}
+}

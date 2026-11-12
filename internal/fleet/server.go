@@ -371,10 +371,7 @@ func (s *Server) images(w http.ResponseWriter, r *http.Request, hostID string, r
 	return true
 }
 
-var (
-	imageIDPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	distroPattern  = regexp.MustCompile(`^[a-z0-9._-]{0,64}$`)
-)
+var imageIDPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // validImagePackages checks an image record from an agent: the agent is a
 // separate trust zone.
@@ -382,16 +379,11 @@ func validImagePackages(p inventory.ImagePackages) error {
 	if !imageIDPattern.MatchString(p.ImageID) {
 		return errors.New("image record without a valid image ID")
 	}
-	if !distroPattern.MatchString(p.Distro) || len(p.OS) > 128 || len(p.Error) > 512 {
+	if len(p.Error) > 512 {
 		return errors.New("image record with invalid release fields")
 	}
-	if len(p.Packages) > 20000 {
-		return errors.New("image record with too many packages")
-	}
-	for _, pkg := range p.Packages {
-		if len(pkg.Name) > 256 || len(pkg.Version) > 128 || len(pkg.Manager) > 16 || len(pkg.Source) > 256 || len(pkg.Distro) > 64 || len(pkg.Path) > 512 || pkg.System {
-			return errors.New("image record with an invalid package")
-		}
+	if err := inventory.CheckImagePackages(p.Distro, p.OS, p.Packages); err != nil {
+		return fmt.Errorf("image record with %w", err)
 	}
 	return nil
 }

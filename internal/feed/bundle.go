@@ -60,13 +60,19 @@ func unpack(b Blob, data []byte) ([]byte, error) {
 
 // Content is the parsed, validated content of a manifest.
 type Content struct {
-	Catalog    []catalog.Entry
+	Catalog []catalog.Entry
+	// Generated are the generated catalog entries, which rank below the
+	// reviewed ones (catalog.BuildLayered).
+	Generated  []catalog.Entry
 	Advisories []store.AdvisoryRecord
 	KEV        []store.KEVEntry
 	EPSS       []store.EPSSEntry
 	// Index is the first-party index of the package (image to source
 	// repository), nil when the package has none.
 	Index *applists.Table
+	// Releases are the package lists of the newest releases, nil when the
+	// package has none.
+	Releases []ReleaseLine
 }
 
 // maxIndexBytes bounds the unpacked index blob.
@@ -119,6 +125,21 @@ func (c *Content) parse(b Blob, data []byte) error {
 			return fmt.Errorf("catalog: schema version %d", doc.SchemaVersion)
 		}
 		c.Catalog = doc.Entries
+	case b.Name == "generated":
+		var doc catalogDoc
+		if err := decodeStrict(data, &doc); err != nil {
+			return fmt.Errorf("generated: %w", err)
+		}
+		if doc.SchemaVersion != SpecVersion {
+			return fmt.Errorf("generated: schema version %d", doc.SchemaVersion)
+		}
+		c.Generated = doc.Entries
+	case b.Name == "releases":
+		lines, err := parseReleases(data)
+		if err != nil {
+			return err
+		}
+		c.Releases = lines
 	case b.Name == "index":
 		if len(data) > maxIndexBytes {
 			return errors.New("index: larger than allowed")
