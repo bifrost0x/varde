@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The agent installer runs its connectivity diagnostic from a temporary root-owned copy instead
+  of the agent-writable installed binary, preserving the privilege boundary on reinstall and
+  supporting upload directories mounted with `noexec`.
+- Rejected JAR entries consume their decompression allowance, including CRC errors and false
+  size declarations, so malformed archives cannot bypass the shared package-reader budgets.
+- Failed digests remain due for the next minute's retry; only completed work advances the daily
+  success time. Unsent findings follow a priority downgrade into the appropriate digest.
+- App and image-package findings use the same identity when counting overlapping advisories.
+- Registry token realms respect registrable domains, including multi-label and private public
+  suffixes. The roadmap now describes the language metadata readers already implemented.
+
 ### Added
 
 - Data package (ADR 0039): with a trust root, an installation reads its advisories, the KEV list,

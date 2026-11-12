@@ -353,28 +353,33 @@ func isNestedJar(name string) bool {
 
 // readEntry reads a whole entry of at most limit bytes; the declared size
 // is checked first and the read is capped, since the declaration may lie.
-func readEntry(f *zip.File, limit int64) ([]byte, bool) {
+// charged is independent of valid content: a failed ZIP read can consume
+// decompression work without returning those bytes to its caller.
+func readEntry(f *zip.File, limit int64) (data []byte, charged int64, ok bool) {
 	if f.UncompressedSize64 > uint64(limit) { //nolint:gosec // G115: limit is a positive constant
-		return nil, false
+		return nil, 0, false
 	}
 	rc, err := f.Open()
 	if err != nil {
-		return nil, false
+		return nil, 0, false
 	}
 	defer func() { _ = rc.Close() }()
 	b, err := io.ReadAll(io.LimitReader(rc, limit+1))
 	if err != nil || int64(len(b)) > limit {
-		return nil, false
+		// Charge the whole attempted allowance, including for size lies:
+		// archive/zip may return zero bytes after detecting one internally.
+		// The single overflow-probe byte never starts another entry.
+		return nil, limit, false
 	}
-	return b, true
+	return b, int64(len(b)), true
 }
 
 func (s *jarScan) pomProperties(f *zip.File) {
 	if s.pom >= maxPomTotal {
 		return
 	}
-	b, ok := readEntry(f, min(maxPomProperties, maxPomTotal-s.pom))
-	s.pom += int64(len(b))
+	b, charged, ok := readEntry(f, min(maxPomProperties, maxPomTotal-s.pom))
+	s.pom += charged
 	if !ok {
 		return
 	}
@@ -394,8 +399,8 @@ func (s *jarScan) nestedJar(f *zip.File, depth int) {
 	if s.nested >= maxNestedTotal {
 		return
 	}
-	b, ok := readEntry(f, min(maxNestedJar, maxNestedTotal-s.nested))
-	s.nested += int64(len(b))
+	b, charged, ok := readEntry(f, min(maxNestedJar, maxNestedTotal-s.nested))
+	s.nested += charged
 	if !ok {
 		return
 	}
