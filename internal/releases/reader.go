@@ -75,6 +75,8 @@ type Store interface {
 	PutLayerRead(ctx context.Context, digest string, files []byte, partial bool, readAt time.Time) error
 	ReleaseRead(ctx context.Context, appID, image, platform string) (tag, indexDigest string, line []byte, ok bool, err error)
 	PutReleaseRead(ctx context.Context, appID, image, platform, tag, indexDigest string, line []byte, readAt time.Time) error
+	ReleaseReadLimits(ctx context.Context, appID, image, platform string) (string, error)
+	SetReleaseReadLimits(ctx context.Context, appID, image, platform, limits string) error
 }
 
 // Reader reads release package lists. MaxManifests and MaxBytes bound the
@@ -120,6 +122,9 @@ type Stats struct {
 	// spent; BudgetSpent says one was.
 	NotStarted  int
 	BudgetSpent bool
+	// TooLarge counts images whose layers alone exceed MaxBytes; they
+	// are skipped and the run goes on.
+	TooLarge int
 	// Lines, Partial and Stale count the shipped lines: all, those of an
 	// incomplete read, and those read more than StaleAfter ago.
 	Lines, Partial, Stale int
@@ -149,6 +154,7 @@ func (r *Reader) Run(ctx context.Context, cat *catalog.Catalog, order []string) 
 	start := r.Registry.Budget()
 	jobs := r.jobs(cat, order)
 	st.Images = len(jobs)
+	cur := map[job]readID{}
 	for i, j := range jobs {
 		if err := ctx.Err(); err != nil {
 			return nil, st, err
@@ -157,13 +163,13 @@ func (r *Reader) Run(ctx context.Context, cat *catalog.Catalog, order []string) 
 			st.NotStarted += len(jobs) - i
 			break
 		}
-		if err := r.read(ctx, j, start, &st); err != nil {
+		if err := r.read(ctx, j, start, &st, cur); err != nil {
 			return nil, st, err
 		}
 	}
 	used := r.usage(start)
 	st.Manifests, st.Bytes = used.ManifestRequests, used.Bytes
-	lines, err := r.shipped(ctx, jobs, &st)
+	lines, err := r.shipped(ctx, jobs, cur, &st)
 	if err != nil {
 		return nil, st, err
 	}
@@ -280,14 +286,17 @@ func (r *Reader) log() *slog.Logger {
 
 // stored is the stored release read of one platform.
 type stored struct {
-	platform, tag, digest string
-	line                  feed.ReleaseLine
+	platform, tag, digest, limits string
+	line                          feed.ReleaseLine
 }
+
+// readID names one read of a release: its tag and the digest it named.
+type readID struct{ tag, digest string }
 
 // read reads the newest release of one image and stores its lines. An
 // error is returned only for the store or ctx; the registry's errors are
 // counted and logged.
-func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stats) error {
+func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stats, cur map[job]readID) error {
 	log := r.log().With("app", j.app.ID, "image", j.image)
 	if r.usage(start).ManifestRequests+manifestsPerImage > r.maxManifests() || r.usage(start).Bytes >= r.maxBytes() {
 		st.BudgetSpent = true
@@ -334,6 +343,7 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 	}
 	if r.unchanged(prev, tag, digest) {
 		st.Unchanged++
+		cur[j] = readID{tag, digest}
 		return r.confirm(ctx, j, prev, tag, digest)
 	}
 	ms, index, err := r.Registry.Image(ctx, r.remote(j.image), tag, Platforms)
@@ -357,15 +367,25 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 		}
 		reads = append(reads, platformRead{m: m, cfg: cfg, cache: &layerCache{store: r.Store, now: r.Now, log: log, recs: map[string]*imagelayers.LayerRecord{}}})
 	}
-	// The layers the cache does not hold must fit the byte budget before
+	// The layers the cache cannot serve must fit the byte budget before
 	// the first of them is fetched.
 	var need int64
 	for _, pr := range reads {
 		n, err := pr.cache.missing(ctx, pr.m.Layers, pr.cfg, r.Limits)
+		var se *storeError
+		if errors.As(err, &se) {
+			return se.err
+		}
 		if err != nil {
-			return err
+			return failed("release read: layers refused", err)
 		}
 		need += n
+	}
+	if need > r.maxBytes() {
+		// Not even a whole run's budget reads it; the next image may fit.
+		st.TooLarge++
+		log.Warn("release read: layers larger than the byte budget", "tag", tag, "bytes", need)
+		return nil
 	}
 	if r.usage(start).Bytes+need > r.maxBytes() {
 		st.BudgetSpent = true
@@ -390,7 +410,11 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 	}
 	st.Read++
 	// All platforms are stored together, so a stored digest stands for a
-	// complete read of the release (unchanged).
+	// complete read of the release (unchanged). Lines of an earlier read
+	// stay stored (a platform the release dropped, a line left out) but
+	// are not shipped next to this read.
+	cur[j] = readID{tag, index}
+	limits := imagelayers.LimitsKey(r.Limits)
 	for _, l := range lines {
 		if err := l.Validate(); err != nil {
 			st.Invalid++
@@ -406,7 +430,11 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 			log.Warn("release read: line left out", "platform", platformKey(l.Platform.Registry()), "err", "longer than an installation reads")
 			continue
 		}
-		if err := r.PutReleaseRead(ctx, j.app.ID, j.image, platformKey(requested(l.Platform.Registry())), tag, index, b, now); err != nil {
+		key := platformKey(requested(l.Platform.Registry()))
+		if err := r.PutReleaseRead(ctx, j.app.ID, j.image, key, tag, index, b, now); err != nil {
+			return err
+		}
+		if err := r.SetReleaseReadLimits(ctx, j.app.ID, j.image, key, limits); err != nil {
 			return err
 		}
 	}
@@ -435,21 +463,52 @@ func (r *Reader) stored(ctx context.Context, j job) ([]stored, error) {
 			// Read again: the line is replaced.
 			s.digest = ""
 		}
+		if s.limits, err = r.ReleaseReadLimits(ctx, j.app.ID, j.image, s.platform); err != nil {
+			return nil, err
+		}
 		out = append(out, s)
 	}
 	return out, nil
 }
 
-// unchanged reports whether the newest release was read before under the
-// digest its tag names now. The platforms of a read are stored together,
-// so one stored platform of that tag and digest stands for all.
-func (r *Reader) unchanged(prev []stored, tag, digest string) bool {
-	for _, s := range prev {
-		if s.tag == tag && s.digest == digest {
-			return true
+// latest returns the stored platforms of the image's latest read: of id
+// when known, else of the read with the newest read time (the platforms of
+// a read share it). Rows of a superseded read are left out.
+func latest(prev []stored, id readID, known bool) []stored {
+	if !known {
+		var newest time.Time
+		for _, s := range prev {
+			if s.digest != "" && s.line.Read.After(newest) {
+				newest, id = s.line.Read, readID{s.tag, s.digest}
+			}
 		}
 	}
-	return false
+	var out []stored
+	for _, s := range prev {
+		if s.digest != "" && s.tag == id.tag && s.digest == id.digest {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// unchanged reports whether the latest read is of the newest release under
+// the digest its tag names now, made with the current limits where it
+// stopped at one. The platforms of a read are stored together, so the
+// latest read's rows stand for the whole release.
+func (r *Reader) unchanged(prev []stored, tag, digest string) bool {
+	last := latest(prev, readID{}, false)
+	if len(last) == 0 || last[0].tag != tag || last[0].digest != digest {
+		return false
+	}
+	limits := imagelayers.LimitsKey(r.Limits)
+	for _, s := range last {
+		if s.line.Partial && s.limits != limits {
+			// Other limits may read it in full.
+			return false
+		}
+	}
+	return true
 }
 
 // confirm renews the read time of the stored lines of a release whose tag
@@ -467,6 +526,9 @@ func (r *Reader) confirm(ctx context.Context, j job, prev []stored, tag, digest 
 			return err
 		}
 		if err := r.PutReleaseRead(ctx, j.app.ID, j.image, s.platform, tag, digest, b, now); err != nil {
+			return err
+		}
+		if err := r.SetReleaseReadLimits(ctx, j.app.ID, j.image, s.platform, s.limits); err != nil {
 			return err
 		}
 	}
@@ -579,8 +641,9 @@ func (r *Reader) readPlatform(ctx context.Context, j job, pr platformRead) (feed
 	}, nil
 }
 
-// shipped returns the stored lines of every job, valid ones only.
-func (r *Reader) shipped(ctx context.Context, jobs []job, st *Stats) ([]feed.ReleaseLine, error) {
+// shipped returns the stored lines of every job's latest read (the read
+// of this run where there was one), valid ones only.
+func (r *Reader) shipped(ctx context.Context, jobs []job, cur map[job]readID, st *Stats) ([]feed.ReleaseLine, error) {
 	now := r.Now()
 	var out []feed.ReleaseLine
 	for _, j := range jobs {
@@ -588,11 +651,8 @@ func (r *Reader) shipped(ctx context.Context, jobs []job, st *Stats) ([]feed.Rel
 		if err != nil {
 			return nil, err
 		}
-		for _, s := range prev {
-			if s.digest == "" {
-				st.Invalid++
-				continue
-			}
+		id, known := cur[j]
+		for _, s := range latest(prev, id, known) {
 			if err := s.line.Validate(); err != nil || s.line.AppID != j.app.ID || s.line.Image != j.image {
 				st.Invalid++
 				r.log().Warn("release read: stored line left out", "app", j.app.ID, "image", j.image, "platform", s.platform, "err", err)
@@ -612,7 +672,8 @@ func (r *Reader) shipped(ctx context.Context, jobs []job, st *Stats) ([]feed.Rel
 }
 
 // layerCache keeps layer records in the store's layer reads, as gzip
-// JSON keyed by imagelayers.LayerKeys. It remembers what it loaded for the
+// JSON keyed by imagelayers.LayerKeys; a layer cut at a limit is never
+// recorded, so the partial flag is always false. It remembers what it loaded for the
 // build that follows the budget check. A store failure is kept in err, so
 // the run ends instead of counting it as a registry failure.
 type layerCache struct {
@@ -623,19 +684,41 @@ type layerCache struct {
 	err   error
 }
 
-// missing returns the bytes of the layers the cache does not hold.
+// missing returns the most bytes building the view of layers with cfg
+// fetches: the layers whose record is missing or not known to hold the
+// content cfg reads, up to the layer at which the build reaches
+// LayerBytes (a layer's compressed size stands in for its unpacked size,
+// which is not smaller). A store failure is a *storeError.
 func (c *layerCache) missing(ctx context.Context, layers []registry.Layer, cfg docker.ImageConfig, lim imagelayers.Limits) (int64, error) {
-	var n int64
-	for i, key := range imagelayers.LayerKeys(layers, cfg, lim) {
+	keys, err := imagelayers.LayerKeys(layers, lim)
+	if err != nil {
+		return 0, err
+	}
+	bound := lim.LayerBytes
+	if bound <= 0 {
+		bound = imagelayers.DefaultLimits.LayerBytes
+	}
+	var need, unpacked int64
+	for i, key := range keys {
+		if unpacked >= bound {
+			break
+		}
 		rec, err := c.Layer(ctx, key)
 		if err != nil {
-			return 0, err
+			return 0, &storeError{err}
 		}
-		if rec == nil {
-			n += layers[i].Size
+		switch {
+		case rec != nil && rec.Covers(cfg):
+			unpacked += rec.Used
+		case rec != nil:
+			need += layers[i].Size
+			unpacked += rec.Used
+		default:
+			need += layers[i].Size
+			unpacked += layers[i].Size
 		}
 	}
-	return n, nil
+	return need, nil
 }
 
 func (c *layerCache) Layer(ctx context.Context, key string) (*imagelayers.LayerRecord, error) {
@@ -665,7 +748,7 @@ func (c *layerCache) PutLayer(ctx context.Context, key string, rec *imagelayers.
 	if err != nil {
 		return err
 	}
-	if err := c.store.PutLayerRead(ctx, key, b, rec.Partial, c.now()); err != nil {
+	if err := c.store.PutLayerRead(ctx, key, b, false, c.now()); err != nil {
 		c.err = err
 		return err
 	}

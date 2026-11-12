@@ -166,6 +166,7 @@ type platform struct {
 	arch, variant string
 	layers        [][]file
 	workDir       string
+	cmd           string
 }
 
 // push publishes an image under tag: an index of the platforms, or a
@@ -186,7 +187,7 @@ func (f *fakeRegistry) push(t *testing.T, name, tag string, single bool, plats .
 			r.blobs[d] = b
 			layers = append(layers, fmt.Sprintf(`{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":%q,"size":%d}`, d, len(b)))
 		}
-		cfg := fmt.Appendf(nil, `{"os":"linux","architecture":%q,"variant":%q,"config":{"WorkingDir":%q,"Labels":{"a":"b"}}}`, p.arch, p.variant, p.workDir)
+		cfg := fmt.Appendf(nil, `{"os":"linux","architecture":%q,"variant":%q,"config":{"WorkingDir":%q,"Cmd":[%q],"Labels":{"a":"b"}}}`, p.arch, p.variant, p.workDir, p.cmd)
 		cd := digestOf(cfg)
 		r.blobs[cd] = cfg
 		m := fmt.Appendf(nil, `{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":%q,"size":%d},"layers":[%s]}`, cd, len(cfg), strings.Join(layers, ","))
@@ -443,7 +444,14 @@ func TestReusesLayerCache(t *testing.T) {
 	if err := json.Unmarshal(m[doc.Manifests[0].Digest], &pm); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range imagelayers.LayerKeys(pm.Layers, readCfg(t, r, f, doc.Manifests[0].Digest), imagelayers.Limits{}) {
+	keys, err := imagelayers.LayerKeys(pm.Layers, imagelayers.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg := readCfg(t, r, f, doc.Manifests[0].Digest); cfg.Labels["a"] != "b" {
+		t.Fatalf("cached config %+v", cfg)
+	}
+	for _, k := range keys {
 		if _, _, ok, err := s.LayerRead(t.Context(), k); err != nil || !ok {
 			t.Fatalf("no layer record under %s: %v", k, err)
 		}
@@ -474,7 +482,7 @@ func TestBudgetStopsNewReads(t *testing.T) {
 	// a's layers are larger than the byte budget of the second case.
 	noisy := func(arch string) platform {
 		p := debian(arch, "", "a=1")
-		p.layers = append(p.layers, []file{{"usr/share/doc/noise", noise(48 << 10)}})
+		p.layers = append(p.layers, []file{{"usr/share/doc/noise", noise(40 << 10)}})
 		return p
 	}
 	f.push(t, "org/a", "1.0.0", false, noisy("amd64"), noisy("arm64"))
@@ -509,6 +517,8 @@ func TestBudgetStopsNewReads(t *testing.T) {
 	})
 
 	t.Run("bytes", func(t *testing.T) {
+		f.push(t, "org/c", "1.0.0", false, debian("amd64", "", "c=1"), debian("arm64", "", "c=1"))
+		cat := newCatalog(t, []catalog.Entry{reviewedEntry("a", regHost+"/org/a"), reviewedEntry("b", regHost+"/org/b"), reviewedEntry("c", regHost+"/org/c")}, nil)
 		r, s := newReader(t, f)
 		old := feed.ReleaseLine{AppID: "b", Image: regHost + "/org/b", Tag: "1.0.0", Version: "1.0.0",
 			Platform: feed.ReleasePlatform{OS: "linux", Arch: "amd64"}, ManifestDigest: digestOf([]byte("m")),
@@ -518,20 +528,19 @@ func TestBudgetStopsNewReads(t *testing.T) {
 			t.Fatal(err)
 		}
 		f.take()
-		// Room for the tag lists, manifests and configs, not for the
-		// layers of a.
-		r.MaxBytes = 32 << 10
-		lines, st := run(t, r, cat, "a", "b")
+		// a fits a whole budget, not what c leaves of it.
+		r.MaxBytes = 86 << 10
+		lines, st := run(t, r, cat, "c", "a", "b")
 		reqs := f.take()
-		if !st.BudgetSpent || st.Read != 0 || st.NotStarted != 2 || st.Stale != 1 || st.Lines != 1 {
+		if !st.BudgetSpent || st.Read != 1 || st.TooLarge != 0 || st.NotStarted != 2 || st.Stale != 1 || st.Lines != 3 {
 			t.Fatalf("stats %+v requests %v", st, reqs)
 		}
 		for _, req := range reqs {
-			if strings.Contains(req, "/blobs/") && !configBlob(f, req) {
+			if strings.Contains(req, "/org/a/blobs/") && !configBlob(f, req) {
 				t.Fatalf("layer fetched past the budget: %s", req)
 			}
 		}
-		if count(reqs, "/org/b/") != 0 || len(lines) != 1 || !lines[0].Read.Equal(old.Read) || lines[0].Tag != "1.0.0" {
+		if count(reqs, "/org/b/") != 0 || len(lines) != 3 || lines[2].AppID != "b" || !lines[2].Read.Equal(old.Read) || lines[2].Tag != "1.0.0" {
 			t.Fatalf("requests %v lines %+v", reqs, lines)
 		}
 	})
@@ -585,6 +594,97 @@ func TestPartialMarked(t *testing.T) {
 		if want := l.AppID != "ok"; l.Partial != want {
 			t.Errorf("%s: partial %v, want %v", l.AppID, l.Partial, want)
 		}
+	}
+	// Same limits: nothing is read again.
+	if _, st = run(t, r, cat); st.Unchanged != 3 || st.Read != 0 {
+		t.Fatalf("same limits: %+v", st)
+	}
+	// Other limits read the read that stopped at a limit again; complete
+	// reads and reads incomplete for another reason are not affected...
+	r.Limits = imagelayers.Limits{}
+	lines, st = run(t, r, cat)
+	if st.Read != 2 || st.Unchanged != 1 || st.Partial != 1 {
+		t.Fatalf("other limits: %+v", st)
+	}
+	for _, l := range lines {
+		if want := l.AppID == "nodb"; l.Partial != want {
+			t.Errorf("%s under the default limits: partial %v, want %v", l.AppID, l.Partial, want)
+		}
+	}
+}
+
+// Images on the same base layers share the base's records whatever their
+// config: a second image reads only its own layer.
+func TestSharedBaseAcrossConfigs(t *testing.T) {
+	f := newRegistry(t)
+	withTop := func(cmd, workDir string, top ...file) platform {
+		p := debian("amd64", "", "bash=5.2")
+		p.cmd, p.workDir = cmd, workDir
+		p.layers = append(p.layers, top)
+		return p
+	}
+	f.push(t, "org/x", "1.0.0", false, withTop("nginx", "/", file{"etc/nginx/nginx.conf", "x"}))
+	f.push(t, "org/y", "2.0.0", false, withTop("node", "/app", file{"app/package.json", `{"name":"y","version":"2.0.0"}`}))
+	r, _ := newReader(t, f)
+	run(t, r, newCatalog(t, []catalog.Entry{reviewedEntry("x", regHost+"/org/x")}, nil))
+	f.take()
+	lines, st := run(t, r, newCatalog(t, []catalog.Entry{reviewedEntry("x", regHost+"/org/x"), reviewedEntry("y", regHost+"/org/y")}, nil))
+	reqs := f.take()
+	if st.Read != 1 || st.Unchanged != 1 {
+		t.Fatalf("stats %+v", st)
+	}
+	// y's config and its own layer, not the two base layers.
+	if n := count(reqs, "/org/y/blobs/"); n != 2 {
+		t.Fatalf("%d blob requests for y: %v", n, reqs)
+	}
+	for _, l := range lines {
+		if l.AppID == "y" && pkgList(l) != "npm:y=2.0.0,dpkg:bash=5.2" {
+			t.Fatalf("y packages %s", pkgList(l))
+		}
+	}
+}
+
+// Lines of a superseded read are not shipped: a platform the newest
+// release dropped no longer appears, now or in a later unchanged run.
+func TestSupersededNotShipped(t *testing.T) {
+	f := newRegistry(t)
+	f.push(t, "org/app", "1.0.0", false, debian("amd64", "", "bash=5.1"), debian("arm64", "", "bash=5.1"))
+	cat := newCatalog(t, []catalog.Entry{reviewedEntry("app", regHost+"/org/app")}, nil)
+	r, _ := newReader(t, f)
+	if lines, _ := run(t, r, cat); len(lines) != 2 {
+		t.Fatalf("%d lines", len(lines))
+	}
+	f.push(t, "org/app", "1.1.0", false, debian("amd64", "", "bash=5.2"))
+	for i, wantRead := range []int{1, 0} {
+		r.Now = func() time.Time { return now0.Add(time.Duration(i+1) * time.Hour) }
+		lines, st := run(t, r, cat)
+		if st.Read != wantRead || len(lines) != 1 || lines[0].Tag != "1.1.0" || lines[0].Platform.Arch != "amd64" {
+			t.Fatalf("run %d: stats %+v lines %+v", i, st, lines)
+		}
+	}
+}
+
+// An image whose layers alone exceed the byte budget is skipped; the run
+// goes on with the next image.
+func TestLargeImageSkipped(t *testing.T) {
+	f := newRegistry(t)
+	big := debian("amd64", "", "a=1")
+	big.layers = append(big.layers, []file{{"usr/share/doc/noise", noise(24 << 10)}}, []file{{"usr/share/doc/noise2", noise(24 << 10)[1:]}})
+	f.push(t, "org/big", "1.0.0", false, big)
+	f.push(t, "org/small", "1.0.0", false, debian("amd64", "", "b=1"))
+	cat := newCatalog(t, []catalog.Entry{reviewedEntry("big", regHost+"/org/big"), reviewedEntry("small", regHost+"/org/small")}, nil)
+	r, _ := newReader(t, f)
+	r.MaxBytes = 40 << 10
+	lines, st := run(t, r, cat, "big", "small")
+	if st.TooLarge != 1 || st.BudgetSpent || st.Read != 1 || len(lines) != 1 || lines[0].AppID != "small" {
+		t.Fatalf("stats %+v lines %+v", st, lines)
+	}
+	// Layers past LayerBytes are never fetched, so they do not count.
+	r2, _ := newReader(t, f)
+	r2.MaxBytes = 40 << 10
+	r2.Limits = imagelayers.Limits{LayerBytes: 8 << 10}
+	if _, st := run(t, r2, cat, "big", "small"); st.TooLarge != 0 || st.Read != 2 {
+		t.Fatalf("with a layer limit: %+v", st)
 	}
 }
 

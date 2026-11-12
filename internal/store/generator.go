@@ -85,8 +85,10 @@ func (s *Store) queryCandidates(ctx context.Context, query string, args ...any) 
 	return out, rows.Err()
 }
 
-// LayerRead returns the cached files of a layer digest (gzip JSON), whether
-// that read was cut off by a bound, and whether the layer was read at all.
+// LayerRead returns a cached read of an immutable blob or blob chain (gzip
+// JSON): the release reader keys layer records by their chain key
+// (imagelayers.LayerKeys) and image configs by their digest. partial says
+// the read was cut off by a bound; ok whether anything is cached.
 func (s *Store) LayerRead(ctx context.Context, digest string) (files []byte, partial, ok bool, err error) {
 	err = s.db.QueryRowContext(ctx, `SELECT files, partial FROM layer_reads WHERE digest = ?`, digest).Scan(&files, &partial)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -98,8 +100,8 @@ func (s *Store) LayerRead(ctx context.Context, digest string) (files []byte, par
 	return files, partial, true, nil
 }
 
-// PutLayerRead stores what was read from a layer, replacing an earlier read
-// of the same digest. files is gzip-compressed JSON.
+// PutLayerRead stores a read under its key (see LayerRead), replacing an
+// earlier one. files is gzip-compressed JSON.
 func (s *Store) PutLayerRead(ctx context.Context, digest string, files []byte, partial bool, readAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO layer_reads (digest, files, partial, read_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT (digest) DO UPDATE SET files = excluded.files, partial = excluded.partial, read_at = excluded.read_at`,
@@ -125,14 +127,41 @@ func (s *Store) ReleaseRead(ctx context.Context, appID, image, platform string) 
 }
 
 // PutReleaseRead stores a release read, replacing the earlier one of the
-// same app, image and platform.
+// same app, image and platform. The limits of the earlier read are
+// cleared (SetReleaseReadLimits).
 func (s *Store) PutReleaseRead(ctx context.Context, appID, image, platform, tag, indexDigest string, line []byte, readAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO release_reads (app_id, image, platform, tag, index_digest, line, read_at) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (app_id, image, platform) DO UPDATE SET tag = excluded.tag, index_digest = excluded.index_digest,
-		line = excluded.line, read_at = excluded.read_at`,
+		line = excluded.line, read_at = excluded.read_at, limits = ''`,
 		appID, image, platform, tag, indexDigest, line, millis(readAt))
 	if err != nil {
 		return fmt.Errorf("put release read: %w", err)
+	}
+	return nil
+}
+
+// ReleaseReadLimits returns the limits a release read was made with;
+// empty when unknown or when there is no such read.
+func (s *Store) ReleaseReadLimits(ctx context.Context, appID, image, platform string) (string, error) {
+	var limits string
+	err := s.db.QueryRowContext(ctx, `SELECT limits FROM release_reads WHERE app_id = ? AND image = ? AND platform = ?`,
+		appID, image, platform).Scan(&limits)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("query release read limits: %w", err)
+	}
+	return limits, nil
+}
+
+// SetReleaseReadLimits records the limits a stored release read was made
+// with.
+func (s *Store) SetReleaseReadLimits(ctx context.Context, appID, image, platform, limits string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE release_reads SET limits = ? WHERE app_id = ? AND image = ? AND platform = ?`,
+		limits, appID, image, platform)
+	if err != nil {
+		return fmt.Errorf("set release read limits: %w", err)
 	}
 	return nil
 }

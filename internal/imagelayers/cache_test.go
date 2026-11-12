@@ -135,7 +135,67 @@ func TestCacheReplaysLayers(t *testing.T) {
 			if string(ja) != string(jb) || fmt.Sprint(errA) != fmt.Sprint(errB) {
 				t.Fatalf("packages from the replayed view:\n%s %v\nwant\n%s %v", jb, errB, ja, errA)
 			}
+			// Under every other config the records give the view read
+			// from the blobs, reading a layer again only for content
+			// they lack.
+			for _, other := range otherConfigs {
+				want := snapshot(build(t, img, other, tc.lim))
+				v, err := BuildCached(t.Context(), img.layers, img.open, other, tc.lim, cache)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := snapshot(v); got != want {
+					t.Fatalf("config %+v from records:\n%s\nwant\n%s", other, got, want)
+				}
+			}
 		})
+	}
+}
+
+// otherConfigs read other programs and working directories.
+var otherConfigs = []docker.ImageConfig{
+	{},
+	{Entrypoint: []string{"/bin/app"}, WorkingDir: "/app"},
+	{Cmd: []string{"gosu"}, WorkingDir: "/srv/web"},
+	{WorkingDir: "/var/lib"},
+}
+
+// Records are shared by images on the same base whatever their config: a
+// config that reads nothing more of a layer replays it without its blob;
+// one that reads a file the record lacks reads the layer once and adds
+// the file, after which neither config needs the blob.
+func TestCacheSharedAcrossConfigs(t *testing.T) {
+	img := newImage(t, gzipType,
+		[]entry{file("etc/os-release", "ID=debian\n"), file("var/lib/dpkg/status", statusFile)},
+		[]entry{file("app/package.json", `{"name":"web","version":"1.2.3"}`)},
+	)
+	a := docker.ImageConfig{Cmd: []string{"nginx"}}
+	b := docker.ImageConfig{Cmd: []string{"node"}, WorkingDir: "/srv"}
+	c := docker.ImageConfig{WorkingDir: "/app"}
+	cache := &memCache{recs: map[string][]byte{}}
+	var opened []string
+	open := func(ctx context.Context, l registry.Layer) (io.ReadCloser, error) {
+		opened = append(opened, l.Digest)
+		return img.open(ctx, l)
+	}
+	for _, step := range []struct {
+		cfg  docker.ImageConfig
+		want int
+	}{{a, 2}, {b, 0}, {c, 1}, {c, 0}, {a, 0}, {b, 0}} {
+		opened = nil
+		v, err := BuildCached(t.Context(), img.layers, open, step.cfg, Limits{}, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(opened) != step.want {
+			t.Fatalf("config %+v opened %d layers, want %d", step.cfg, len(opened), step.want)
+		}
+		if got, want := snapshot(v), snapshot(build(t, img, step.cfg, Limits{})); got != want {
+			t.Fatalf("config %+v:\n%s\nwant\n%s", step.cfg, got, want)
+		}
+	}
+	if len(cache.recs) != 2 {
+		t.Fatalf("%d records for 2 layers", len(cache.recs))
 	}
 }
 
@@ -169,29 +229,56 @@ func TestCacheSkipsCutLayer(t *testing.T) {
 	}
 }
 
-// The key of a layer changes with the layers below it, the configuration
-// and the limits: a record is replayed only onto the view it was made on.
+// The key of a layer changes with the layers below it and the limits,
+// not with the config. Fields are hashed unambiguously: a media type that
+// smuggles a second layer in cannot reproduce another chain's key, and
+// such a layer is refused.
 func TestLayerKeys(t *testing.T) {
-	a := registry.Layer{Digest: "sha256:" + strings.Repeat("a", 64), MediaType: gzipType}
-	b := registry.Layer{Digest: "sha256:" + strings.Repeat("b", 64), MediaType: gzipType}
-	c := registry.Layer{Digest: "sha256:" + strings.Repeat("c", 64), MediaType: gzipType}
-	base := LayerKeys([]registry.Layer{a, b}, docker.ImageConfig{}, Limits{})
+	d := func(c string) string { return "sha256:" + strings.Repeat(c, 64) }
+	a := registry.Layer{Digest: d("a"), MediaType: gzipType}
+	b := registry.Layer{Digest: d("b"), MediaType: gzipType}
+	c := registry.Layer{Digest: d("c"), MediaType: gzipType}
+	keys := func(ls ...registry.Layer) []string {
+		t.Helper()
+		k, err := LayerKeys(ls, Limits{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return k
+	}
+	base := keys(a, b)
 	if base[0] == base[1] {
 		t.Fatal("two layers share a key")
 	}
-	if again := LayerKeys([]registry.Layer{a, b, c}, docker.ImageConfig{}, Limits{}); again[0] != base[0] || again[1] != base[1] {
+	if again := keys(a, b, c); again[0] != base[0] || again[1] != base[1] {
 		t.Fatal("a layer above changed the keys below it")
 	}
-	if other := LayerKeys([]registry.Layer{c, b}, docker.ImageConfig{}, Limits{}); other[1] == base[1] {
+	if other := keys(c, b); other[1] == base[1] {
 		t.Fatal("a layer on another base kept its key")
 	}
-	if other := LayerKeys([]registry.Layer{a, b}, docker.ImageConfig{Entrypoint: []string{"/app"}}, Limits{}); other[0] == base[0] {
-		t.Fatal("another configuration kept the key")
-	}
-	if other := LayerKeys([]registry.Layer{a, b}, docker.ImageConfig{Labels: map[string]string{"x": "y"}}, Limits{}); other[0] != base[0] {
-		t.Fatal("a label the reader does not use changed the key")
-	}
-	if other := LayerKeys([]registry.Layer{a, b}, docker.ImageConfig{}, Limits{Files: 3}); other[0] == base[0] {
+	if other, _ := LayerKeys([]registry.Layer{a, b}, Limits{Files: 3}); other[0] == base[0] {
 		t.Fatal("other limits kept the key")
+	}
+	for _, bad := range []registry.Layer{
+		{Digest: d("a"), MediaType: gzipType + "\x01" + d("b") + "\x00" + gzipType},
+		{Digest: d("a"), MediaType: "x+gzip"},
+		{Digest: "sha256:" + strings.Repeat("A", 64), MediaType: gzipType},
+		{Digest: d("a") + "\x01", MediaType: gzipType},
+	} {
+		if _, err := LayerKeys([]registry.Layer{bad}, Limits{}); err == nil {
+			t.Errorf("layer %+v accepted", bad)
+		}
+		img := newImage(t, gzipType, []entry{file("etc/os-release", "ID=x\n")})
+		img.layers[0] = bad
+		if _, err := BuildCached(t.Context(), img.layers, img.open, docker.ImageConfig{}, Limits{}, &memCache{recs: map[string][]byte{}}); err == nil {
+			t.Errorf("build with layer %+v accepted", bad)
+		}
+	}
+	// The crafted pair (digest a, media type carrying b) against the chain
+	// (a, b): different keys even if it were accepted.
+	crafted := hashJSON([]any{"imagelayers record", recordFormat, docker.ReaderFormat, LimitsKey(Limits{}),
+		[]string{d("a"), gzipType + "\x01" + d("b") + "\x00" + gzipType}})
+	if crafted == base[1] || crafted == base[0] {
+		t.Fatal("crafted media type reproduced a chain key")
 	}
 }

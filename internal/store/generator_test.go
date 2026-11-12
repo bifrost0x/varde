@@ -70,6 +70,22 @@ func TestReleaseReads(t *testing.T) {
 	if err != nil || !ok || tag != "1.1" || dig != "sha256:j" || string(line) != `{"v":2}` {
 		t.Fatalf("read: %q %q %q %v %v", tag, dig, line, ok, err)
 	}
+	if l, err := s.ReleaseReadLimits(ctx, "a", "img", "linux/amd64"); err != nil || l != "" {
+		t.Fatalf("limits before: %q %v", l, err)
+	}
+	if err := s.SetReleaseReadLimits(ctx, "a", "img", "linux/amd64", "k1"); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := s.ReleaseReadLimits(ctx, "a", "img", "linux/amd64"); err != nil || l != "k1" {
+		t.Fatalf("limits: %q %v", l, err)
+	}
+	// A new read clears the limits of the one it replaces.
+	if err := s.PutReleaseRead(ctx, "a", "img", "linux/amd64", "1.1", "sha256:j", []byte(`{"v":2}`), at); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := s.ReleaseReadLimits(ctx, "a", "img", "linux/amd64"); err != nil || l != "" {
+		t.Fatalf("limits after a new read: %q %v", l, err)
+	}
 	all, err := s.ReleaseReads(ctx)
 	if err != nil || len(all) != 2 || string(all[0]) != `{"v":2}` {
 		t.Fatalf("all: %q %v", all, err)
