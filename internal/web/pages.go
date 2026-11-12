@@ -501,8 +501,37 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		RegistryTags                    bool
 		Paths                           []paths.Path
 		History                         []historyEntry
+		// Image is set for a flaw in a package of the container's image.
+		Image *imageFinding
 	}{f, m, a.appName(f.AppID), wl.Name, host, details, a.update(r.Context(), f, m, wl), a.d.Settings.Get().RegistryTags, a.findingPaths(r, f.ID),
-		a.findingHistory(r, f.ID)}})
+		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl)}})
+}
+
+// imageFinding is what the page says about a flaw in a package of a
+// container's image. The versions of such a finding are the package's, not
+// the app's: the page names the container and its image first and says what
+// Varde can and cannot know about a fixed image.
+type imageFinding struct {
+	// Ref is the image the container runs.
+	Ref string
+	// App and AppVersion name what runs in the container, when recognised.
+	App, AppVersion string
+	// Floating is set when the container runs a moving tag.
+	Floating bool
+	Compose  *remedy.Compose
+}
+
+func (a *app) imageFinding(ctx context.Context, m match.Finding, wl inventory.Workload) *imageFinding {
+	if !m.Image || wl.Container == nil {
+		return nil
+	}
+	v := &imageFinding{Ref: wl.Container.ImageRef, Floating: remedy.Floating(wl.Container), Compose: remedy.ComposeOf(wl.Container)}
+	if ids, err := a.d.Store.Identifications(ctx); err == nil {
+		if id, ok := ids[wl.ID]; ok && id.AppID != "" {
+			v.App, v.AppVersion = a.appName(id.AppID), id.Version
+		}
+	}
+	return v
 }
 
 // update is the concrete update for an affected container finding: the

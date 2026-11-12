@@ -24,7 +24,7 @@
 {{template "pathcards" $d.LAN}}{{end}}
 {{if lt $d.Shown $d.Count}}<p class="small muted">The {{$d.Shown}} most dangerous of {{$d.Count}} paths are shown.</p>{{end}}
 {{end}}
-<p class="small muted">Varde cannot see router port forwards or firewalls. A path from the internet is based on proxy routes under your public domains; a flaw whose attack vector is not published is assumed to be remote and marked as such.</p>
+<p class="small muted">A path starts with a flaw in a service that answers, or with a service that needs no sign-in. A flaw in a library of an image or of a service counts as a way in only when it is known or likely to be exploited (CISA KEV, or EPSS from 0.10): nearly every image has some library flaw, and whether the app uses the flawed part is unknown. The others are listed under <a href="/findings?path=unclear">findings Varde cannot place</a>. Varde cannot see router port forwards or firewalls. A path from the internet is based on proxy routes under your public domains; a flaw of the service itself whose attack vector is not published is assumed to be remote and marked as such.</p>
 {{end}}
 
 {{define "pathcards"}}
@@ -33,17 +33,26 @@
 <details class="group{{if eq .Entry "internet"}} group--p1{{end}}">
   <summary class="group__head">
     <span class="group__badges"><span class="badge {{if eq .Entry "internet"}}badge--p1{{else}}badge--p2{{end}}">{{if eq .Entry "internet"}}internet{{else}}LAN{{end}}</span></span>
-    <span class="group__title"><strong>{{.Impact}}</strong><span class="cell-sub">{{plural (len .Steps) "step"}}</span></span>
+    <span class="group__title"><strong>{{join .Targets ", "}}</strong><span class="cell-sub">{{if .Same}}{{len .Targets}} targets reached through one way in · {{.Gain}} · up to {{plural .MaxSteps "step"}}{{else}}{{if .Where}}{{.Where}} · {{.Gain}} · {{end}}{{plural (len .Steps) "step"}}{{end}}</span></span>
     <span class="group__action">{{.Cut}}{{if .Breaker}} <a class="small" href="/findings/{{.Breaker}}">Open the finding</a>{{end}}</span>
   </summary>
   <div class="group__body">
-    <ol class="path">
-    {{range .Steps}}
-      <li class="path__step path__step--{{.Kind}}">{{.Label}}{{if .Indirect}} <span class="badge badge--unverified">indirect</span>{{end}}{{if .FindingID}} <a class="mono small" href="/findings/{{.FindingID}}">{{.Advisory}}</a> {{template "prio" .Priority}}{{end}}</li>
+    {{if .Same}}<h3 class="small">To {{.Name}}</h3>{{end}}
+    {{template "pathsteps" .Steps}}
+    {{range .Same}}
+    <h3 class="small">To {{.Name}}</h3>
+    {{template "pathsteps" .Steps}}
     {{end}}
-    </ol>
   </div>
 </details>
 {{end}}
 </div>
+{{end}}
+
+{{define "pathsteps"}}
+<ol class="path">
+{{range .}}
+  <li class="path__step path__step--{{.Kind}}">{{.Label}}{{if .Indirect}} <span class="badge badge--unverified">indirect</span>{{end}}{{if .FindingID}} <a class="mono small" href="/findings/{{.FindingID}}">{{.Advisory}}</a> {{template "prio" .Priority}}{{end}}</li>
+{{end}}
+</ol>
 {{end}}
