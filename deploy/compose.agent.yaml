@@ -31,7 +31,7 @@ services:
     restart: unless-stopped
 
   agent:
-    image: bifrost0x/varde:${VARDE_VERSION:?set VARDE_VERSION to a release, e.g. in .env}
+    image: ${VARDE_IMAGE:-bifrost0x/varde}:${VARDE_VERSION:?set VARDE_VERSION to a release, e.g. in .env}
     command: ["agent"]
     environment:
       VARDE_SERVER_URL: https://varde.lan:8443
