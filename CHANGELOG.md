@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The Compose examples start on hosts without IPv6: the socket proxy binds IPv4 only
+  (`DISABLE_IPV6`). It exited in a loop where the kernel has IPv6 switched off.
 - The builder's store is published compressed on the branch `data`. It holds the text of public
   advisories, whose proofs of concept quote credentials; as plain text it raised a
   secret-scanning alert on the repository with every build.

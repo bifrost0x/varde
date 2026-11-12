@@ -28,6 +28,9 @@ services:
       VERSION: 1
       PING: 1
       POST: 0
+      # The proxy is reached over IPv4 inside the stack. Without this it also
+      # binds IPv6 and does not start on a host whose kernel has IPv6 off.
+      DISABLE_IPV6: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [varde-internal]
