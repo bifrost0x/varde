@@ -3,6 +3,7 @@
 package web
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -36,6 +37,9 @@ type todoGroup struct {
 	Count       int
 	Urgent, New int
 	Groups      []findingGroup
+	// Release says which of a container's image findings the newest
+	// release of its app fixes; set on the findings page only.
+	Release *releaseView
 }
 
 // todoGroups groups findings by what fixes them on which system.
@@ -125,6 +129,33 @@ func (a *app) todoGroups(s *snapshot, fs []store.Finding) []todoGroup {
 		return a.Name < b.Name
 	})
 	return out
+}
+
+// withReleases sets the release of each container group: one read of the
+// release lists and one of the advisories per container that has a newer
+// release, none per finding.
+func (a *app) withReleases(ctx context.Context, s *snapshot, groups []todoGroup, fs []store.Finding) {
+	arch := map[string]string{}
+	for _, h := range s.hosts {
+		arch[h.ID] = h.Arch
+	}
+	byWorkload := map[string][]store.Finding{}
+	for _, f := range fs {
+		byWorkload[f.WorkloadID] = append(byWorkload[f.WorkloadID], f)
+	}
+	for i := range groups {
+		g := &groups[i]
+		id, ok := strings.CutPrefix(g.Key, "w:")
+		if g.Kind != "image" || !ok {
+			continue
+		}
+		image := imageFindings(byWorkload[id])
+		if len(image) == 0 {
+			continue
+		}
+		wl := s.byID[id]
+		g.Release = a.containerRelease(ctx, wl, s.ids[wl.ID], arch[wl.HostID], image)
+	}
 }
 
 // todoAction says what fixes a group's findings, what needs saying about

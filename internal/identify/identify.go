@@ -966,7 +966,7 @@ func ImageLanguagePackages(c *inventory.Container) []distro.Package {
 		}
 		seen[pkg] = true
 		out = append(out, pkg)
-		if len(out) == maxImageSystemPackages {
+		if len(out) == MaxImagePackages {
 			break
 		}
 	}
@@ -979,8 +979,10 @@ var languageEcosystem = map[string]string{
 	"pip": "PyPI", "composer": "Packagist", "gem": "RubyGems", "nuget": "NuGet", "maven": "Maven", "cargo": "crates.io",
 }
 
-// maxImageSystemPackages bounds the source packages checked per image.
-const maxImageSystemPackages = 5000
+// MaxImagePackages bounds the source packages checked per image, and
+// separately its language packages. A list cut at it may lack a package
+// the image has (remedy.ReleaseFixFor).
+const MaxImagePackages = 5000
 
 // ImageSystemPackages are the source packages of a container's image on a
 // release with distribution security data, at the highest version among
@@ -997,8 +999,8 @@ func ImageSystemPackages(c *inventory.Container) []distro.Package {
 		}
 	}
 	out := distro.Checked(c.Distro, pkgs, distro.CheckOptions{Image: true})
-	if len(out) > maxImageSystemPackages {
-		out = out[:maxImageSystemPackages]
+	if len(out) > MaxImagePackages {
+		out = out[:MaxImagePackages]
 	}
 	return out
 }

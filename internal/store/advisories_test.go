@@ -41,6 +41,16 @@ func TestAdvisoriesAndEnrichment(t *testing.T) {
 		t.Fatalf("cves: %v %v", cves, err)
 	}
 
+	if err := s.ReplaceAdvisories(ctx, "system:Debian:12/openssl", "distro", []AdvisoryRecord{{Vuln: advisory.Vulnerability{ID: "DEBIAN-CVE-2026-3", Modified: now}}}, now); err != nil {
+		t.Fatal(err)
+	}
+	byApp, err := s.AdvisoriesFor(ctx, []string{"immich", "system:Debian:12/openssl", "absent"})
+	if err != nil || len(byApp) != 2 || len(byApp["immich"]) != 2 || len(byApp["system:Debian:12/openssl"]) != 1 || byApp["immich"][0].AppID != "immich" {
+		t.Fatalf("advisories for apps: %+v %v", byApp, err)
+	}
+	if none, err := s.AdvisoriesFor(ctx, nil); err != nil || len(none) != 0 {
+		t.Fatalf("no apps: %v %v", none, err)
+	}
 	if err := s.ReplaceKEV(ctx, []KEVEntry{{CVE: "CVE-2026-1", DateAdded: "2026-11-01"}}); err != nil {
 		t.Fatal(err)
 	}
