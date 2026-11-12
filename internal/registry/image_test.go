@@ -35,7 +35,7 @@ type imageRegistry struct {
 	redirect  string // blob redirect target, when set
 }
 
-func newImageRegistry(t *testing.T, opts ...Option) (*imageRegistry, *Client, string) {
+func newImageRegistry(t *testing.T) (*imageRegistry, *Client, string) {
 	t.Helper()
 	r := &imageRegistry{manifests: map[string]string{}, blobs: map[string]string{}}
 	r.srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -87,7 +87,7 @@ func newImageRegistry(t *testing.T, opts ...Option) (*imageRegistry, *Client, st
 	pool.AddCert(r.srv.Certificate())
 	hc := httpx.New(httpx.Options{RootCAs: pool, Timeout: 5 * time.Second})
 	host := strings.TrimPrefix(r.srv.URL, "https://")
-	return r, New(hc, opts...), host
+	return r, New(hc), host
 }
 
 func (r *imageRegistry) addManifest(ref, body string) string {
@@ -211,7 +211,7 @@ func TestBlobMaxBytes(t *testing.T) {
 }
 
 func TestBlobRedirectDropsCredentials(t *testing.T) {
-	r, c, host := newImageRegistry(t)
+	r, _, host := newImageRegistry(t)
 	var cdnAuth string
 	var cdnHits int
 	var cdnHeaders http.Header
@@ -225,7 +225,7 @@ func TestBlobRedirectDropsCredentials(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(r.srv.Certificate())
 	pool.AddCert(cdn.Certificate())
-	c = New(httpx.New(httpx.Options{RootCAs: pool, Timeout: 5 * time.Second, AllowInternalRedirects: true}), WithCredentials(host, "user", "tok"))
+	c := New(httpx.New(httpx.Options{RootCAs: pool, Timeout: 5 * time.Second, AllowInternalRedirects: true}), WithCredentials(host, "user", "tok"))
 	r.redirect = cdn.URL
 	d := sum("layer")
 	rc, err := c.Blob(t.Context(), host+"/org/app", d, 1<<20)
