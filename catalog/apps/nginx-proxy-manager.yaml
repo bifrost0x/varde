@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+id: nginx-proxy-manager
+name: Nginx Proxy Manager
+homepage: https://nginxproxymanager.com
+tags: [reverse-proxy, nginx]
+images:
+  - match: jc21/nginx-proxy-manager
+version:
+  scheme: semver
+  sources:
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)$'
+advisories:
+  coverage: limited
+  github_repos:
+    - NginxProxyManager/nginx-proxy-manager
+  cpe:
+    - cpe:2.3:a:jc21:nginx_proxy_manager
+    - cpe:2.3:a:nginxproxymanager:nginx_proxy_manager
+  notes: >-
+    SECURITY.md names GitHub private vulnerability reporting and states that public GitHub
+    Security Advisories will be published in NginxProxyManager/nginx-proxy-manager, but none are
+    published yet. CVEs exist in NVD under two CPE vendors (jc21, nginxproxymanager); recent
+    ones (e.g. CVE-2026-40519, CVE-2026-102334, CVE-2026-102335) appear only as unreviewed
+    GitHub advisories without package data and partly without CPE, so Varde's own pipeline has
+    to pick them up by keyword. Only the latest stable release receives fixes. Fixes are
+    mentioned in GitHub release notes. No npm package, no OSV package. The image has no OCI
+    labels; latest, 2 and v3 are floating, so pin a version tag or set varde.version.
+exposure_hints:
+  default_ports: [80, 443, 81]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

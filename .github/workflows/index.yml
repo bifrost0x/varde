@@ -1,0 +1,70 @@
+name: index
+
+# Rebuilds the first-party index (index/images.tsv, ADR 0038) once a week and
+# opens a pull request when it changed. The table is reviewed like any other
+# change; nothing is published from here.
+#
+# A pull request opened with the workflow token does not start other
+# workflows: close and reopen it, or push to its branch, to run CI on it.
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: index
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build the index
+        env:
+          # Used for GitHub's repository search only; every other request is anonymous.
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          make index-fetch
+          # The builder refuses to write the table when too many requests
+          # failed or the table shrank a lot; the job then fails here.
+          make index | tee index-stats.txt
+          go test ./index/
+      - name: Open a pull request when the table changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- index/images.tsv; then
+            echo "index unchanged"
+            exit 0
+          fi
+          branch="index/update-$(date -u +%Y-%m-%d)-${GITHUB_RUN_NUMBER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add index/images.tsv
+          git commit -m "data: rebuild the first-party index"
+          git push origin "$branch"
+          {
+            echo "Rebuilt by the weekly index workflow. Every row rests on what the project or the registry states itself (see index/SOURCES.md)."
+            echo
+            echo '```'
+            tail -n 12 index-stats.txt
+            echo '```'
+          } > pr-body.md
+          gh pr create --base main --head "$branch" --title "data: rebuild the first-party index" --body-file pr-body.md

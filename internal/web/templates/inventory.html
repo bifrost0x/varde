@@ -1,0 +1,54 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}{{$csrf := .CSRF}}
+<div class="page-head">
+  <div><h1>Apps and containers</h1><p>Every container and every app Varde recognised among the installed packages, grouped by system, with the version and where it comes from. The full package list of a system is on its page.</p></div>
+</div>
+{{if $d.WithoutReads}}<p class="small muted">{{plural $d.WithoutReads "further system"}} without containers or recognised apps are listed under <a href="/systems">Systems</a>, with their packages and what Varde cannot read yet.</p>{{end}}
+{{range $d.Hosts}}
+<section class="panel" aria-labelledby="h-{{.Machine.ID}}">
+  <div class="panel__head">
+    <h2 id="h-{{.Machine.ID}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#server"></use></svg> <a href="/systems/{{.Machine.ID}}">{{.Machine.Name}}</a>{{if .Machine.Self}} <span class="badge badge--muted">this server</span>{{end}}</h2>
+    <span class="small muted">{{machineKind .Machine.Kind}}{{if .Machine.OS}} · {{.Machine.OS}}{{end}}{{if .Machine.Addresses}} · <span class="mono">{{index .Machine.Addresses 0}}</span>{{end}} · {{plural (len .Workloads) "workload"}}</span>
+  </div>
+  {{if .Workloads}}
+  <table class="table">
+    <thead><tr><th scope="col">Workload</th><th scope="col">App</th><th scope="col">Version</th><th scope="col">Exposure</th><th scope="col">Findings</th></tr></thead>
+    <tbody>
+    {{range .Workloads}}
+    <tr id="w-{{.ID}}">
+      <td data-label="Workload">{{.Name}}{{if .Stack}} <span class="badge badge--muted">{{.Stack}}</span>{{end}}<span class="cell-sub mono">{{.Image}}</span>{{if .Pulled}}<span class="badge badge--unverified">newer image pulled</span><span class="cell-sub">The tag points to an image this container does not run yet. Recreate it (for Compose: <code>docker compose up -d</code>) to run it.</span>{{end}}{{if .EOL}}<span class="badge badge--unverified">end of life</span><span class="cell-sub">{{.EOL}}</span>{{end}}{{if .Changed}}<span class="badge badge--muted">changed inside</span><span class="cell-sub">Changed in the container since its image: <span class="mono">{{join .Changed ", "}}</span>. Varde does not use the image's version evidence from these files.</span>{{end}}</td>
+      <td data-label="App">
+        {{if .Derived}}{{.AppName}} <span class="badge badge--unverified">recognised automatically</span><span class="cell-sub">{{.Basis}}. Confirm with label <code>varde.app={{.AppID}}</code> to get alerts</span>{{else if .Basis}}{{.AppName}} <span class="badge badge--muted">recognised automatically</span><span class="cell-sub">{{.Basis}}</span>{{else if eq .Confidence "exact"}}{{.AppName}}{{else if eq .Confidence "strong"}}{{.AppName}} <span class="badge badge--muted">via source label</span>{{else if eq .Confidence "weak"}}<span class="badge badge--unverified">probably {{.AppName}}</span><span class="cell-sub">Confirm with label <code>varde.app={{.AppID}}</code></span>{{else if .NotApp}}<span class="muted">helper, not counted</span><span class="cell-sub">{{.NotApp}}</span>{{else}}<span class="muted">not in catalog</span>{{end}}
+      </td>
+      <td data-label="Version">{{if .Version}}<span class="mono">{{.Version}}</span>{{if eq .Trust "conflict"}} <span class="badge badge--unverified">sources disagree</span>{{else if eq .Trust "reported"}} <span class="badge badge--muted">reported</span>{{end}}<span class="cell-sub">{{if .Doubt}}{{truncate .Doubt 160}}{{else}}{{.VersionSource}}{{end}}</span>{{else if .Distro}}<span class="mono">{{.PackageVersion}}</span> <span class="badge badge--muted">{{.Distro}}</span><span class="cell-sub">Distribution package, checked against the {{.Distro}} security data</span>{{else if .AppID}}<span class="badge badge--unverified">unknown</span><span class="cell-sub">{{truncate .Note 140}}</span>{{else}}<span class="muted">–</span>{{end}}</td>
+      <td data-label="Exposure">{{template "exposure" .Exposure}}</td>
+      <td data-label="Findings">{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else}}<span class="muted">none</span>{{end}}
+        {{if .Manual}}<form method="post" action="/systems/apps/{{.ID}}/delete" data-confirm="Remove the manual entry {{.Name}}?">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Remove</button></form>{{end}}
+      </td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{else}}<p class="muted small">No workloads reported.</p>{{end}}
+</section>
+{{else}}
+<div class="empty panel"><img src="/static/brand/mark-unlit.svg" alt=""><h2>Nothing inventoried yet</h2>{{if $d.LocalDocker}}<p>Varde is waiting for the first Docker sync. Check that the socket proxy is reachable.</p>{{else if $d.AnyIntegrated}}<p>The connected platforms have not reported workloads yet. Their state is under <a href="/connections#integrations">Connections</a>.</p>{{else}}<p>The local Docker collector is off. Connect a Docker host or Proxmox, or install the agent, under <a href="/connections">Connections</a>.</p>{{end}}</div>
+{{end}}
+
+<section class="panel" aria-labelledby="manual-title">
+  <h2 id="manual-title">Add a manual entry</h2>
+  <p class="small muted">For appliances and anything Varde cannot observe (NAS firmware, routers). Manual entries need you to keep the version current.</p>
+  <form class="form" method="post" action="/systems/apps/manual">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="m-host">Device or host</label><input id="m-host" name="host_name" type="text" required maxlength="128"></div>
+    <div class="field"><label for="m-name">Name</label><input id="m-name" name="name" type="text" required maxlength="128"></div>
+    <div class="field"><label for="m-app">App</label>
+      <select id="m-app" name="app_id" required>{{range $d.Apps}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
+    <div class="field"><label for="m-version">Version</label><input id="m-version" name="version" type="text" required maxlength="64" spellcheck="false"></div>
+    <div class="field"><label for="m-exposure">Exposure</label>
+      <select id="m-exposure" name="exposure"><option value="lan">LAN</option><option value="public">Public</option><option value="internal">Internal</option><option value="unknown">Unknown</option></select></div>
+    <button class="btn btn--primary" type="submit">Add entry</button>
+  </form>
+</section>
+{{end}}

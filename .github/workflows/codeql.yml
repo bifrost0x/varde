@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: Apache-2.0
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "45 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    # Code scanning uploads need a public repository (or GitHub Advanced
+    # Security). Skip while private instead of failing on every push.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build_mode: manual
+          - language: actions
+            build_mode: none
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # The CodeQL bundle is downloaded from GitHub releases, which can fail
+      # transiently. Retry twice with a pause before giving up.
+      - name: Initialize CodeQL
+        id: init
+        continue-on-error: true
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build_mode }}
+      - name: Wait before retrying CodeQL setup
+        if: steps.init.outcome == 'failure'
+        run: sleep 60
+      - name: Initialize CodeQL (second attempt)
+        id: init_retry
+        if: steps.init.outcome == 'failure'
+        continue-on-error: true
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build_mode }}
+      - name: Wait before the last CodeQL setup attempt
+        if: steps.init_retry.outcome == 'failure'
+        run: sleep 180
+      - name: Initialize CodeQL (last attempt)
+        if: steps.init_retry.outcome == 'failure'
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build_mode }}
+      - name: Build Go packages
+        if: matrix.language == 'go'
+        run: go build ./...
+      - name: Analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}

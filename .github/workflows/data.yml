@@ -1,0 +1,101 @@
+name: data
+
+# Builds the daily data package (ADR 0039, docs/data-package.md) and
+# publishes it on the branch "data": the signed package every installation
+# reads, plus the builder's store for the next build. The store and the
+# counts of the package are signed by the builder with the feed key and
+# used by the next build only when that signature holds: the branch is
+# writable by more than can sign a package.
+#
+# The job does nothing until the repository variable DATA_PACKAGE_ENABLED
+# is "true". That is set in the key ceremony, together with the secret
+# VARDE_FEED_KEY (the private feed key) in the environment "data-package"
+# and the trust root in internal/feed/roots/production.json. Limiting that
+# environment to the branch main is a repository setting this file cannot
+# make: without it, any workflow that names the environment gets the key.
+#
+# A build that looks broken is refused by the builder; the job then fails
+# and the package published before stays.
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Sign although the package shrank a lot (after checking why)"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Only from main: a run started on another branch would build and
+    # publish that branch's builder, catalog and index.
+    if: vars.DATA_PACKAGE_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    environment: data-package
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Fetch the published package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p published work/cache
+          # Exit code 2 means the branch does not exist. Anything else is a
+          # failure: treating it as a first build would publish without the
+          # earlier trust roots and without the checks against yesterday.
+          rc=0
+          git ls-remote --exit-code --heads origin data >/dev/null || rc=$?
+          case "${rc}" in
+            0)
+              git fetch --depth 1 origin data
+              # More people and tokens can write this branch than can sign.
+              # Only plain files are taken from it: no symlinks, nothing
+              # executable, no submodules. The builder checks the content.
+              if git ls-tree -r FETCH_HEAD | awk '$1 != "100644" { bad = 1; print "unexpected entry: " $0 } END { exit bad }'; then
+                git archive FETCH_HEAD | tar -x -C published
+              else
+                echo "the branch data holds entries that are not plain files; refusing to build from it" >&2
+                exit 1
+              fi
+              ;;
+            2)
+              echo "no branch data yet: first build"
+              ;;
+            *)
+              echo "could not ask the remote for the branch data (exit ${rc})" >&2
+              exit 1
+              ;;
+          esac
+          for f in builder.db builder.db.sig; do
+            if [[ -f "published/cache/${f}" && ! -L "published/cache/${f}" ]]; then
+              cp "published/cache/${f}" "work/cache/${f}"
+            fi
+          done
+      - name: Build, check and sign
+        env:
+          VARDE_FEED_KEY: ${{ secrets.VARDE_FEED_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force && '-force' || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # FORCE is one flag or nothing
+          go run ./cmd/packagebuilder -db work/cache/builder.db -previous published/feed -out work/feed ${FORCE} | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/publish-data.sh work

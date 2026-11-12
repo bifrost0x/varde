@@ -1,0 +1,58 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    gosec:
+      excludes: []
+    misspell:
+      ignore-rules:
+        - mosquitto
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: unused-parameter
+        - name: context-as-argument
+        - name: context-keys-type
+  exclusions:
+    generated: strict
+    presets:
+      - std-error-handling
+    rules:
+      # Test helpers deliberately exercise insecure inputs and unchecked
+      # paths; response bodies are closed inside shared helpers.
+      - path: _test\.go
+        linters: [gosec, noctx, bodyclose]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/bifrost0x/varde

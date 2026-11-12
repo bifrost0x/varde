@@ -1,0 +1,173 @@
+# SPDX-License-Identifier: Apache-2.0
+# Synthetic cases for behaviour the real images do not show. Each states why it exists.
+
+containers:
+  - name: conflicting label and tag
+    why: the tag and the publisher label disagree; Varde must not pick one silently
+    image: vaultwarden/server:1.36.0
+    image_labels: {org.opencontainers.image.version: "1.37.5"}
+    truth: {app: vaultwarden, version: "", basis: none, trust: conflict}
+  - name: user pins the version
+    why: varde.version overrides a wrong label
+    image: vaultwarden/server:latest
+    image_labels: {org.opencontainers.image.version: "main"}
+    labels: {varde.version: "1.37.5"}
+    truth: {app: vaultwarden, version: "1.37.5", basis: user}
+  - name: digest only
+    why: pinned by digest without a tag or label; no version
+    image: vaultwarden/server@sha256:2f1a8b2e3e9ae1e8a3c45c3d7a2e1c1b4f2f6f3a1e1d0c9b8a7f6e5d4c3b2a10
+    truth: {app: vaultwarden, version: "", basis: none}
+  - name: unknown image named like an app
+    why: a container called jellyfin from another image is only a probable match
+    image: example.org/someone/media-server:1.0.0
+    container_name: jellyfin
+    truth: {app: jellyfin, version: "", basis: none, weak: true}
+  - name: minor-line tag and full label
+    why: tag 1.37 tracks the 1.37 line; the label 1.37.5 agrees with it
+    image: vaultwarden/server:1.37
+    image_labels: {org.opencontainers.image.version: "1.37.5"}
+    truth: {app: vaultwarden, version: "1.37.5", basis: label}
+  - name: upstream package in the image only
+    why: the lsio Jellyfin image of the real corpus without its build label; the jellyfin-server package of the project's repository still states the release
+    image: lscr.io/linuxserver/jellyfin:latest
+    packages: [{manager: dpkg, name: jellyfin-server, version: "12.4+ubu2604", distro: ubuntu-26.04}]
+    truth: {app: jellyfin, version: "12.4", basis: package}
+
+# Hosts and devices seen by several sources. groups lists the expected
+# machines as sets of record IDs ("device:<address>" for scan results).
+topologies:
+  - name: proxmox guest read over ssh and found by the scan
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: pve-a-101, name: docker-vm, kind: proxmox-guest, source: proxmox, os: QEMU VM, addresses: [10.10.1.20, 172.17.0.1], integration_id: a, macs: ["bc:24:11:00:00:01"]}
+      - {id: ssh-b, name: docker-vm.lan, kind: docker-host, source: ssh, addresses: [10.10.1.20], integration_id: b}
+    devices: [10.10.1.20, 10.10.1.99]
+    groups: [[pve-a-101, ssh-b, "device:10.10.1.20"], ["device:10.10.1.99"]]
+  - name: same machine without a shared address, tied by MAC
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: pve-a-102, name: app-vm, kind: proxmox-guest, source: proxmox, os: QEMU VM, integration_id: a, macs: ["bc:24:11:00:00:02"]}
+      - {id: sshinv-c, name: app-vm, kind: linux, source: ssh-inventory, addresses: [10.10.2.5], integration_id: c, macs: ["bc:24:11:00:00:02", "02:42:ac:11:00:01"], machine_id: 0123456789abcdef0123456789abcdef}
+    groups: [[pve-a-102, sshinv-c]]
+  - name: two guests behind one address stay apart
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: pve-a-1, name: g1, kind: proxmox-guest, source: proxmox, addresses: [10.10.1.5], integration_id: a}
+      - {id: pve-a-2, name: g2, kind: proxmox-guest, source: proxmox, addresses: [10.10.1.5], integration_id: a}
+      - {id: ssh-x, name: d, kind: docker-host, source: ssh, addresses: [10.10.1.5], integration_id: x}
+    groups: [[pve-a-1], [pve-a-2], [ssh-x]]
+  - name: docker bridges are on every docker vm
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: pve-a-3, name: g3, kind: proxmox-guest, source: proxmox, addresses: [172.17.0.1, "fe80::1"], integration_id: a}
+      - {id: pve-a-4, name: g4, kind: proxmox-guest, source: proxmox, addresses: [172.17.0.1, "fe80::1"], integration_id: a}
+    groups: [[pve-a-3], [pve-a-4]]
+  - name: node and guest share an address
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: pve-a-node-pve, name: pve, kind: bare-metal, source: proxmox, addresses: [10.10.1.253], integration_id: a}
+      - {id: pve-a-6, name: g6, kind: proxmox-guest, source: proxmox, addresses: [10.10.1.253], integration_id: a}
+    groups: [[pve-a-node-pve], [pve-a-6]]
+  - name: two ssh records with one machine-id
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: sshinv-d, name: nas, kind: linux, source: ssh-inventory, addresses: [10.10.1.30], integration_id: d, machine_id: fedcba9876543210fedcba9876543210}
+      - {id: ssh-e, name: nas, kind: docker-host, source: ssh, addresses: [10.10.3.30], integration_id: e, machine_id: fedcba9876543210fedcba9876543210}
+    groups: [[sshinv-d, ssh-e]]
+
+  - name: a cluster with guests, one of them a docker host read over ssh
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: pve-a-node-pve1, name: pve1, kind: bare-metal, source: proxmox, addresses: [10.10.1.253], integration_id: a}
+      - {id: pve-a-node-pve2, name: pve2, kind: bare-metal, source: proxmox, addresses: [10.10.1.252], integration_id: a}
+      - {id: pve-a-201, name: media, kind: proxmox-guest, source: proxmox, os: LXC container, addresses: [10.10.1.40], integration_id: a, parent_id: pve-a-node-pve1}
+      - {id: pve-a-202, name: apps, kind: proxmox-guest, source: proxmox, os: QEMU VM, addresses: [10.10.1.41], integration_id: a, parent_id: pve-a-node-pve2, macs: ["bc:24:11:00:02:02"]}
+      - {id: ssh-f, name: apps.lan, kind: docker-host, source: ssh, addresses: [10.10.1.41], integration_id: f}
+    devices: [10.10.1.41, 10.10.1.253]
+    groups: [[pve-a-node-pve1, "device:10.10.1.253"], [pve-a-node-pve2], [pve-a-201], [pve-a-202, ssh-f, "device:10.10.1.41"]]
+    parents: {pve-a-201: pve-a-node-pve1, ssh-f: pve-a-node-pve2}
+
+  - name: vm without guest agent, tied to its address by the router's MAC table
+    scope: 10.10.1.0/24
+    hosts:
+      - {id: pve-a-301, name: legacy-vm, kind: proxmox-guest, source: proxmox, os: QEMU VM, integration_id: a, macs: ["bc:24:11:00:03:01"]}
+      - {id: lan-fb-bc2411000301, name: legacy-vm, kind: device, source: lease, addresses: [10.10.1.60], integration_id: fb, macs: ["bc:24:11:00:03:01"]}
+      - {id: lan-fb-aabbccddeeff, name: phone, kind: device, source: lease, addresses: [10.10.1.61], integration_id: fb, macs: ["aa:bb:cc:dd:ee:ff"]}
+      - {id: lan-op-aabbccddeeff, name: phone, kind: device, source: lease, addresses: [10.10.1.61], integration_id: op, macs: ["aa:bb:cc:dd:ee:ff"]}
+    devices: [10.10.1.60]
+    groups: [[pve-a-301, lan-fb-bc2411000301, "device:10.10.1.60"], [lan-fb-aabbccddeeff, lan-op-aabbccddeeff]]
+
+# Package lists read over SSH. "fixture" files hold real output of the
+# inventory command; inline lists are synthetic.
+packages:
+  - {name: debian trixie, fixture: inventory-debian.txt, truth: []}
+  - {name: fedora 42, fixture: inventory-fedora.txt, truth: []}
+  - {name: alpine 3.22, fixture: inventory-alpine.txt, truth: []}
+  - name: vendor and distribution packages
+    why: a vendor package carries the release version, a distribution package never does
+    list:
+      - {manager: dpkg, name: jellyfin-server, version: "12.4+deb12"}
+      - {manager: dpkg, name: pve-manager, version: "9.2.26"}
+      - {manager: dpkg, name: proxmox-backup-server, version: "4.2.9-1"}
+    truth:
+      - {app: jellyfin, version: "12.4"}
+      - {app: proxmox-ve, version: "9.2.26"}
+      - {app: proxmox-backup-server, version: "4.2.9"}
+  - name: appliance firmware
+    why: appliance integrations record the system's own version as a firmware package (ADR 0036); each names its product
+    list:
+      - {manager: firmware, name: synology-dsm, version: "7.2.1.69057.5"}
+      - {manager: firmware, name: qnap-qts, version: "5.1.4.2596"}
+      - {manager: firmware, name: qnap-quts-hero, version: "5.1.4.2596"}
+      - {manager: firmware, name: truenas, version: "24.10.1"}
+      - {manager: firmware, name: truenas-core, version: "13.0.6.2"}
+      - {manager: firmware, name: unraid, version: "7.1.4"}
+      - {manager: firmware, name: home-assistant-core, version: "2025.1.2"}
+      - {manager: firmware, name: fritzos, version: "7.57"}
+      - {manager: firmware, name: unifi-ap, version: "6.6.77"}
+      - {manager: firmware, name: unifi-switch, version: "7.1.66"}
+      - {manager: firmware, name: unifi-gateway, version: "4.0.6"}
+    truth:
+      - {app: synology-dsm, version: "7.2.1.69057.5"}
+      - {app: qnap-qts, version: "5.1.4.2596"}
+      - {app: qnap-quts-hero, version: "5.1.4.2596"}
+      - {app: truenas, version: "24.10.1"}
+      - {app: truenas-core, version: "13.0.6.2"}
+      - {app: unraid, version: "7.1.4"}
+      - {app: home-assistant, version: "2025.1.2"}
+      - {app: fritzos, version: "7.57"}
+      - {app: unifi-ap, version: "6.6.77"}
+      - {app: unifi-switch, version: "7.1.66"}
+      - {app: unifi-gateway, version: "4.0.6"}
+  - name: docker from its own repositories
+    why: docker-ce and containerd.io carry the release in their version; the distributions' packages do not and are left to their security data
+    list:
+      - {manager: dpkg, name: docker-ce, version: "5:27.3.1-1~debian.12~bookworm"}
+      - {manager: dpkg, name: containerd.io, version: "1.7.22-1"}
+    truth:
+      - {app: docker-engine, version: "27.3.1"}
+      - {app: containerd, version: "1.7.22"}
+  - name: docker from its rpm repository
+    why: the rpm builds carry an epoch and the el release
+    list:
+      - {manager: rpm, name: docker-ce, version: "3:26.1.4-1.el9"}
+      - {manager: rpm, name: containerd.io, version: "1.7.22-3.1.el9"}
+    truth:
+      - {app: docker-engine, version: "26.1.4"}
+      - {app: containerd, version: "1.7.22"}
+
+# Advisory matching. Advisory ranges are copied from the real GitHub
+# advisories named by ID. expect lists the advisories that must be affected;
+# all others must not be.
+matching:
+  advisories:
+    vaultwarden:
+      - {id: GHSA-h6cc-rc6q-23j4, fixed: "1.33.0"}
+      - {id: GHSA-569v-845w-g82p, fixed: "1.35.5"}
+      - {id: GHSA-69q9-v8p6-xvx3, fixed: "1.37.4"}
+  cases:
+    - {name: old release, app: vaultwarden, version: "1.30.0", trust: confirmed, expect: [GHSA-h6cc-rc6q-23j4, GHSA-569v-845w-g82p, GHSA-69q9-v8p6-xvx3]}
+    - {name: between fixes, app: vaultwarden, version: "1.35.5", trust: confirmed, expect: [GHSA-69q9-v8p6-xvx3]}
+    - {name: fixed release, app: vaultwarden, version: "1.37.5", trust: confirmed, expect: []}
+    - {name: endpoint only, why: an unauthenticated endpoint never confirms a version, app: vaultwarden, version: "1.30.0", trust: reported, expect: []}
+    - {name: sources disagree, app: vaultwarden, version: "1.30.0", trust: conflict, expect: []}

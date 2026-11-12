@@ -1,0 +1,605 @@
+{
+ "resultsPerPage": 3,
+ "startIndex": 0,
+ "totalResults": 26,
+ "format": "NVD_CVE",
+ "version": "2.0",
+ "timestamp": "2026-11-08T22:01:18.411",
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2017-9868",
+    "sourceIdentifier": "cve@mitre.org",
+    "published": "2017-06-25T14:29:00.167",
+    "lastModified": "2026-06-17T01:29:05.207",
+    "vulnStatus": "Modified",
+    "cveTags": [],
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "In Mosquitto through 1.4.12, mosquitto.db (aka the persistence file) is world readable, which allows local users to obtain sensitive MQTT topic information."
+     },
+     {
+      "lang": "es",
+      "value": "En Mosquitto hasta la versi\u00f3n 1.4.12, mosquitto.db (tambi\u00e9n conocido como archivo de persistencia) es legible por todo el mundo, lo que permite a los usuarios locales obtener informaci\u00f3n sensible de los topic's MQTT."
+     }
+    ],
+    "affected": [
+     {
+      "source": "cve@mitre.org",
+      "affectedData": [
+       {
+        "vendor": "n/a",
+        "product": "n/a",
+        "versions": [
+         {
+          "version": "n/a",
+          "status": "affected"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "metrics": {
+     "cvssMetricV30": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "3.0",
+        "vectorString": "CVSS:3.0/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
+        "baseScore": 5.5,
+        "baseSeverity": "MEDIUM",
+        "attackVector": "LOCAL",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "LOW",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "NONE",
+        "availabilityImpact": "NONE"
+       },
+       "exploitabilityScore": 1.8,
+       "impactScore": 3.6
+      }
+     ],
+     "cvssMetricV2": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "2.0",
+        "vectorString": "AV:L/AC:L/Au:N/C:P/I:N/A:N",
+        "baseScore": 2.1,
+        "accessVector": "LOCAL",
+        "accessComplexity": "LOW",
+        "authentication": "NONE",
+        "confidentialityImpact": "PARTIAL",
+        "integrityImpact": "NONE",
+        "availabilityImpact": "NONE"
+       },
+       "baseSeverity": "LOW",
+       "exploitabilityScore": 3.9,
+       "impactScore": 2.9,
+       "acInsufInfo": false,
+       "obtainAllPrivilege": false,
+       "obtainUserPrivilege": false,
+       "obtainOtherPrivilege": false,
+       "userInteractionRequired": false
+      }
+     ]
+    },
+    "weaknesses": [
+     {
+      "source": "nvd@nist.gov",
+      "type": "Primary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-200"
+       }
+      ]
+     }
+    ],
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:eclipse:mosquitto:*:*:*:*:*:*:*:*",
+          "versionEndIncluding": "1.4.12",
+          "matchCriteriaId": "CDE954B3-68D0-45E7-91DE-C5D3264D4596"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:o:debian:debian_linux:8.0:*:*:*:*:*:*:*",
+          "matchCriteriaId": "C11E6FB0-C8C0-4527-9AA0-CB9B316F8F43"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "references": [
+     {
+      "url": "https://github.com/eclipse/mosquitto/issues/468",
+      "source": "cve@mitre.org",
+      "tags": [
+       "Issue Tracking",
+       "Patch",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://lists.debian.org/debian-lts-announce/2018/09/msg00036.html",
+      "source": "cve@mitre.org",
+      "tags": [
+       "Mailing List",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://github.com/eclipse/mosquitto/issues/468",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Issue Tracking",
+       "Patch",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://lists.debian.org/debian-lts-announce/2018/09/msg00036.html",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Mailing List",
+       "Third Party Advisory"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2017-7650",
+    "sourceIdentifier": "emo@eclipse.org",
+    "published": "2017-09-11T16:29:00.260",
+    "lastModified": "2026-06-17T01:24:53.130",
+    "vulnStatus": "Modified",
+    "cveTags": [],
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "In Mosquitto before 1.4.12, pattern based ACLs can be bypassed by clients that set their username/client id to '#' or '+'. This allows locally or remotely connected clients to access MQTT topics that they do have the rights to. The same issue may be present in third party authentication/access control plugins for Mosquitto."
+     },
+     {
+      "lang": "es",
+      "value": "En Mosquitto en versiones anteriores a la 1.4.12, las listas de control de acceso (ACL) basadas en patrones pueden ser omitidas por clientes que establecen su ID de nombre de usuario/cliente como '#' o '+'. Esto permite que los clientes conectados de forma local o remota accedan a temas MQTT a los que no tienen derecho de acceso. Este mismo problema tambi\u00e9n podr\u00eda estar presente en plugins de control de autenticaci\u00f3n/acceso para Mosquitto."
+     }
+    ],
+    "affected": [
+     {
+      "source": "emo@eclipse.org",
+      "affectedData": [
+       {
+        "vendor": "Eclipse Foundation",
+        "product": "Mosquitto",
+        "versions": [
+         {
+          "version": "0.15 to 1.4.11 inclusive",
+          "status": "affected"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "metrics": {
+     "cvssMetricV30": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "3.0",
+        "vectorString": "CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
+        "baseScore": 6.5,
+        "baseSeverity": "MEDIUM",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "LOW",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "NONE",
+        "availabilityImpact": "NONE"
+       },
+       "exploitabilityScore": 2.8,
+       "impactScore": 3.6
+      }
+     ],
+     "cvssMetricV2": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "2.0",
+        "vectorString": "AV:N/AC:L/Au:S/C:P/I:N/A:N",
+        "baseScore": 4.0,
+        "accessVector": "NETWORK",
+        "accessComplexity": "LOW",
+        "authentication": "SINGLE",
+        "confidentialityImpact": "PARTIAL",
+        "integrityImpact": "NONE",
+        "availabilityImpact": "NONE"
+       },
+       "baseSeverity": "MEDIUM",
+       "exploitabilityScore": 8.0,
+       "impactScore": 2.9,
+       "acInsufInfo": false,
+       "obtainAllPrivilege": false,
+       "obtainUserPrivilege": false,
+       "obtainOtherPrivilege": false,
+       "userInteractionRequired": false
+      }
+     ]
+    },
+    "weaknesses": [
+     {
+      "source": "nvd@nist.gov",
+      "type": "Primary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-287"
+       }
+      ]
+     }
+    ],
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:eclipse:mosquitto:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "1.4.12",
+          "matchCriteriaId": "E80E733B-BD63-4B8E-88FE-11243F5BA437"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:o:debian:debian_linux:8.0:*:*:*:*:*:*:*",
+          "matchCriteriaId": "C11E6FB0-C8C0-4527-9AA0-CB9B316F8F43"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "references": [
+     {
+      "url": "http://mosquitto.org/2017/05/security-advisory-cve-2017-7650/",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Patch",
+       "Vendor Advisory"
+      ]
+     },
+     {
+      "url": "http://www.debian.org/security/2017/dsa-3865",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "http://www.securityfocus.com/bid/98741",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Third Party Advisory",
+       "VDB Entry"
+      ]
+     },
+     {
+      "url": "https://bugs.eclipse.org/bugs/show_bug.cgi?id=516765",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Exploit",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "http://mosquitto.org/2017/05/security-advisory-cve-2017-7650/",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Patch",
+       "Vendor Advisory"
+      ]
+     },
+     {
+      "url": "http://www.debian.org/security/2017/dsa-3865",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "http://www.securityfocus.com/bid/98741",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Third Party Advisory",
+       "VDB Entry"
+      ]
+     },
+     {
+      "url": "https://bugs.eclipse.org/bugs/show_bug.cgi?id=516765",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Exploit",
+       "Third Party Advisory"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2017-7651",
+    "sourceIdentifier": "emo@eclipse.org",
+    "published": "2018-04-24T14:29:00.437",
+    "lastModified": "2026-06-17T01:24:53.250",
+    "vulnStatus": "Modified",
+    "cveTags": [],
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "In Eclipse Mosquitto 1.4.14, a user can shutdown the Mosquitto server simply by filling the RAM memory with a lot of connections with large payload. This can be done without authentications if occur in connection phase of MQTT protocol."
+     },
+     {
+      "lang": "es",
+      "value": "En Eclipse Mosquitto 1.4.14, un usuario puede cerrar el servidor Mosquitto simplemente llenando la memoria RAM con muchas conexiones con una carga \u00fatil grande. Esto puede hacerse sin autenticaciones si ocurre en la fase de conexi\u00f3n del protocolo MQTT."
+     }
+    ],
+    "affected": [
+     {
+      "source": "emo@eclipse.org",
+      "affectedData": [
+       {
+        "vendor": "The Eclipse Foundation",
+        "product": "Eclipse Mosquitto",
+        "versions": [
+         {
+          "version": "1.4.14",
+          "status": "affected"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "metrics": {
+     "cvssMetricV30": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "3.0",
+        "vectorString": "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+        "baseScore": 7.5,
+        "baseSeverity": "HIGH",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "NONE",
+        "integrityImpact": "NONE",
+        "availabilityImpact": "HIGH"
+       },
+       "exploitabilityScore": 3.9,
+       "impactScore": 3.6
+      }
+     ],
+     "cvssMetricV2": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "2.0",
+        "vectorString": "AV:N/AC:L/Au:N/C:N/I:N/A:P",
+        "baseScore": 5.0,
+        "accessVector": "NETWORK",
+        "accessComplexity": "LOW",
+        "authentication": "NONE",
+        "confidentialityImpact": "NONE",
+        "integrityImpact": "NONE",
+        "availabilityImpact": "PARTIAL"
+       },
+       "baseSeverity": "MEDIUM",
+       "exploitabilityScore": 10.0,
+       "impactScore": 2.9,
+       "acInsufInfo": false,
+       "obtainAllPrivilege": false,
+       "obtainUserPrivilege": false,
+       "obtainOtherPrivilege": false,
+       "userInteractionRequired": false
+      }
+     ]
+    },
+    "weaknesses": [
+     {
+      "source": "emo@eclipse.org",
+      "type": "Secondary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-789"
+       }
+      ]
+     },
+     {
+      "source": "nvd@nist.gov",
+      "type": "Primary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-400"
+       }
+      ]
+     }
+    ],
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:eclipse:mosquitto:*:*:*:*:*:*:*:*",
+          "versionEndIncluding": "1.4.14",
+          "matchCriteriaId": "01C2095B-D7E4-46EE-89C0-0FC635DB4E05"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:o:debian:debian_linux:7.0:*:*:*:*:*:*:*",
+          "matchCriteriaId": "16F59A04-14CF-49E2-9973-645477EA09DA"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:o:debian:debian_linux:8.0:*:*:*:*:*:*:*",
+          "matchCriteriaId": "C11E6FB0-C8C0-4527-9AA0-CB9B316F8F43"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:o:debian:debian_linux:9.0:*:*:*:*:*:*:*",
+          "matchCriteriaId": "DEECE5FC-CACF-4496-A3E7-164736409252"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "references": [
+     {
+      "url": "https://bugs.eclipse.org/bugs/show_bug.cgi?id=529754",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Exploit",
+       "Issue Tracking",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://lists.debian.org/debian-lts-announce/2018/03/msg00037.html",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Mailing List",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://lists.debian.org/debian-lts-announce/2018/06/msg00016.html",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Mailing List",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://mosquitto.org/blog/2018/02/security-advisory-cve-2017-7651-cve-2017-7652/",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Patch",
+       "Vendor Advisory"
+      ]
+     },
+     {
+      "url": "https://www.debian.org/security/2018/dsa-4325",
+      "source": "emo@eclipse.org",
+      "tags": [
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://bugs.eclipse.org/bugs/show_bug.cgi?id=529754",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Exploit",
+       "Issue Tracking",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://lists.debian.org/debian-lts-announce/2018/03/msg00037.html",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Mailing List",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://lists.debian.org/debian-lts-announce/2018/06/msg00016.html",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Mailing List",
+       "Third Party Advisory"
+      ]
+     },
+     {
+      "url": "https://mosquitto.org/blog/2018/02/security-advisory-cve-2017-7651-cve-2017-7652/",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Patch",
+       "Vendor Advisory"
+      ]
+     },
+     {
+      "url": "https://www.debian.org/security/2018/dsa-4325",
+      "source": "af854a3a-2127-422b-91ae-364da2661108",
+      "tags": [
+       "Third Party Advisory"
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

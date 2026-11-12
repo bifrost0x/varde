@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+id: uptime-kuma
+name: Uptime Kuma
+homepage: https://uptime.kuma.pet
+tags: [monitoring]
+images:
+  - match: louislam/uptime-kuma
+  - match: ghcr.io/louislam/uptime-kuma
+oci_source:
+  - https://github.com/louislam/uptime-kuma
+version:
+  scheme: semver
+  sources:
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-(?:slim|rootless|slim-rootless))?$'
+advisories:
+  coverage: full
+  github_repos:
+    - louislam/uptime-kuma
+  packages:
+    - {name: uptime-kuma}
+    - {name: louislam/uptime-kuma}
+  osv_packages:
+    - {ecosystem: npm, name: uptime-kuma}
+  cpe:
+    - cpe:2.3:a:uptime.kuma:uptime_kuma
+    - cpe:2.3:a:uptime-kuma_project:uptime-kuma
+  notes: >-
+    The image has an OCI source label but no version label; the version comes from the tag.
+    Major tags (1, 2, 2-slim), next, nightly*, base* and latest are floating.
+exposure_hints:
+  default_ports: [3001]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

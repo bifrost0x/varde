@@ -1,0 +1,16 @@
+[varde] Weekly digest: 8 findings
+
+P3 low
+
+Immich (immich_server on nas), running 1.120.0
+GHSA-9 / CVE-2026-9: Path traversal in asset upload
+Severity: low (CVSS 3.1), EPSS 0.42
+Action: update to 1.121.0 or later
+Advisory: https://github.com/immich-app/immich/security/advisories/GHSA-9
+Details: https://varde.example.com/findings/9
+
+glibc (Debian 12 package) on web, installed 2.36-9
+7 advisories: CVE-2026-3 (known exploited), CVE-2026-0, CVE-2026-1, CVE-2026-2, CVE-2026-4, and 2 more
+Severity: not rated, 1 known exploited (CISA KEV)
+Action: update to 2.36-9+deb12u14 or later; it fixes all 7
+Details: https://varde.example.com/findings?app=os%3ADebian%3A12%2Fglibc

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+id: ntfy
+name: ntfy
+homepage: https://ntfy.sh
+tags: [notifications, push]
+images:
+  - match: binwiederhier/ntfy
+oci_source:
+  - https://github.com/binwiederhier/ntfy
+version:
+  scheme: semver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)(?:-(?:amd64|arm64v8|armv7|armv6))?$'
+advisories:
+  coverage: partial
+  osv_packages:
+    - {ecosystem: Go, name: heckel.io/ntfy/v2}
+  notes: >-
+    binwiederhier/ntfy publishes no repository advisories; SECURITY.md asks for reports to
+    security@mail.ntfy.sh and supports only the latest version. Structured data exists only in
+    OSV for the Go module heckel.io/ntfy/v2 (CVE-2026-39087, fixed in 2.22.0); the v1 module
+    heckel.io/ntfy is not listed because its record has no fixed version and would flag every 2.x
+    release. No NVD CPE. Tags have a v prefix (v2.37.2) plus per-architecture tags
+    (v2.37.2-amd64); latest, v2 and v2.37 are floating.
+exposure_hints:
+  default_ports: [80]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

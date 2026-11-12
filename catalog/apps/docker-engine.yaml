@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+id: docker-engine
+name: Docker Engine
+homepage: https://docs.docker.com/engine/
+tags: [containers, runtime]
+packages:
+  # Docker's own repositories (download.docker.com) ship docker-ce with the
+  # release in the version: "5:27.3.1-1~debian.12~bookworm",
+  # "3:27.3.1-1.el9". The distributions' docker.io/moby-engine packages
+  # are checked against their security data instead.
+  - {manager: dpkg, name: docker-ce, versioning: upstream, version_pattern: '^(?:\d+:)?(?P<v>\d+\.\d+\.\d+)'}
+  - {manager: rpm, name: docker-ce, versioning: upstream, version_pattern: '^(?:\d+:)?(?P<v>\d+\.\d+\.\d+)'}
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - moby/moby
+  osv_packages:
+    - {ecosystem: Go, name: github.com/docker/docker}
+    - {ecosystem: Go, name: github.com/moby/moby}
+  cpe:
+    - cpe:2.3:a:docker:engine
+    - cpe:2.3:a:mobyproject:moby
+  notes: >-
+    Advisories are published in moby/moby and in the Go vulnerability database for
+    github.com/docker/docker (versions with +incompatible) and github.com/moby/moby.
+exposure_hints:
+  default_ports: [2375, 2376]
+  typical: internal
+eol: docker-engine
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

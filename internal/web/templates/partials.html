@@ -1,0 +1,131 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "findingtable"}}
+<table class="table">
+  <thead><tr><th scope="col">Priority</th><th scope="col">App</th><th scope="col">Advisory</th><th scope="col">Fix</th><th scope="col">Exposure</th></tr></thead>
+  <tbody>
+  {{range .}}
+  <tr>
+    <td data-label="Priority">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</td>
+    <td data-label="App"><a href="/findings/{{.ID}}">{{.AppName}}</a><span class="cell-sub">{{.WorkloadName}}{{if .Version}} · <span class="mono">{{.Version}}</span>{{end}}</span></td>
+    <td data-label="Advisory"><span class="mono">{{.AdvisoryID}}</span><span class="cell-sub">{{truncate .Summary 110}}</span></td>
+    <td data-label="Fix">{{if .FixedIn}}<span class="mono">≥ {{.FixedIn}}</span>{{else}}<span class="muted">no fix yet</span>{{end}}</td>
+    <td data-label="Exposure">{{template "exposure" .Exposure}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{/* One card per app version; the advisories behind it fold out. */}}
+{{define "findinggroups"}}
+<div class="groups">
+{{range .}}
+<details class="group{{if eq .Priority "P1"}} group--p1{{end}}">
+  <summary class="group__head">
+    <span class="group__badges">{{template "prio" .Priority}}{{if .KEV}}<span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}{{template "exposure" .Exposure}}</span>
+    <span class="group__title"><strong>{{.AppName}}</strong> <span class="mono">{{if .Version}}{{.Version}}{{else}}version unknown{{end}}</span><span class="cell-sub">{{join .Workloads ", "}}</span></span>
+    <span class="group__action">{{template "grouptarget" .}}</span>
+    <span class="group__count small muted">{{plural (len .Rows) "advisory"}}{{if .Acknowledged}} · {{.Acknowledged}} acknowledged{{end}}{{if .New}} · {{.New}} new{{end}}</span>
+  </summary>
+  <div class="group__body">
+    {{template "advisorytable" .Rows}}
+  </div>
+</details>
+{{end}}
+</div>
+{{end}}
+
+{{/* The single next step for a group, in plain words. */}}
+{{define "grouptarget"}}
+{{- if not .Version -}}
+  Varde needs the running version. Add the label <code>varde.version=&lt;version&gt;</code> to the container or use a version tag instead of <code>latest</code>.
+{{- else if and .Target .Target.Version .Image -}}
+  Pull a newer image whose <strong class="mono">{{.Package}}</strong> is <strong class="mono">{{.Target.Version}}</strong> or later, and recreate the container: fixes {{.Target.Fixes}} of {{.Target.Total}}. <span class="cell-sub">{{.Target.Version}} is the version of {{.Package}} inside the image, not of the image. It is part of the image, so updating it inside the container does not last; with a tag such as <code>latest</code>, pull it again (<code>docker compose pull</code>) and recreate the container (<code>docker compose up -d</code>). Varde reads the new image by itself.</span>
+{{- else if and .Target .Target.Version -}}
+  Update to <strong class="mono">{{.Target.Version}}</strong>
+  {{- if eq .Target.Fixes .Target.Total}}: fixes {{if eq .Target.Total 1}}this advisory{{else}}all {{.Target.Total}} advisories{{end}}.{{else}}: fixes {{.Target.Fixes}} of {{.Target.Total}}; the rest have no fix yet.{{end}}
+  {{- if .Target.NewLine}} <span class="cell-sub">This is a new major version. Read the upgrade notes first.{{with .Target.Line}} On your current version line, <span class="mono">{{.Version}}</span> fixes {{.Fixes}} of {{.Total}}.{{end}}</span>{{end}}
+  {{- if .Unverified}}<span class="cell-sub">{{plural .Unverified "advisory"}} could not be checked against {{.Version}}; see below.</span>{{end}}
+{{- else if .Target -}}
+  No fixed version is published yet. Limit who can reach it until one is.
+{{- else -}}
+  Varde cannot tell whether {{.Version}} is affected. Compare it with the advisory, then acknowledge it if it does not apply.
+{{- end -}}
+{{end}}
+
+{{/* How a finding relates to the attack paths (ADR 0034). */}}
+{{define "pathclass"}}
+{{- if eq . "path-internet"}} <span class="badge badge--p1" title="Opens an attack path from the internet">attack path</span>
+{{- else if eq . "path-lan"}} <span class="badge badge--p2" title="Opens an attack path from the LAN">attack path, LAN</span>
+{{- else if eq . "amplifier"}} <span class="badge badge--p2" title="Turns a foothold on an attack path into root">amplifier</span>
+{{- else if eq . "noise"}} <span class="badge badge--muted" title="No attack path uses it">noise</span>
+{{- end}}
+{{- end}}
+
+{{define "advisorytable"}}
+<table class="table">
+  <thead><tr><th scope="col">Priority</th><th scope="col">Advisory</th><th scope="col">Fixed in</th><th scope="col">State</th></tr></thead>
+  <tbody>
+  {{range .}}
+  <tr>
+    <td data-label="Priority">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</td>
+    <td data-label="Advisory"><a class="mono" href="/findings/{{.ID}}">{{.AdvisoryID}}</a><span class="cell-sub">{{truncate .Summary 110}}</span></td>
+    <td data-label="Fixed in">{{if .FixedIn}}<span class="mono">{{.FixedIn}}</span>{{else}}<span class="muted">no fix yet</span>{{end}}</td>
+    <td data-label="State">{{if eq .State "open"}}new{{else}}{{.State}}{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{define "machineState"}}{{if eq .State "inventoried"}}<span class="badge badge--ok">read</span>{{else if eq .State "stale"}}<span class="badge badge--p2">not reporting</span>{{else if eq .State "paused"}}<span class="badge badge--muted">switched off</span>{{else}}<span class="badge badge--muted">nothing read</span>{{end}}{{end}}
+
+{{define "setupsteps"}}{{if .}}<section class="panel" id="next-steps" aria-labelledby="steps-title">
+  <div class="panel__head"><h2 id="steps-title">Next steps</h2><a class="small" href="/connections">Connections</a></div>
+  <p class="small">Ranked by what they show you. Each one says what Varde may do afterwards; every connection is read-only and can be switched off or removed under Connections.</p>
+  <ol class="steps">{{range .}}
+    <li><a href="{{.Link}}"><strong>{{.Title}}</strong></a><span class="cell-sub">{{.Gain}}</span><span class="cell-sub"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#lock"></use></svg> {{.Grant}}</span></li>
+  {{end}}</ol>
+</section>{{end}}{{end}}
+
+{{define "guide"}}{{$g := .Guide}}<section class="panel guide" id="get-started" aria-labelledby="guide-title">
+  <h1 id="guide-title">{{if .Empty}}Varde does not know your systems yet{{else}}Finish getting started{{end}}</h1>
+  <p class="small">{{if .Empty}}Nothing is checked yet, so Varde cannot say that anything is safe. These steps get you to the full inventory of your systems; each says what Varde may do afterwards.{{else}}A few steps are left.{{end}}</p>
+  <ol class="guide__steps">{{range $i, $s := $g.Steps}}
+    <li class="guide__step{{if $s.Done}} is-done{{else if eq $i $g.Next}} is-next{{end}}"{{if eq $i $g.Next}} aria-current="step"{{end}}>
+      <span class="guide__mark" aria-hidden="true">{{if $s.Done}}<svg class="icon icon--sm"><use href="/static/icons.svg#check"></use></svg>{{end}}</span>
+      <div><strong>{{$s.Title}}</strong>{{if $s.Done}}<span class="visually-hidden"> (done)</span>{{end}}
+        {{if not $s.Done}}<p class="small">{{$s.Text}}</p>{{else if eq $i 2}}<p class="small muted">{{$s.Text}}</p>{{end}}
+        {{if and (not $s.Done) $s.Link}}{{if eq $i $g.Next}}<a class="btn btn--primary" href="{{$s.Link}}">{{$s.Action}}</a>{{else}}<a class="small" href="{{$s.Link}}">{{$s.Action}}</a>{{end}}{{end}}
+      </div>
+    </li>{{end}}
+  </ol>
+</section>{{end}}
+
+{{define "guiderest"}}{{if ge .Next 0}}<section class="panel" id="get-started" aria-labelledby="rest-title">
+  <h2 id="rest-title">Left to set up</h2>
+  <ul class="notice-list">{{range .Steps}}{{if not .Done}}<li>{{if .Link}}<a href="{{.Link}}"><strong>{{.Title}}</strong></a>{{else}}<strong>{{.Title}}</strong>{{end}}<span class="cell-sub">{{.Text}}</span></li>{{end}}{{end}}</ul>
+</section>{{end}}{{end}}
+
+{{/* One card per thing to do on one system; the packages behind it fold out. */}}
+{{define "todogroups"}}
+{{range .}}
+<article class="todo{{if eq .Priority "P1"}} todo--p1{{else if eq .Priority "P2"}} todo--p2{{end}}">
+  <div class="todo__head">
+    <div class="todo__badges">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</div>
+    <div class="todo__what">
+      <h3>{{.Name}}</h3>
+      <span class="cell-sub">{{.Where}}</span>
+    </div>
+    <div class="todo__count"><strong>{{.Count}}</strong><span class="cell-sub">{{if .Urgent}}{{.Urgent}} urgent{{else}}{{if eq .Count 1}}finding{{else}}findings{{end}}{{end}}{{if .New}} · {{.New}} new{{end}}</span></div>
+  </div>
+  <p class="todo__action"><strong>{{.Action}}</strong></p>
+  {{if .Note}}<p class="small">{{.Note}}</p>{{end}}
+  {{if .Command}}<p class="small muted">For example <code>{{.Command}}</code></p>{{end}}
+  <details class="todo__details">
+    <summary class="small">What is affected ({{len .Groups}} {{if eq (len .Groups) 1}}package or app{{else}}packages and apps{{end}})</summary>
+    {{template "findinggroups" .Groups}}
+  </details>
+</article>
+{{end}}
+{{end}}

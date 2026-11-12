@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+id: synology-dsm
+name: Synology DSM
+homepage: https://www.synology.com/dsm
+tags: [nas, storage, appliance]
+packages:
+  # Read through the Synology integration (SYNO.DSM.Info), which records
+  # "DSM 7.2.1-69057 Update 5" as 7.2.1.69057.5.
+  - {manager: firmware, name: synology-dsm, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:o:synology:diskstation_manager
+  notes: >-
+    Synology publishes Security Advisories (Synology-SA-YY:NN) on its website with fixed DSM
+    versions; there is no machine-readable feed. NVD records name DSM versions with build and
+    update ("7.2.1-69057"), which Varde compares as dotted numbers.
+exposure_hints:
+  default_ports: [5000, 5001]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+id: open-webui
+name: Open WebUI
+homepage: https://openwebui.com
+tags: [ai, llm, chat]
+images:
+  - match: ghcr.io/open-webui/open-webui
+  - match: openwebui/open-webui
+oci_source:
+  - https://github.com/open-webui/open-webui
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - open-webui/open-webui
+  osv_packages:
+    - {ecosystem: PyPI, name: open-webui}
+  cpe:
+    - cpe:2.3:a:openwebui:open_webui
+  notes: >-
+    Images built from the main, cuda, ollama and slim floating tags set
+    org.opencontainers.image.version to "main"; release tags (0.13.2, v0.13.2 and their
+    -cuda, -cuda126, -ollama, -slim variants) carry the real version.
+exposure_hints:
+  default_ports: [8080]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

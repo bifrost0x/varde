@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+id: outline
+name: Outline
+homepage: https://www.getoutline.com
+tags: [wiki, knowledge-base]
+images:
+  - match: outlinewiki/outline
+  - match: docker.getoutline.com/outlinewiki/outline
+    note: registry endpoint used in the official self-hosting docs, serves the same images
+oci_source:
+  - https://github.com/outline/outline
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - outline/outline
+  cpe:
+    - cpe:2.3:a:getoutline:outline
+  notes: >-
+    No npm package of the server is published, so there is no OSV package. nightly and
+    nightly-* tags are floating or commit builds.
+exposure_hints:
+  default_ports: [3000]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

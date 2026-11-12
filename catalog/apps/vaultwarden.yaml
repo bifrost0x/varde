@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+id: vaultwarden
+name: Vaultwarden
+homepage: https://github.com/dani-garcia/vaultwarden
+tags: [passwords, security]
+images:
+  - match: vaultwarden/server
+  - match: ghcr.io/dani-garcia/vaultwarden
+  - match: quay.io/vaultwarden/server
+  - match: bitwardenrs/server
+    note: legacy name (bitwarden_rs), last release 1.24.0
+oci_source:
+  - https://github.com/dani-garcia/vaultwarden
+version:
+  scheme: semver
+  probe:
+    http:
+      check_path: /api/config
+      expect: {/server/name: Vaultwarden}
+      path: /api/version
+      json_pointer: ''
+      version_pattern: '^(?P<v>\d+\.\d+\.\d+)$'
+advisories:
+  coverage: full
+  github_repos:
+    - dani-garcia/vaultwarden
+  osv_packages:
+    - {ecosystem: crates.io, name: vaultwarden}
+  cpe:
+    - cpe:2.3:a:dani-garcia:vaultwarden
+  notes: Tags are plain semver with an optional -alpine suffix; testing and alpine are floating.
+exposure_hints:
+  default_ports: [80]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

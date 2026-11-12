@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+id: bazarr
+name: Bazarr
+homepage: https://www.bazarr.media
+tags: [media, arr, subtitles]
+images:
+  - match: lscr.io/linuxserver/bazarr
+    flavor: lsio
+  - match: ghcr.io/hotio/bazarr
+    note: third-party image by hotio, release-<version> and release-<commit> tags, version in the OCI label
+version:
+  scheme: semver
+advisories:
+  coverage: partial
+  github_repos:
+    - morpheus65535/bazarr
+  cpe:
+    - cpe:2.3:a:bazarr:bazarr
+  notes: >-
+    morpheus65535/bazarr publishes repository advisories since 2026; older CVEs exist only in NVD.
+    Package names in the advisories vary (bazarr, Bazarr, morpheus65535/bazarr) and some ranges
+    are not machine-readable ("through current master"). No OSV package (PyPI bazarr has no
+    records). The project publishes no official container image. Releases are v1.6.2,
+    pre-releases v1.6.3-beta.25; lsio tags are v1.6.2-ls371 and 1.6.2.
+exposure_hints:
+  default_ports: [6767]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

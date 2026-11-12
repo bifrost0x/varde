@@ -1,0 +1,72 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+{{if .Refresh}}<meta http-equiv="refresh" content="{{.Refresh}}">{{end}}
+{{if .CSRF}}<meta name="csrf-token" content="{{.CSRF}}">{{end}}
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false,"selfRequestsOnly":true}'>
+<title>{{if .Title}}{{.Title}} · {{end}}{{.Product}}</title>
+<link rel="icon" type="image/svg+xml" href="/static/brand/favicon.svg">
+<link rel="stylesheet" href="/static/css/varde.css?v={{.AssetVersion}}">
+<script src="/static/vendor/htmx-2.0.11.min.js" defer></script>
+<script src="/static/js/app.js?v={{.AssetVersion}}" defer></script>
+</head>
+{{end}}
+
+{{define "layout"}}{{template "head" .}}
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar__inner">
+    <a class="brand" href="/"><img src="/static/brand/{{if .Lit}}mark{{else}}mark-unlit{{end}}.svg" alt=""><span>varde</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/" {{if eq .Nav "overview"}}aria-current="page"{{end}}>Overview</a>
+      <a href="/findings" {{if eq .Nav "findings"}}aria-current="page"{{end}}>Findings</a>
+      <a href="/systems" {{if eq .Nav "systems"}}aria-current="page"{{end}}>Systems</a>
+      <a href="/connections" {{if eq .Nav "connections"}}aria-current="page"{{end}}>Connections</a>
+      <a href="/settings" {{if eq .Nav "settings"}}aria-current="page"{{end}}>Settings</a>
+    </nav>
+    <div class="topbar__user">
+      <button class="btn btn--ghost" type="button" data-tour-start>Tour</button>
+      <span class="visually-hidden">Signed in as</span><span>{{.User.Username}}</span>
+      <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn btn--ghost" type="submit">Sign out</button></form>
+    </div>
+  </div>
+</header>
+<main id="main">
+{{range .Banners}}<div class="banner banner--{{.Kind}}" role="status"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#{{.Icon}}"></use></svg><p>{{.Text}}</p></div>
+{{end}}
+{{if .Tabs}}<nav class="tabs" aria-label="{{.Nav}} pages">{{range .Tabs}}<a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}
+{{template "content" .}}
+</main>
+<footer class="footer">{{.Product}} {{.Version}}. No telemetry; your inventory stays on this machine.</footer>
+{{if .Notice}}<div class="toast" role="status">{{.Notice}}</div>{{end}}
+<dialog id="confirm-dialog" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <h2 id="confirm-title">Please confirm</h2>
+    <p data-confirm-text></p>
+    <div class="actions"><button class="btn btn--danger" value="confirm">Confirm</button><button class="btn" value="cancel" autofocus>Cancel</button></div>
+  </form>
+</dialog>
+</body>
+</html>
+{{end}}
+
+{{define "bare"}}{{template "head" .}}
+<body>
+<main class="auth" id="main">{{template "content" .}}</main>
+</body>
+</html>
+{{end}}
+
+{{define "prio"}}{{if eq . "P1"}}<span class="badge badge--p1">P1 urgent</span>{{else if eq . "P2"}}<span class="badge badge--p2">P2</span>{{else if eq . "P3"}}<span class="badge badge--p3">P3</span>{{else}}<span class="badge badge--unverified">needs a check</span>{{end}}{{end}}
+
+{{define "exposure"}}{{if eq . "public"}}<span class="badge"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#globe"></use></svg>public</span>{{else if eq . "lan"}}<span class="badge"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#home"></use></svg>LAN</span>{{else if eq . "internal"}}<span class="badge badge--muted"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#lock"></use></svg>internal</span>{{else}}<span class="badge badge--muted">unknown</span>{{end}}{{end}}
+
+{{define "csrf"}}<input type="hidden" name="csrf" value="{{.}}">{{end}}
+
+{{define "proxyhint"}}<div><p>You reach Varde through an HTTPS proxy at <span class="mono">{{.}}</span>, but Varde does not trust it yet, so it treats this connection as unencrypted.</p>
+<p class="small">Add to Varde's environment and restart it: <code>VARDE_TRUSTED_PROXIES={{.}}</code>, and <code>VARDE_BEHIND_TLS_PROXY=true</code> when every access goes through the proxy.</p></div>{{end}}

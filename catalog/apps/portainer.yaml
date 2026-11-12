@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+id: portainer
+name: Portainer
+homepage: https://www.portainer.io
+tags: [docker, management]
+images:
+  - match: portainer/portainer-ce
+  - match: portainer/portainer
+    note: legacy name, last release 2.0.1
+version:
+  scheme: semver
+  sources:
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-(?:alpine|linux-[a-z0-9]+(?:-alpine)?|windows[a-z0-9]+-amd64))?$'
+    - tag: '^linux-[a-z0-9]+-(?P<v>\d+\.\d+\.\d+)(?:-alpine)?$'
+advisories:
+  coverage: full
+  github_repos:
+    - portainer/portainer
+  osv_packages:
+    - {ecosystem: Go, name: github.com/portainer/portainer}
+  cpe:
+    - cpe:2.3:a:portainer:portainer
+  notes: >-
+    The images carry no org.opencontainers.image.source or version label, so detection relies on
+    the image name and the version on the tag (latest, lts, sts, alpine, alpine-sts are floating;
+    pin a version tag or set varde.version). The Business Edition has its own entry
+    (portainer-ee) because its version numbers differ from CE.
+exposure_hints:
+  default_ports: [9443, 9000, 8000]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

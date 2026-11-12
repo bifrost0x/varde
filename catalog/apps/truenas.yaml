@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+id: truenas
+name: TrueNAS
+homepage: https://www.truenas.com
+tags: [nas, storage, appliance]
+packages:
+  # TrueNAS SCALE and Community Edition (24.10, 25.04, ...), read through
+  # /api/v2.0/system/version.
+  - {manager: firmware, name: truenas, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  cpe:
+    - cpe:2.3:o:ixsystems:truenas_scale
+    - cpe:2.3:o:ixsystems:truenas
+  notes: >-
+    iXsystems publishes security notes on security.truenas.com and in the release notes; there is
+    no machine-readable feed. CPE product names to be confirmed against NVD records.
+exposure_hints:
+  default_ports: [443, 80]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

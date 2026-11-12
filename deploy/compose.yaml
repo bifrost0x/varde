@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Varde server with a read-only Docker socket proxy. Set VARDE_VERSION to a
+# release (there is no "latest" tag); pinning the digest is better still.
+#
+#   echo VARDE_VERSION=X.Y.Z > .env
+#   docker compose up -d
+#   docker compose logs varde | grep setup_token   # first login
+name: varde
+
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    environment:
+      # Read-only access to exactly what Varde needs (docs/configuration.md).
+      CONTAINERS: 1
+      IMAGES: 1
+      INFO: 1
+      EVENTS: 1
+      VERSION: 1
+      PING: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [varde-internal]
+    read_only: true
+    tmpfs: [/run, /tmp]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  varde:
+    image: bifrost0x/varde:${VARDE_VERSION:?set VARDE_VERSION to a release, e.g. in .env}
+    command: ["server"]
+    environment:
+      VARDE_DOCKER_HOST: tcp://socket-proxy:2375
+      # Domain suffixes reachable from the internet (Traefik routes).
+      # VARDE_PUBLIC_DOMAINS: example.com
+      # VARDE_BASE_URL: https://varde.example.com
+      # This machine's address in your network: ties it to what the network
+      # scan finds and is the address agents are told to use.
+      # VARDE_HOST_ADDRESS: 192.168.1.10
+      # Digests run at this local time (default UTC).
+      # TZ: Europe/Berlin
+      # Notifications: see docs/configuration.md (ntfy, Gotify, webhook, SMTP).
+    volumes:
+      - varde-data:/data
+    ports:
+      - "127.0.0.1:8080:8080" # UI and API; put a TLS reverse proxy in front for other machines
+      - "8443:8443"           # agent listener (mTLS, client certificates only); remove when no agents are used
+    networks: [varde-internal, default]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    restart: unless-stopped
+
+networks:
+  varde-internal:
+    internal: true
+
+volumes:
+  varde-data:

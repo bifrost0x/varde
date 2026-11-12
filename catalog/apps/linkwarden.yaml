@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+id: linkwarden
+name: Linkwarden
+homepage: https://linkwarden.app
+tags: [bookmarks, archive]
+images:
+  - match: ghcr.io/linkwarden/linkwarden
+oci_source:
+  - https://github.com/linkwarden/linkwarden
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - linkwarden/linkwarden
+  notes: >-
+    Three repository advisories (2025-2026). No NVD CPE exists; the known CVEs (e.g.
+    CVE-2025-49588) have no CPE configuration. No npm package, so no OSV package. Release tags
+    are v-prefixed (v2.16.3); latest is floating.
+exposure_hints:
+  default_ports: [3000]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

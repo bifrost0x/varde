@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+id: prowlarr
+name: Prowlarr
+homepage: https://prowlarr.com
+tags: [media, arr, indexer]
+images:
+  - match: lscr.io/linuxserver/prowlarr
+    flavor: lsio
+  - match: ghcr.io/hotio/prowlarr
+    note: third-party image by hotio, release-<version> and release-<commit> tags, version in the OCI label
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  notes: >-
+    No repository advisories in Prowlarr/Prowlarr, no OSV package and no NVD CPE (no CVE for
+    Prowlarr found in NVD). SECURITY.md asks for private reports via the Servarr Discord or
+    development@servarr.com; fixes are only mentioned in GitHub release notes
+    (https://github.com/Prowlarr/Prowlarr/releases). The sibling project Sonarr publishes
+    repository advisories; Servarr-wide issues may appear there first. The project publishes no
+    official container image. Versions have four components (2.7.0.5723); lsio tags add -lsNNN.
+exposure_hints:
+  default_ports: [9696]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

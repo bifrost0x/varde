@@ -1,0 +1,194 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package pkgbuild
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"go.yaml.in/yaml/v3"
+)
+
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.org", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.org")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The publish step replaces the branch "data" with one commit that holds
+// the package and the builder's store, and touches nothing else.
+func TestPublishScript(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "publish-data.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	git(t, "", "init", "-q", "--bare", "-b", "main", remote)
+	clone := filepath.Join(t.TempDir(), "clone")
+	git(t, "", "clone", "-q", remote, clone)
+	writeFile(t, filepath.Join(clone, "README.md"), "source\n")
+	writeFile(t, filepath.Join(clone, ".gitignore"), "*.db\nwork/\n")
+	git(t, clone, "add", "-A")
+	git(t, clone, "commit", "-q", "-m", "source")
+	git(t, clone, "push", "-q", "origin", "HEAD:main")
+	mainBefore := git(t, remote, "rev-parse", "main")
+
+	work := filepath.Join(clone, "work")
+	publish := func(sequence, blob string) (string, error) {
+		writeFile(t, filepath.Join(work, "feed", "v1", "manifest.json"), `{"sequence":`+sequence+`}`)
+		writeFile(t, filepath.Join(work, "feed", "v1", "manifest.json.sig"), "sig")
+		writeFile(t, filepath.Join(work, "feed", "v1", "root.json"), "root")
+		writeFile(t, filepath.Join(work, "feed", "v1", "blobs", "sha256", blob), "blob")
+		writeFile(t, filepath.Join(work, "feed", "stats.json"), "{\n  \"sequence\": "+sequence+",\n  \"advisories\": 1\n}\n")
+		writeFile(t, filepath.Join(work, "feed", "stats.json.sig"), "sig")
+		writeFile(t, filepath.Join(work, "cache", "builder.db"), "db "+sequence)
+		writeFile(t, filepath.Join(work, "cache", "builder.db.sig"), "sig")
+		writeFile(t, filepath.Join(work, "cache", "scratch.tmp"), "not to be published")
+		cmd := exec.Command("bash", script, work)
+		cmd.Dir = clone
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	for _, build := range []struct{ sequence, blob string }{{"100", "aaaa"}, {"200", "bbbb"}} {
+		if out, err := publish(build.sequence, build.blob); err != nil {
+			t.Fatalf("publish %s: %v\n%s", build.sequence, err, out)
+		}
+		if n := git(t, remote, "rev-list", "--count", "data"); n != "1" {
+			t.Fatalf("branch data has %s commits after package %s, want 1", n, build.sequence)
+		}
+		if msg := git(t, remote, "log", "-1", "--format=%s", "data"); msg != "data: package "+build.sequence {
+			t.Fatalf("commit message %q", msg)
+		}
+	}
+	files := git(t, remote, "ls-tree", "-r", "--name-only", "data")
+	want := "cache/builder.db\ncache/builder.db.sig\nfeed/stats.json\nfeed/stats.json.sig\nfeed/v1/blobs/sha256/aaaa\nfeed/v1/blobs/sha256/bbbb\nfeed/v1/manifest.json\nfeed/v1/manifest.json.sig\nfeed/v1/root.json"
+	if files != want {
+		t.Fatalf("published files:\n%s\nwant:\n%s", files, want)
+	}
+	if got := git(t, remote, "show", "data:cache/builder.db"); got != "db 200" {
+		t.Fatalf("published store = %q", got)
+	}
+	if after := git(t, remote, "rev-parse", "main"); after != mainBefore {
+		t.Fatal("main was touched")
+	}
+	if status := git(t, clone, "status", "--porcelain", "--untracked-files=no"); status != "" {
+		t.Fatalf("the checkout's index was changed: %s", status)
+	}
+
+	// An incomplete build is not published, and neither is anything over main.
+	if err := os.Remove(filepath.Join(work, "feed", "v1", "manifest.json.sig")); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", script, work)
+	cmd.Dir = clone
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "nothing published") {
+		t.Fatalf("incomplete build: %v\n%s", err, out)
+	}
+	writeFile(t, filepath.Join(work, "feed", "v1", "manifest.json.sig"), "sig")
+	cmd = exec.Command("bash", script, work)
+	cmd.Dir = clone
+	cmd.Env = append(os.Environ(), "PUBLISH_BRANCH=main")
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "refusing to publish over main") {
+		t.Fatalf("publish over main: %v\n%s", err, out)
+	}
+	if after := git(t, remote, "rev-parse", "main"); after != mainBefore {
+		t.Fatal("main was overwritten")
+	}
+}
+
+// The daily workflow stays idle until the key ceremony, runs with write
+// access to the repository contents only, and uses no action beyond the
+// two pinned ones the index workflow already uses.
+func TestDataWorkflow(t *testing.T) {
+	read := func(name string) string {
+		data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	text := read("data.yml")
+	var wf struct {
+		Permissions map[string]string `yaml:"permissions"`
+		Jobs        map[string]struct {
+			If          string            `yaml:"if"`
+			Environment string            `yaml:"environment"`
+			Permissions map[string]string `yaml:"permissions"`
+			Steps       []struct {
+				Uses string            `yaml:"uses"`
+				Run  string            `yaml:"run"`
+				Env  map[string]string `yaml:"env"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(text), &wf); err != nil {
+		t.Fatal(err)
+	}
+	if len(wf.Permissions) != 0 {
+		t.Errorf("workflow permissions = %v, want none at the top", wf.Permissions)
+	}
+	job, ok := wf.Jobs["build"]
+	if !ok || len(wf.Jobs) != 1 {
+		t.Fatalf("jobs = %v", wf.Jobs)
+	}
+	if job.If != "vars.DATA_PACKAGE_ENABLED == 'true' && github.ref == 'refs/heads/main'" {
+		t.Errorf("the job is not gated by DATA_PACKAGE_ENABLED and the branch main: %q", job.If)
+	}
+	// What comes from the published branch is checked before it is used.
+	for _, want := range []string{`$1 != "100644"`, `2)`, `builder.db.sig`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the workflow lacks %q", want)
+		}
+	}
+	if job.Environment != "data-package" {
+		t.Errorf("environment = %q", job.Environment)
+	}
+	if len(job.Permissions) != 1 || job.Permissions["contents"] != "write" {
+		t.Errorf("job permissions = %v, want contents: write only", job.Permissions)
+	}
+	pinned := map[string]bool{}
+	for _, m := range regexp.MustCompile(`uses: (\S+@[0-9a-f]{40})`).FindAllStringSubmatch(read("index.yml"), -1) {
+		pinned[m[1]] = true
+	}
+	secretSteps := 0
+	for _, s := range job.Steps {
+		if s.Uses != "" && !pinned[s.Uses] {
+			t.Errorf("action %q is not one of the pinned actions of index.yml", s.Uses)
+		}
+		if _, ok := s.Env["VARDE_FEED_KEY"]; ok {
+			secretSteps++
+			if !strings.Contains(s.Run, "cmd/packagebuilder") || strings.Contains(s.Run, "VARDE_FEED_KEY") {
+				t.Errorf("the key is handed to something else than the builder, or named in the script: %q", s.Run)
+			}
+		}
+	}
+	if secretSteps != 1 {
+		t.Errorf("%d steps receive the feed key, want 1", secretSteps)
+	}
+	if strings.Count(text, "secrets.") != 1 {
+		t.Errorf("the workflow names %d secrets, want only VARDE_FEED_KEY", strings.Count(text, "secrets."))
+	}
+}

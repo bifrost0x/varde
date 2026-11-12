@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+id: sonarr
+name: Sonarr
+homepage: https://sonarr.tv
+tags: [media, arr, pvr]
+images:
+  - match: lscr.io/linuxserver/sonarr
+    flavor: lsio
+  - match: ghcr.io/hotio/sonarr
+    note: third-party image by hotio, release-<commit> tags, version only in the OCI label
+version:
+  scheme: semver
+advisories:
+  coverage: partial
+  github_repos:
+    - Sonarr/Sonarr
+  cpe:
+    - cpe:2.3:a:sonarr:sonarr
+  notes: >-
+    The Sonarr project publishes no official container image. Sonarr/Sonarr has two repository
+    advisories (2026); older CVEs exist only in NVD. Vulnerabilities are reported privately
+    (security@sonarr.tv or Discord per SECURITY.md) and fixes are mentioned in GitHub release
+    notes. Versions have four components (4.0.20.3014); lsio tags add -lsNNN.
+exposure_hints:
+  default_ports: [8989]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

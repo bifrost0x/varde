@@ -1,0 +1,121 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}
+{{if not $d.Guide.Started}}{{template "guide" $d}}{{end}}
+{{if $d.Empty}}{{else if eq $d.State "urgent"}}
+<section class="hero hero--alert" aria-labelledby="status-title">
+  <img class="hero__mark" src="/static/brand/mark.svg" alt="">
+  <div>
+    <h1 class="hero__title" id="status-title">{{plural $d.UrgentTodo "urgent update"}} to do</h1>
+    <p class="hero__text">{{plural $d.Findings.New.P1 "new urgent finding"}} on {{$d.UrgentTodo}} {{if eq $d.UrgentTodo 1}}container or system{{else}}containers or systems{{end}}. Each card below names the one update that fixes them; install it and Varde closes them at the next report.</p>
+  </div>
+</section>
+{{else if $d.NotUrgent}}
+<section class="hero hero--clear" aria-labelledby="status-title">
+  <img class="hero__mark" src="/static/brand/mark-unlit.svg" alt="">
+  <div>
+    <h1 class="hero__title" id="status-title">{{plural $d.NotUrgent "new finding"}}, none urgent</h1>
+    <p class="hero__text">{{if $d.Findings.New.P2}}P2 findings go into the daily digest{{if $d.Findings.New.P3}}, P3 into the weekly one{{end}}{{else}}P3 findings go into the weekly digest{{end}}. Each one names the update that fixes it.</p>
+  </div>
+</section>
+{{else}}
+<section class="hero hero--clear" aria-labelledby="status-title">
+  <img class="hero__mark" src="/static/brand/mark-unlit.svg" alt="">
+  <div>
+    <h1 class="hero__title" id="status-title">{{if $d.Unassessed}}Nothing checked yet{{else if $d.Acknowledged}}Nothing new{{else}}All clear{{end}}</h1>
+    {{if $d.Unassessed}}
+    <p class="hero__text">Varde knows what is installed on {{plural $d.Machines.Read "system"}}, but checks none of it yet.{{if ge $d.Guide.Next 0}} Next: <a href="{{(index $d.Guide.Steps $d.Guide.Next).Link}}">{{(index $d.Guide.Steps $d.Guide.Next).Action}}</a>.{{end}}</p>
+    {{else if $d.Acknowledged}}
+    <p class="hero__text">No new finding. {{plural $d.Acknowledged "acknowledged finding"}} {{if eq $d.Acknowledged 1}}is still open and no longer notifies{{else}}are still open and no longer notify{{end}}{{if $d.Quiet}}, listed below{{end}}.</p>
+    {{else if $d.Notices}}
+    <p class="hero__text">No known vulnerability in what Varde can check. {{plural (len $d.Notices) "blind spot"}} listed below.</p>
+    {{else if $d.Unchecked}}
+    <p class="hero__text">No known vulnerability in the {{plural $d.Coverage.Assessable "app"}}{{if $d.SystemChecked}} and {{plural $d.SystemChecked "system package"}}{{end}} Varde can check. {{$d.Unchecked}} more {{if eq $d.Unchecked 1}}is{{else}}are{{end}} not checked yet; <a href="/systems/gaps">Gaps</a> names the step for each.</p>
+    {{else}}
+    <p class="hero__text">No action needed. {{if $d.Coverage.Assessable}}{{plural $d.Coverage.Assessable "app"}}{{if $d.SystemChecked}} and {{end}}{{end}}{{if $d.SystemChecked}}{{plural $d.SystemChecked "system package"}}{{end}} checked{{if not $d.LastInventory.IsZero}}, inventory read {{since $d.LastInventory}}{{end}}.</p>
+    {{end}}
+  </div>
+</section>
+{{end}}
+
+{{if not $d.Empty}}<div class="stats">
+  <a class="stat {{if $d.Findings.New.P1}}stat--p1{{end}}" href="/findings?priority=P1&amp;state=open"><span class="stat__label">{{template "prio" "P1"}} new</span><span class="stat__value">{{$d.Findings.New.P1}}</span><span class="stat__sub">reachable or exploited: notified at once</span></a>
+  <a class="stat" href="/findings?priority=P2&amp;state=open"><span class="stat__label">{{template "prio" "P2"}} new</span><span class="stat__value">{{$d.Findings.New.P2}}</span><span class="stat__sub">serious: in the daily digest</span></a>
+  <a class="stat" href="/findings?priority=P3&amp;state=open"><span class="stat__label">{{template "prio" "P3"}} new</span><span class="stat__value">{{$d.Findings.New.P3}}</span><span class="stat__sub">fix with the next regular update: weekly digest</span></a>
+  <a class="stat" href="/findings?match=unverified&amp;state=open"><span class="stat__label">{{template "prio" ""}}</span><span class="stat__value">{{$d.Findings.New.Unverified}}</span><span class="stat__sub">Varde could not confirm the version</span></a>
+</div>
+{{if $d.Acknowledged}}<p class="small muted"><a href="/findings?state=acknowledged">{{plural $d.Acknowledged "acknowledged or snoozed finding"}}</a> not counted above.</p>{{end}}{{end}}
+
+{{if $d.Todo}}
+<section aria-labelledby="urgent-title">
+  <div class="panel__head"><h2 id="urgent-title">Update these first</h2><a class="small" href="/findings">All updates to do</a></div>
+  {{template "todogroups" $d.Todo}}
+</section>
+{{end}}
+
+{{if $d.Guide.Started}}{{template "guiderest" $d.Guide}}{{end}}
+{{if $d.Guide.Started}}{{template "setupsteps" $d.Steps}}{{end}}
+
+{{if $d.Notices}}
+<section class="panel" aria-labelledby="blind-title">
+  <div class="panel__head"><h2 id="blind-title">Blind spots</h2></div>
+  <p class="small">Varde cannot check these. They are not vulnerabilities, but nothing protects you from one here either.</p>
+  <ul class="notice-list">
+  {{range $d.Notices}}
+    <li><a href="{{noticeLink .Kind}}"><strong>{{.Title}}</strong></a><span class="cell-sub">{{.Detail}} Since {{since .FirstSeen}}.</span></li>
+  {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{if $d.Paths}}
+<section class="panel" aria-labelledby="paths-title">
+  <div class="panel__head"><h2 id="paths-title">Attack paths</h2><a class="small" href="/findings/paths">{{if gt $d.PathCount 3}}All {{$d.PathCount}} paths{{else}}Show the steps{{end}}</a></div>
+  <p class="small">How an attacker gets in, from what Varde knows of your systems. Cut each one where it starts.{{if $d.Noise}} <a href="/findings/noise">{{plural $d.Noise "finding"}}</a> no path uses {{if eq $d.Noise 1}}is{{else}}are{{end}} background noise.{{end}}</p>
+  <ul class="notice-list">{{range $d.Paths}}
+    <li><span class="badge {{if eq .Entry "internet"}}badge--p1{{else}}badge--p2{{end}}">{{if eq .Entry "internet"}}internet{{else}}LAN{{end}}</span> <strong>{{.Impact}}</strong><span class="cell-sub">{{.Cut}}{{if .Breaker}} · <a href="/findings/{{.Breaker}}">finding</a>{{end}}</span></li>
+  {{end}}</ul>
+</section>
+{{end}}
+
+
+{{if $d.Restarts}}
+<section class="panel" aria-labelledby="restart-title">
+  <div class="panel__head"><h2 id="restart-title">Waiting for a restart</h2></div>
+  <p class="small">Updates are installed, but their fixes take effect only after a restart.</p>
+  <ul class="notice-list">{{range $d.Restarts}}<li><a href="/systems/{{.Machine.ID}}"><strong>{{.Machine.Name}}</strong></a><span class="cell-sub">{{.Reboot}}</span></li>{{end}}</ul>
+</section>
+{{end}}
+
+{{if $d.Quiet}}
+<section class="panel" aria-labelledby="quiet-title">
+  <div class="panel__head"><h2 id="quiet-title">Acknowledged, still open</h2><a class="small" href="/findings?state=acknowledged">Show all</a></div>
+  <p class="small">You have seen these. They stay here until the update is installed.</p>
+  {{template "findinggroups" $d.Quiet}}
+</section>
+{{end}}
+
+<div class="grid-2">
+  <section class="panel" aria-labelledby="coverage-title">
+    <div class="panel__head"><h2 id="coverage-title">Coverage</h2><a class="small" href="/systems/gaps">Details</a></div>
+    <p class="small">{{$d.Coverage.Assessable}} of {{plural $d.Coverage.Total "workload"}} checked against advisories{{if $d.Coverage.Identified}}, {{$d.Coverage.Identified}} identified{{end}}.</p>
+    <div class="meter" role="img" aria-label="{{$d.Coverage.Percent}} percent identified"><span class="meter__fill {{meterClass $d.Coverage.Percent}}"></span></div>
+    <p class="small">{{if $d.Machines.Hosts}}Varde knows what is installed on <a href="/systems">{{$d.Machines.Read}} of {{plural $d.Machines.Hosts "system"}}</a>{{if $d.Machines.Stale}}, {{$d.Machines.Stale}} not reporting{{end}}{{if $d.Machines.Paused}}, {{$d.Machines.Paused}} switched off{{end}}{{if $d.Machines.Devices}}; <a href="/connections#devices">{{plural $d.Machines.Devices "further device"}}</a> in the network{{end}}.{{else if $d.Machines.Devices}}<a href="/connections#devices">{{plural $d.Machines.Devices "device"}}</a> found in the network; Varde does not know what is installed on any of them yet.{{else}}No system known yet.{{end}}</p>
+    <ul class="small muted">
+      {{if $d.Coverage.NotInCatalog}}<li><a href="/systems/gaps#unidentified">{{plural (len $d.Coverage.NotInCatalog) "workload"}} not in the catalog</a></li>{{end}}
+      {{if $d.Coverage.VersionUnknown}}<li><a href="/systems/gaps#version">{{plural (len $d.Coverage.VersionUnknown) "workload"}} with unknown version</a></li>{{end}}
+      {{if $d.Coverage.Weak}}<li><a href="/systems/gaps#weak">{{plural (len $d.Coverage.Weak) "probable match"}} to confirm</a></li>{{end}}
+      {{if $d.Coverage.PublicRoutes}}<li><a href="/systems/gaps#routes">{{plural (len $d.Coverage.PublicRoutes) "public route"}} Varde cannot check</a></li>{{end}}
+      {{if and (not $d.Coverage.BlindSpots) (not $d.Empty)}}<li>No blind spots found.</li>{{end}}
+      {{if $d.Coverage.NotApps}}<li><a href="/systems/gaps#not-apps">{{plural (len $d.Coverage.NotApps) "helper container"}} not counted</a></li>{{end}}
+    </ul>
+  </section>
+  <section class="panel" aria-labelledby="sources-title">
+    <div class="panel__head"><h2 id="sources-title">Advisory data</h2><a class="small" href="/settings/sources">Details</a></div>
+    <p class="small">Mode: {{$d.Mode}}. {{if not $d.LastRefresh.IsZero}}Last update {{since $d.LastRefresh}}.{{else}}Waiting for the first update.{{end}}</p>
+    {{if $d.SourceErrors}}<p class="small"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg> {{plural $d.SourceErrors "source"}} reported errors.</p>{{else}}<p class="small muted">All sources healthy.</p>{{end}}
+    <form method="post" action="/scan" class="actions">{{template "csrf" .CSRF}}<button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#refresh"></use></svg>Refresh inventory and advisories</button></form>
+    <p class="small muted">Reads every connected platform and the advisory sources again. The network scan runs under <a href="/connections#scan">Connections</a>.</p>
+  </section>
+</div>
+{{end}}

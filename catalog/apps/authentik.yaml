@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+id: authentik
+name: authentik
+homepage: https://goauthentik.io
+tags: [identity, sso, security]
+images:
+  - match: ghcr.io/goauthentik/server
+  - match: authentik/server
+  - match: beryju/authentik
+    note: legacy Docker Hub name, last release 2025.6.4; its version label is refs/tags/version/<v>
+oci_source:
+  - https://github.com/goauthentik/authentik
+version:
+  scheme: calver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^(?P<v>\d{4}\.\d{1,2}\.\d+(?:-rc\d+)?)$'
+advisories:
+  coverage: full
+  github_repos:
+    - goauthentik/authentik
+  osv_packages:
+    - {ecosystem: Go, name: goauthentik.io}
+  cpe:
+    - cpe:2.3:a:goauthentik:authentik
+  notes: >-
+    Advisories are also listed in the release notes and at docs.goauthentik.io/security.
+    Outpost images (ghcr.io/goauthentik/proxy, ldap, radius, rac) are components and not listed.
+    YYYY.M floating tags and latest never yield a version.
+exposure_hints:
+  default_ports: [9000, 9443]
+  typical: public
+eol: authentik
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

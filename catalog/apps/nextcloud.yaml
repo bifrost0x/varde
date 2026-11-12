@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+id: nextcloud
+name: Nextcloud
+homepage: https://nextcloud.com
+tags: [files, collaboration]
+images:
+  - match: library/nextcloud
+    note: Docker official image (docker-library), variants apache, fpm, fpm-alpine
+  - match: lscr.io/linuxserver/nextcloud
+    flavor: lsio
+version:
+  scheme: semver
+  probe:
+    http:
+      path: /status.php
+      json_pointer: /versionstring
+      version_pattern: '^(?P<v>\d+\.\d+\.\d+)$'
+      expect: {/productname: Nextcloud}
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-(?:apache|fpm|fpm-alpine))?$'
+advisories:
+  coverage: full
+  github_repos:
+    - nextcloud/security-advisories
+  packages:
+    - {ecosystem: nextcloud, name: Server}
+    - {name: Nextcloud Server}
+  cpe:
+    - cpe:2.3:a:nextcloud:nextcloud_server
+  notes: >-
+    Nextcloud publishes all advisories (server, apps, desktop, mobile) centrally in
+    nextcloud/security-advisories, not in nextcloud/server; they use the non-OSV ecosystem
+    "nextcloud" with products such as Server or Deck, so advisories for apps other than Server
+    need filtering. Also listed at https://nextcloud.com/security/advisories/. The official image
+    has no OCI labels, so the version comes from the tag (stable, production, latest, apache, fpm
+    and major/minor tags are floating). Nextcloud All-in-One (nextcloud/all-in-one,
+    ghcr.io/nextcloud-releases/aio-*) is deliberately not listed: the mastercontainer is a
+    separate product with date tags and the aio-nextcloud image carries no Nextcloud version.
+exposure_hints:
+  default_ports: [80]
+  typical: public
+eol: nextcloud
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

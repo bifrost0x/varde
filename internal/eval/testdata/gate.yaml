@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Minimum numbers of the evaluation (internal/eval). They are the measured baseline:
+# a change that lowers one fails the build. Raise them when recognition improves,
+# never lower them to make a change pass.
+precision: 1.0
+recall: 1.0
+version_accuracy: 1.0
+# 3 of 58 app cases: nothing states the version, registry, packages and manifests included (see the report).
+version_coverage: 0.948
+match_precision: 1.0
+match_recall: 1.0
+max_version_wrong: 0
+max_duplicates: 0
+max_false_merges: 0
+max_trust_wrong: 0
+max_relation_wrong: 0

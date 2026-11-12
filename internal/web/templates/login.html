@@ -1,0 +1,16 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+<div class="auth__card">
+  <div class="auth__brand"><img src="/static/brand/mark-unlit.svg" alt=""><span>varde</span></div>
+  <h1>Sign in</h1>
+  {{if .Data.Error}}<p class="error" role="alert">{{.Data.Error}}</p>{{end}}
+  {{if .Data.Insecure}}<div class="banner banner--warn">{{if .Data.Proxy}}{{template "proxyhint" .Data.Proxy}}{{else}}<p>This connection is not encrypted. Your password travels in clear text through the local network.</p>{{end}}</div>{{end}}
+  <form class="form" method="post" action="/login">
+    {{template "csrf" .CSRF}}
+    {{if ne .Data.Next "/"}}<input type="hidden" name="next" value="{{.Data.Next}}">{{end}}
+    <div class="field"><label for="username">Username</label><input id="username" name="username" type="text" autocomplete="username" required autofocus value="{{.Data.Username}}"></div>
+    <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
+    <button class="btn btn--primary" type="submit">Sign in</button>
+  </form>
+</div>
+{{end}}

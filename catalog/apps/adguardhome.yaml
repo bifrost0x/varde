@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+id: adguardhome
+name: AdGuard Home
+homepage: https://adguard.com/adguard-home/overview.html
+tags: [dns, adblock, network]
+images:
+  - match: adguard/adguardhome
+oci_source:
+  - https://github.com/AdguardTeam/AdGuardHome
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - AdguardTeam/AdGuardHome
+  osv_packages:
+    - {ecosystem: Go, name: github.com/AdguardTeam/AdGuardHome}
+  cpe:
+    - cpe:2.3:a:adguard:adguardhome
+  notes: >-
+    Release tags are v-prefixed (v0.107.80); beta tags look like v0.108.0-b.91 and
+    v1.0.0-b.2; latest, beta and edge are floating. Security fixes are also listed in the
+    CHANGELOG and GitHub release notes.
+exposure_hints:
+  default_ports: [53, 80, 443, 853, 3000]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-08

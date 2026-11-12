@@ -1,0 +1,60 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}{{$csrf := .CSRF}}
+<div class="page-head">
+  <div><h1>Agents</h1><p>The agent reports the full inventory of a host: every installed package and every Docker container, kept current. Varde installs it with one SSH sign-in it does not keep, and the agent updates itself to this server's version. It connects out, so it also works for hosts in another VLAN or behind a VPN.</p></div>
+  {{if $d.CanInstall}}<div class="actions"><a class="btn btn--primary" href="/connections/agents/install">Install the agent on a host</a></div>{{end}}
+</div>
+{{if $d.NewToken}}
+<div class="banner banner--ok" role="status"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>
+  <div><p>Enrollment token for <strong>{{$d.NewName}}</strong> created. It works once, for one hour, and is not shown again.</p>
+  <div class="secret"><span id="new-token">{{$d.NewToken}}</span><button class="btn btn--ghost" type="button" data-copy="#new-token"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+  <p class="small">On the new host, put the token into a file and start the agent with <code>deploy/compose.agent.yaml</code>:
+  <code>VARDE_SERVER_URL=https://&lt;this server&gt;:{{port $d.ListenAddr}}</code> and <code>VARDE_ENROLL_TOKEN_FILE</code> pointing to the file.
+  The token contains the fingerprint of this server's certificate authority, so the agent can verify the server.</p></div></div>
+{{end}}
+{{if $d.Error}}<div class="banner banner--warn" role="alert"><p>{{$d.Error}}</p></div>{{end}}
+<section class="panel" id="enroll" aria-labelledby="enroll-title">
+  <h2 id="enroll-title">Installed agents</h2>
+  {{if not $d.Agents}}<p class="small muted">No agent yet.</p>{{end}}
+  {{if $d.Agents}}
+  <table class="table">
+    <thead><tr><th scope="col">Agent</th><th scope="col">State</th><th scope="col">Certificate</th><th scope="col">Last contact</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>{{range $d.Agents}}
+    <tr>
+      <td data-label="Agent"><a href="/systems/{{.ID}}">{{.Name}}</a>{{if .AgentVersion}}<span class="cell-sub">agent {{.AgentVersion}}{{if .OS}} · {{.OS}}{{end}}</span>{{end}}</td>
+      <td data-label="State">{{if eq .State "stale"}}<span class="badge badge--p2">not reporting</span>{{else if eq .State "revoked"}}<span class="badge badge--muted">revoked</span>{{else}}<span class="badge badge--ok">active</span>{{end}}</td>
+      <td data-label="Certificate">{{if and .CertExpires (ne .State "revoked")}}until {{date .CertExpires}}{{else}}<span class="muted">–</span>{{end}}</td>
+      <td data-label="Last contact">{{since .LastContact}}</td>
+      <td data-label="Actions">{{if ne .State "revoked"}}
+        <form method="post" action="/connections/agents/{{.ID}}/revoke" data-confirm="Revoke {{.Name}}? Its certificate is rejected from now on and its workloads leave the inventory. Enrolling again needs a new token.">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Revoke</button></form>
+      {{end}}</td>
+    </tr>{{end}}</tbody>
+  </table>
+  {{end}}
+  {{if $d.AgentsOff}}
+  <p>The agent listener is switched off. Set <code>VARDE_AGENT_LISTEN_ADDR</code> (default <code>:8443</code>) and publish that port to add agents.</p>
+  {{end}}
+</section>
+
+{{if not $d.AgentsOff}}
+<section class="panel" id="manual" aria-labelledby="manual-title">
+  <h2 id="manual-title">Run the agent yourself</h2>
+  <p class="small">For hosts Varde cannot sign in to, or to run the agent in a container with <code>deploy/compose.agent.yaml</code>: create a one-time token here and give it to the agent. It connects out to this server on port {{port $d.ListenAddr}} and needs no inbound port.</p>
+  <form class="form form--inline" method="post" action="/connections/agents/tokens">{{template "csrf" $csrf}}
+    <div class="field"><label for="enroll-name">Token for</label><input id="enroll-name" name="name" type="text" maxlength="64" required placeholder="e.g. nas or vps-01"></div>
+    <button class="btn btn--primary" type="submit">Create enrollment token</button>
+  </form>
+  {{if $d.Pending}}
+  <h3>Unused tokens</h3>
+  <table class="table">
+    <thead><tr><th scope="col">For</th><th scope="col">Created</th><th scope="col">Expires</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>{{range $d.Pending}}
+      <tr><td data-label="For">{{.Name}}<span class="cell-sub">by {{.CreatedBy}}</span></td><td data-label="Created">{{since .CreatedAt}}</td><td data-label="Expires">{{date .ExpiresAt}}</td>
+      <td data-label="Actions"><form method="post" action="/connections/agents/tokens/{{.ID}}/delete">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Delete</button></form></td></tr>
+    {{end}}</tbody>
+  </table>
+  {{end}}
+</section>
+{{end}}
+{{end}}

@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+id: searxng
+name: SearXNG
+homepage: https://docs.searxng.org
+tags: [search, privacy]
+images:
+  - match: searxng/searxng
+  - match: ghcr.io/searxng/searxng
+oci_source:
+  - https://github.com/searxng/searxng
+version:
+  scheme: calver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^(?P<v>\d{4}\.\d{1,2}\.\d{1,2}-[0-9a-f]{7,40})$'
+advisories:
+  coverage: limited
+  notes: >-
+    SearXNG publishes no releases, no repository advisories and no OSV records (no PyPI package)
+    and has no NVD CPE; NVD keyword hits for SearXNG concern other products that call it. Reports
+    go to security@searxng.org (SECURITY.md); fixes appear only in the commit history. Every
+    build is tagged <date>-<commit> (2026.11.9-57ff753ad), often several per day; the OCI
+    version label carries the same value. latest is floating.
+exposure_hints:
+  default_ports: [8080]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

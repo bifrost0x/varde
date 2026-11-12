@@ -1,0 +1,9 @@
+[varde] P1 Immich: CVE-2026-1, update to 1.121.0
+
+Immich (immich_server on nas), running 1.120.0
+GHSA-1 / CVE-2026-1: Path traversal in asset upload
+Severity: critical (CVSS 9.8), known exploited (CISA KEV), EPSS 0.42
+Exposure: public (traefik router immich serves photos.example.com)
+Action: update to 1.121.0 or later
+Advisory: https://github.com/immich-app/immich/security/advisories/GHSA-1
+Details: https://varde.example.com/findings/1

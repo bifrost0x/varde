@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+id: fritzos
+name: FRITZ!OS
+homepage: https://avm.de/fritz-os/
+tags: [router, appliance]
+packages:
+  # Read through the Fritz!Box integration (TR-064 DeviceInfo GetInfo):
+  # "164.07.57" is recorded as 7.57.
+  - {manager: firmware, name: fritzos, versioning: upstream}
+version:
+  scheme: semver
+advisories:
+  coverage: limited
+  notes: >-
+    AVM publishes security notes at avm.de/service/aktuelle-sicherheitshinweise naming fixed
+    FRITZ!OS versions per model; there is no machine-readable feed and few CVE records. Varde
+    records the version so outdated firmware is visible.
+exposure_hints:
+  default_ports: [80, 443, 49443]
+  typical: lan
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-11

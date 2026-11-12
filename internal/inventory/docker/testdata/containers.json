@@ -1,0 +1,35 @@
+[
+  {
+    "Id": "1111111111111111111111111111111111111111111111111111111111111111",
+    "Names": ["/immich_server"],
+    "Image": "ghcr.io/immich-app/immich-server:v1.120.0",
+    "ImageID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "State": "running",
+    "Labels": {"com.docker.compose.project": "immich", "com.docker.compose.service": "immich-server"},
+    "Ports": [
+      {"IP": "0.0.0.0", "PrivatePort": 2283, "PublicPort": 2283, "Type": "tcp"},
+      {"IP": "::", "PrivatePort": 2283, "PublicPort": 2283, "Type": "tcp"}
+    ],
+    "NetworkSettings": {"Networks": {"immich_default": {"IPAddress": "172.20.0.5"}}}
+  },
+  {
+    "Id": "2222222222222222222222222222222222222222222222222222222222222222",
+    "Names": ["/vaultwarden"],
+    "Image": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "ImageID": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "State": "exited",
+    "Labels": {},
+    "Ports": [],
+    "NetworkSettings": {"Networks": {"bridge": {"IPAddress": ""}, "proxy": {"IPAddress": "172.21.0.3"}}}
+  },
+  {
+    "Id": "3333333333333333333333333333333333333333333333333333333333333333",
+    "Names": ["/sidecar"],
+    "Image": "ghcr.io/immich-app/immich-server:v1.120.0",
+    "ImageID": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "State": "running",
+    "Labels": null,
+    "Ports": null,
+    "NetworkSettings": {"Networks": {}}
+  }
+]

@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Release: runs only when the maintainer pushes a version tag (v1.2.3). Builds the
+# multi-arch image reproducibly, attaches SBOM and SLSA provenance, signs the
+# image with cosign (keyless, GitHub OIDC), pushes it to Docker Hub and GHCR,
+# and creates a GitHub release with static binaries and checksums.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   DOCKERHUB_USERNAME   Docker Hub account that owns bifrost0x/varde
+#   DOCKERHUB_TOKEN      Docker Hub access token with read/write scope
+# GHCR and the GitHub release use the workflow's GITHUB_TOKEN.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+
+permissions: {}
+
+env:
+  DOCKERHUB_IMAGE: docker.io/bifrost0x/varde
+  GHCR_IMAGE: ghcr.io/bifrost0x/varde
+  GOVULNCHECK_VERSION: v1.9.0
+  GOLANGCI_LINT_VERSION: v2.15.0
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # The same checks as CI, so a tag cannot release what CI would refuse.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "the tagged commit is not on main"; exit 1; }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: ./scripts/check-license-headers.sh
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+      - run: go test -race -count=1 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+      - name: gitleaks (full history)
+        run: >
+          docker run --rm -v "$PWD:/repo:ro"
+          ghcr.io/gitleaks/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854
+          git /repo --no-banner --redact --exit-code 1
+      - name: tag matches the changelog
+        run: grep -q "^## \[${GITHUB_REF_NAME#v}\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for ${GITHUB_REF_NAME#v}"; exit 1; }
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push to GHCR
+      id-token: write   # cosign keyless signing and provenance
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: source date
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: |
+            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+          labels: |
+            org.opencontainers.image.title=Varde
+            org.opencontainers.image.licenses=Apache-2.0
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ env.SOURCE_DATE_EPOCH }}
+          sbom: true
+          provenance: mode=max
+        env:
+          SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: sign
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign sign --yes "${DOCKERHUB_IMAGE}@${DIGEST}"
+          cosign sign --yes "${GHCR_IMAGE}@${DIGEST}"
+
+  binaries:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the GitHub release
+      id-token: write   # cosign keyless signing of the checksums
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: build
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          mkdir dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -buildvcs=false \
+              -ldflags "-s -w -buildid= -X github.com/bifrost0x/varde/internal/buildinfo.Version=${GITHUB_REF_NAME} \
+                -X github.com/bifrost0x/varde/internal/buildinfo.Commit=${GITHUB_SHA} \
+                -X github.com/bifrost0x/varde/internal/buildinfo.Date=${SOURCE_DATE_EPOCH}" \
+              -o "dist/varde-linux-${arch}" ./cmd/varde
+          done
+          (cd dist && sha256sum varde-* > SHA256SUMS)
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: sign the checksums
+        # Verification: docs/releasing.md.
+        run: cosign sign-blob --yes --bundle dist/SHA256SUMS.bundle dist/SHA256SUMS
+      - name: release notes from the changelog
+        run: awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notes.md
+      - name: create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          printf '\n\nImage digest: `%s` (%s, %s), signed with cosign.\n' "$DIGEST" "$DOCKERHUB_IMAGE" "$GHCR_IMAGE" >> notes.md
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag $prerelease

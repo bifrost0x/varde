@@ -1,0 +1,49 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-head">
+  <div><h1>Attack paths</h1><p>How an attacker gets from the internet or your LAN to a foothold on your systems, built from what Varde knows: the services that answer, the proxy routes, the findings and how containers and guests run. Fixing the first flaw on a path cuts it.</p></div>
+</div>
+<div class="stats">
+  <div class="stat{{if $d.InternetCount}} stat--p1{{end}}"><span class="stat__label">Paths from the internet</span><span class="stat__value">{{$d.InternetCount}}</span></div>
+  <div class="stat"><span class="stat__label">Paths from the LAN</span><span class="stat__value">{{$d.LANCount}}</span></div>
+  <div class="stat"><span class="stat__label">Systems an attacker could take over</span><span class="stat__value">{{$d.Root}}</span></div>
+  <a class="stat" href="/findings?path=path"><span class="stat__label">Findings on a path</span><span class="stat__value">{{$d.OnPath}}</span></a>
+  <a class="stat" href="/findings/noise"><span class="stat__label">Background noise</span><span class="stat__value">{{$d.Noise}}</span></a>
+</div>
+{{if not $d.Count}}
+<div class="empty panel">
+  <img src="/static/brand/mark-unlit.svg" alt="">
+  <h2>No attack path found</h2>
+  <p>No finding Varde knows of opens a way in from the internet or the LAN. {{if $d.Unclear}}{{plural $d.Unclear "finding"}} could not be placed yet: Varde sees more once agents report the ports their hosts listen on and a network scan has run.{{end}}</p>
+</div>
+{{else}}
+{{if $d.Internet}}<h2>From the internet</h2>{{template "pathcards" $d.Internet}}{{end}}
+{{if $d.LAN}}<h2>From the LAN</h2>
+<p class="small muted">Someone already in your network: a compromised laptop, a guest, an IoT device.</p>
+{{template "pathcards" $d.LAN}}{{end}}
+{{if lt $d.Shown $d.Count}}<p class="small muted">The {{$d.Shown}} most dangerous of {{$d.Count}} paths are shown.</p>{{end}}
+{{end}}
+<p class="small muted">Varde cannot see router port forwards or firewalls. A path from the internet is based on proxy routes under your public domains; a flaw whose attack vector is not published is assumed to be remote and marked as such.</p>
+{{end}}
+
+{{define "pathcards"}}
+<div class="groups">
+{{range .}}
+<details class="group{{if eq .Entry "internet"}} group--p1{{end}}">
+  <summary class="group__head">
+    <span class="group__badges"><span class="badge {{if eq .Entry "internet"}}badge--p1{{else}}badge--p2{{end}}">{{if eq .Entry "internet"}}internet{{else}}LAN{{end}}</span></span>
+    <span class="group__title"><strong>{{.Impact}}</strong><span class="cell-sub">{{plural (len .Steps) "step"}}</span></span>
+    <span class="group__action">{{.Cut}}{{if .Breaker}} <a class="small" href="/findings/{{.Breaker}}">Open the finding</a>{{end}}</span>
+  </summary>
+  <div class="group__body">
+    <ol class="path">
+    {{range .Steps}}
+      <li class="path__step path__step--{{.Kind}}">{{.Label}}{{if .Indirect}} <span class="badge badge--unverified">indirect</span>{{end}}{{if .FindingID}} <a class="mono small" href="/findings/{{.FindingID}}">{{.Advisory}}</a> {{template "prio" .Priority}}{{end}}</li>
+    {{end}}
+    </ol>
+  </div>
+</details>
+{{end}}
+</div>
+{{end}}

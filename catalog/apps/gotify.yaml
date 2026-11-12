@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+id: gotify
+name: Gotify
+homepage: https://gotify.net
+tags: [notifications, push]
+images:
+  - match: gotify/server
+  - match: ghcr.io/gotify/server
+  - match: gotify/server-arm64
+    note: legacy per-architecture name, now receives the same multi-arch index
+  - match: gotify/server-arm7
+    note: legacy per-architecture name, now receives the same multi-arch index
+oci_source:
+  - https://github.com/gotify/server
+version:
+  scheme: semver
+advisories:
+  coverage: full
+  github_repos:
+    - gotify/server
+  cpe:
+    - cpe:2.3:a:gotify:server
+  notes: >-
+    Repository advisories name the Go modules github.com/gotify/server, /v2 and /v3. Some OSV
+    records of the Go vulnerability database for these modules have no fixed version, so no OSV
+    package is listed. Tags are plain semver (3.1.1); latest, master and major and minor tags
+    (3, 3.1) are floating.
+exposure_hints:
+  default_ports: [80]
+  typical: public
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-09

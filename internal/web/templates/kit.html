@@ -1,0 +1,37 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+<div class="page-head"><div><h1>Component kit</h1><p>Every component of the design system. Development builds only.</p></div></div>
+
+<h2>Status hero</h2>
+<section class="hero hero--clear"><img class="hero__mark" src="/static/brand/mark-unlit.svg" alt=""><div><p class="hero__title">All clear</p><p class="hero__text">No action needed. 23 workloads watched, last check 4 minutes ago.</p></div></section>
+<section class="hero hero--alert"><img class="hero__mark" src="/static/brand/mark.svg" alt=""><div><p class="hero__title">2 urgent findings</p><p class="hero__text">Act on these now. Each one names the update that fixes it.</p></div></section>
+
+<h2>Badges</h2>
+<section class="panel actions">{{template "prio" "P1"}}{{template "prio" "P2"}}{{template "prio" "P3"}}{{template "prio" ""}}<span class="badge badge--kev">KEV</span><span class="badge badge--ok">ok</span>{{template "exposure" "public"}}{{template "exposure" "lan"}}{{template "exposure" "internal"}}{{template "exposure" "unknown"}}</section>
+
+<h2>Finding table</h2>
+<section class="panel">{{template "findingtable" .Data}}</section>
+
+<h2>Banners</h2>
+<div class="banner banner--alert"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg><p>Alert banner.</p></div>
+<div class="banner banner--warn"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#lock"></use></svg><p>Warning banner.</p></div>
+<div class="banner banner--info"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#question"></use></svg><p>Information banner.</p></div>
+<div class="banner banner--ok"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg><p>Success banner.</p></div>
+
+<h2>Evidence</h2>
+<section class="panel"><dl class="evidence"><dt>Running version</dt><dd><span class="mono">1.120.0</span> <span class="muted">(image label)</span></dd><dt>Affected range</dt><dd class="mono">&gt;= 1.0.0, &lt; 1.121.0</dd></dl></section>
+
+<h2>Coverage meter</h2>
+<section class="panel"><div class="meter"><span class="meter__fill meter__fill--w70"></span></div></section>
+
+<h2>Buttons and form</h2>
+<section class="panel">
+  <div class="actions"><button class="btn btn--primary" type="button">Primary</button><button class="btn" type="button">Default</button><button class="btn btn--ghost" type="button">Ghost</button>
+  <form data-confirm="This is a confirmation dialog."><button class="btn btn--danger" type="submit">Destructive (confirms)</button></form></div>
+  <form class="form"><div class="field"><label for="k1">Text field</label><input id="k1" type="text" placeholder="example.com"><span class="hint">A hint.</span></div>
+  <label class="check"><input type="checkbox" checked><span>A checkbox<span class="cell-sub">With an explanation.</span></span></label></form>
+</section>
+
+<h2>Empty state</h2>
+<div class="empty panel"><img src="/static/brand/mark-unlit.svg" alt=""><h2>Nothing here</h2><p>No open findings. Varde stays silent until something applies to you.</p></div>
+{{end}}

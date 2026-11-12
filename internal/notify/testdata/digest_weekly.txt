@@ -1,0 +1,25 @@
+[varde] Weekly digest: 2 findings, 1 need attention
+
+P2 important
+
+Immich (immich_server on nas), running 1.120.0
+GHSA-2 / CVE-2026-2: Path traversal in asset upload
+Severity: critical (CVSS 9.8), EPSS 0.42
+Exposure: public (traefik router immich serves photos.example.com)
+Action: update to 1.121.0 or later
+Advisory: https://github.com/immich-app/immich/security/advisories/GHSA-2
+Details: https://varde.example.com/findings/2
+
+P3 low
+
+Immich (immich_server on nas), running 1.120.0
+GHSA-3 / CVE-2026-3: Path traversal in asset upload
+Severity: low (CVSS 3.1)
+Action: no fixed version published yet; restrict access until one is available
+Advisory: https://github.com/immich-app/immich/security/advisories/GHSA-3
+Details: https://varde.example.com/findings/3
+
+Needs attention: version unknown or not comparable on publicly exposed apps
+
+- Immich (immich_server): GHSA-4 Path traversal in asset upload
+  Set the label varde.version on the container so Varde can check it.

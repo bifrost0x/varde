@@ -1,0 +1,91 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}
+<div class="page-head">
+  <div><h1>History</h1><p>What was fixed, when and how, what came in new, and what you did about it. To keep a report, print this page or save it as PDF from your browser, or download the entries as CSV.</p></div>
+  <div class="actions no-print"><a class="btn btn--ghost" href="/findings/history.csv?days={{$d.Days}}{{if $d.HostID}}&amp;host={{$d.HostID}}{{end}}">Download CSV</a></div>
+</div>
+<form class="filters no-print" method="get" action="/findings/history">
+  <div class="field"><label for="h-days">Period</label>
+    <select id="h-days" name="days">
+      {{range $d.Periods}}<option value="{{.}}" {{if eq . $d.Days}}selected{{end}}>Last {{.}} days</option>{{end}}
+    </select></div>
+  <div class="field"><label for="h-host">System</label>
+    <select id="h-host" name="host">
+      <option value="">All systems</option>
+      {{range $d.Hosts}}<option value="{{.ID}}" {{if eq .ID $d.HostID}}selected{{end}}>{{.Name}}</option>{{end}}
+    </select></div>
+  <div class="field field--action"><button class="btn" type="submit">Show</button></div>
+</form>
+
+<p class="print-only small">Varde history, last {{$d.Days}} days.</p>
+<div class="stats">
+  <div class="stat stat--ok"><span class="stat__label">Fixed</span><span class="stat__value">{{$d.Fixed}}</span><span class="stat__sub">{{if $d.FixedUrgent}}{{$d.FixedUrgent}} of them urgent{{else}}by an update or removing the package{{end}}</span></div>
+  <div class="stat"><span class="stat__label">New</span><span class="stat__value">{{$d.Opened}}</span>{{if $d.Reopened}}<span class="stat__sub">and {{$d.Reopened}} back again</span>{{end}}</div>
+  <a class="stat{{if $d.OpenUrgent}} stat--p1{{end}}" href="/findings"><span class="stat__label">Open now</span><span class="stat__value">{{$d.Open}}</span><span class="stat__sub">{{if $d.OpenUrgent}}{{$d.OpenUrgent}} urgent{{else}}none urgent{{end}}</span></a>
+  {{if $d.Closed}}<div class="stat"><span class="stat__label">Closed without a fix</span><span class="stat__value">{{$d.Closed}}</span><span class="stat__sub">container gone or advisory changed</span></div>{{end}}
+</div>
+
+{{if or $d.TimeToFix $d.ByCause}}
+<section class="panel" aria-labelledby="h-summary">
+  <div class="panel__head"><h2 id="h-summary">How findings ended</h2></div>
+  <div class="split">
+    {{if $d.ByCause}}<table class="table table--compact"><tbody>
+      {{range $d.ByCause}}<tr><td>{{.Label}}</td><td class="num">{{.Count}}</td></tr>{{end}}
+    </tbody></table>{{end}}
+    {{if $d.TimeToFix}}<table class="table table--compact">
+      <thead><tr><th scope="col">Priority</th><th scope="col">Time to fix (median)</th><th scope="col" class="num">Fixed</th></tr></thead>
+      <tbody>{{range $d.TimeToFix}}<tr><td>{{template "prio" .Priority}}</td><td>{{.Median}}</td><td class="num">{{.Count}}</td></tr>{{end}}</tbody>
+    </table>{{end}}
+  </div>
+</section>
+{{end}}
+
+{{if $d.Oldest}}
+<section class="panel" aria-labelledby="h-oldest">
+  <div class="panel__head"><h2 id="h-oldest">Waiting longest</h2><a class="small no-print" href="/findings">All open findings</a></div>
+  {{template "findingtable" $d.Oldest}}
+</section>
+{{end}}
+
+<h2>Timeline</h2>
+{{if $d.Timeline}}
+{{range $d.Timeline}}
+<section class="panel history-day" aria-label="{{.Date}}">
+  <div class="panel__head"><h3>{{.Date}}</h3></div>
+  <ol class="history">
+  {{range .Entries}}
+    <li class="history__entry history__entry--{{.Kind}}">
+      <div class="history__head">
+        <span class="history__time mono">{{clock .At}}</span>
+        <strong>{{.Headline}}</strong>
+        {{if .Workload}}<span>{{.Workload}}{{if .Host}} on {{.Host}}{{end}}</span>{{end}}
+        {{if .Actor}}<span class="muted">by {{.Actor}}</span>{{end}}
+        {{if .Items}}<span class="badge{{if eq .Kind "fixed"}} badge--ok{{else if .Urgent}} badge--p1{{end}}">{{plural (len .Items) "finding"}}</span>{{end}}
+      </div>
+      {{if .Explain}}<p class="small muted">{{.Explain}}</p>{{end}}
+      {{if .Image}}<p class="small muted">Image <span class="mono">{{.Image}}</span></p>{{end}}
+      {{if .Items}}
+      <details{{if le (len .Items) 3}} open{{end}}>
+        <summary class="small">{{if eq .Kind "fixed"}}What was fixed{{else}}Which findings{{end}}</summary>
+        <ul class="history__items">
+        {{range .Items}}<li>{{template "prio" .Priority}} {{if .Link}}<a href="/findings/{{.FindingID}}">{{.App}}</a>{{else}}{{.App}}{{end}}
+          <span class="mono">{{.Advisory}}</span>
+          {{if .To}}<span class="small"><span class="mono">{{.From}}</span> → <span class="mono">{{.To}}</span></span>{{else if .From}}<span class="small muted">version <span class="mono">{{.From}}</span></span>{{end}}</li>{{end}}
+        </ul>
+      </details>
+      {{end}}
+    </li>
+  {{end}}
+  </ol>
+</section>
+{{end}}
+{{if $d.Truncated}}<p class="small muted">Only the newest entries of this period are shown; choose a shorter period or one system for the rest.</p>{{end}}
+{{else}}
+<div class="empty panel">
+  <img src="/static/brand/mark-unlit.svg" alt="">
+  <h2>Nothing happened in this period</h2>
+  <p>Varde records every finding it opens and resolves, and why: an update, a package taken out, a container gone. Updates you install show up here after the next report of the system.</p>
+</div>
+{{end}}
+{{end}}
