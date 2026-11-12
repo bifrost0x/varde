@@ -21,6 +21,7 @@ import (
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/fleet/wire"
 	"github.com/bifrost0x/varde/internal/integrations"
+	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/store"
 )
 
@@ -95,16 +96,17 @@ func (a *app) renderAgentInstall(w http.ResponseWriter, r *http.Request, cur *au
 	a.page(w, r, cur, status, "agentinstall", view{Title: "Install the agent", Nav: "connections", Tabs: tabs("connections", "/connections/agents"), Data: d})
 }
 
-// defaultAgentURL guesses the agent listener as hosts reach it: the host
-// name the browser used, with the listener's port.
+// defaultAgentURL guesses the agent listener as hosts reach it: this
+// machine's configured address, else the host name the browser used, with
+// the listener's port. The configured address comes first: the browser's
+// name is often that of a reverse proxy, which forwards the web interface
+// and not the agent port.
 func (a *app) defaultAgentURL(r *http.Request) string {
 	host := r.Host
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	if len(a.d.HostAddresses) > 0 && (host == "" || loopbackURL("https://"+net.JoinHostPort(strings.Trim(host, "[]"), "1"))) {
-		// Opened on the machine itself: the configured address is the one
-		// the hosts reach.
+	if len(a.d.HostAddresses) > 0 {
 		host = a.d.HostAddresses[0]
 	}
 	port := "8443"
@@ -252,6 +254,19 @@ func (a *app) agentInstall(w http.ResponseWriter, r *http.Request, cur *auth.Cur
 		fail("Select at least one host whose key you compared.")
 		return
 	}
+	// The agents this server knows: an identity found on a host that is
+	// not among them is from another server or revoked, and is replaced.
+	known := []string{}
+	all, err := a.d.Store.Hosts(ctx)
+	if err != nil {
+		a.fail(w, r, cur, err)
+		return
+	}
+	for _, h := range all {
+		if h.Source == inventory.SourceAgent && h.State != inventory.HostRevoked {
+			known = append(known, h.ID)
+		}
+	}
 	each(len(d.Hosts), func(i int) {
 		h := &d.Hosts[i]
 		if h.Error != "" || h.key == nil {
@@ -266,7 +281,7 @@ func (a *app) agentInstall(w http.ResponseWriter, r *http.Request, cur *auth.Cur
 		res, err := integrations.InstallAgent(ctx, integrations.AgentInstall{
 			Target: target, HostKey: h.key, User: d.User,
 			Password: password, PrivateKey: []byte(privateKey), Passphrase: r.PostFormValue("passphrase"),
-			Docker: d.Docker, ServerURL: d.ServerURL, Token: token,
+			Docker: d.Docker, ServerURL: d.ServerURL, Token: token, KnownAgents: known,
 			Binary: func(p string) (string, bool) {
 				b, ok := a.d.AgentBinaries.For(p)
 				return b.Path, ok

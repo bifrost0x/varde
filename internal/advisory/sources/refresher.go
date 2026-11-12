@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"math/rand/v2"
+	"sync"
 	"time"
 
 	"github.com/bifrost0x/varde/internal/catalog"
@@ -32,6 +33,45 @@ type Refresher struct {
 	StartDelay time.Duration
 
 	trigger chan struct{}
+
+	// state is shared by the copies NewRefresher makes of its argument.
+	state *refreshState
+}
+
+type refreshState struct {
+	mu sync.Mutex
+	st Status
+}
+
+// Status says how far the advisory data is: whether a run through the
+// sources is under way or wanted, and whether the last one got through
+// every source.
+type Status struct {
+	// Running is set while a run is under way; Wanted when one was asked
+	// for (new apps, a changed setting) and has not started.
+	Running, Wanted bool
+	// Completed is when a run last got through every source without one
+	// of them putting requests off; zero before the first.
+	Completed time.Time
+	// Limited is set when the last run left work for later because a
+	// source limits requests.
+	Limited bool
+	// Failed is set when a source of the last run answered with an error:
+	// what it would have brought is missing until a run succeeds.
+	Failed bool
+}
+
+// CatchingUp reports that what is shown may still be incomplete: no run has
+// finished yet, one is under way or wanted, or the last one was cut short.
+func (s Status) CatchingUp() bool {
+	return s.Running || s.Wanted || s.Limited || s.Failed || s.Completed.IsZero()
+}
+
+// Status returns the current state.
+func (r *Refresher) Status() Status {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	return r.state.st
 }
 
 // NewRefresher returns a Refresher with defaults applied.
@@ -48,11 +88,15 @@ func NewRefresher(r Refresher) *Refresher {
 		r.StartDelay = 10 * time.Second
 	}
 	r.trigger = make(chan struct{}, 1)
+	r.state = &refreshState{}
 	return &r
 }
 
 // Trigger requests a run soon, e.g. after new apps appeared.
 func (r *Refresher) Trigger() {
+	r.state.mu.Lock()
+	r.state.st.Wanted = true
+	r.state.mu.Unlock()
 	select {
 	case r.trigger <- struct{}{}:
 	default:
@@ -94,6 +138,21 @@ func (r *Refresher) next() time.Duration {
 
 // RunOnce refreshes every source once.
 func (r *Refresher) RunOnce(ctx context.Context) {
+	r.state.mu.Lock()
+	r.state.st.Running, r.state.st.Wanted = true, false
+	r.state.mu.Unlock()
+	limited, failed, complete := false, false, false
+	defer func() {
+		r.state.mu.Lock()
+		r.state.st.Running = false
+		if complete {
+			r.state.st.Limited, r.state.st.Failed = limited, failed
+			if !limited && !failed {
+				r.state.st.Completed = time.Now()
+			}
+		}
+		r.state.mu.Unlock()
+	}()
 	apps, err := r.Apps(ctx)
 	if err != nil {
 		r.Log.Error("advisory refresh: listing apps failed", "err", err)
@@ -114,14 +173,17 @@ func (r *Refresher) RunOnce(ctx context.Context) {
 			"not_modified", res.NotModified, "skipped", res.Skipped, "duration", time.Since(start).Round(time.Millisecond)}
 		switch {
 		case errors.Is(err, ErrRateLimited):
+			limited = true
 			r.Log.Warn("advisory source rate limited; continuing after reset", append(attrs, "err", err)...)
 		case err != nil:
+			failed = true
 			r.Log.Error("advisory source failed", append(attrs, "err", err)...)
 		default:
 			r.Log.Info("advisory source refreshed", attrs...)
 		}
 		changed = changed || res.Changed()
 	}
+	complete = true
 	if changed && r.OnChange != nil {
 		r.OnChange(ctx)
 	}

@@ -71,8 +71,7 @@
 </section>
 
 <section class="panel" id="integrations" aria-labelledby="int-title">
-  <div class="panel__head"><h2 id="int-title">4. Connected platforms</h2>
-    <div class="actions"><a class="btn btn--ghost" href="/connections/connect/proxmox">Add Proxmox</a><a class="btn btn--ghost" href="/connections/connect/docker">Add Docker host</a><a class="btn btn--ghost" href="/connections/connect/packages">Read packages</a>{{range $d.ServiceKinds}}<a class="btn btn--ghost" href="/connections/connect/{{.Kind}}">Add {{.Name}}</a>{{end}}</div></div>
+  <div class="panel__head"><h2 id="int-title">4. Connected platforms</h2></div>
   {{if $d.Integration}}
   {{range $d.Integration}}
   <article class="integration">
@@ -106,10 +105,20 @@
       <td data-label="Machine">{{if .Machine}}{{.Machine}}{{if not .Checked}} <span class="badge badge--unverified">not checked</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}</td></tr>{{end}}
     </tbody></table>{{else if .Service}}{{if not .Service.Clients}}<p class="small muted">No routes.</p>{{end}}{{end}}
     {{with .LXC}}<p class="small">{{plural .Containers "running container"}}, {{plural .Packages "package"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
-    {{if .CanLXC}}<p class="small"><a href="/connections/connect/proxmox-lxc?address={{.Address}}">Read the full inventory of every guest on this node</a> (LXC containers and VMs with guest agent: packages and Docker containers) with one key line, without signing in to each guest.</p>{{end}}
+    {{if .CanLXC}}
+    <div class="banner banner--info" role="note"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg><div>
+      <p><strong>Next: have the guests read.</strong> So far Varde knows that these guests exist and where they are, not what is installed in them, so nothing in them is checked yet.</p>
+      <p class="small">One step covers them all: Varde reads every running LXC container, and every VM that runs the QEMU guest agent, through the node, with one key line you add on the node. Nothing is installed in the guests. A VM without the guest agent needs the Varde agent inside it instead.</p>
+      <p><a class="btn btn--primary" href="/connections/connect/proxmox-lxc?address={{.Address}}">Read every guest on this node</a></p>
+    </div></div>
+    {{end}}
     {{with .Inventory}}<p class="small">{{if .OS}}{{.OS}} · {{end}}{{plural .Packages "package"}} and {{plural .Services "service"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
   </article>
   {{end}}
-  {{else}}<p class="small muted">No platform connected yet. Found devices offer the matching setup.</p>{{end}}
+  {{else}}<p class="small muted">No platform connected yet. The devices found above offer the matching setup.</p>{{end}}
+  <details class="small"><summary>Connect a platform the scan did not find</summary>
+    <p>The devices under "Found in your network" each offer their own setup; that is the usual way. Use these only for a platform in a network Varde does not scan, or one that did not answer.</p>
+    <div class="actions"><a class="btn btn--ghost" href="/connections/connect/proxmox">Add Proxmox</a><a class="btn btn--ghost" href="/connections/connect/docker">Add Docker host</a><a class="btn btn--ghost" href="/connections/connect/packages">Read packages</a>{{range $d.ServiceKinds}}<a class="btn btn--ghost" href="/connections/connect/{{.Kind}}">Add {{.Name}}</a>{{end}}</div>
+  </details>
 </section>
 {{end}}

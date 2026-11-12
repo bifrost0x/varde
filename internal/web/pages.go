@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/paths"
+	"github.com/bifrost0x/varde/internal/registry"
 	"github.com/bifrost0x/varde/internal/remedy"
 	"github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
@@ -215,6 +217,10 @@ type overviewData struct {
 	// Guide leads through getting started; it carries the notification
 	// and HTTPS state the overview shows instead of banners.
 	Guide guide
+	// SetupLeft counts the guide's steps that are not done; SetupHidden is
+	// set when the user hid the setup reminder.
+	SetupLeft   int
+	SetupHidden bool
 	// SystemChecked is the number of system packages checked against
 	// their distributions' security data (ADR 0032).
 	SystemChecked int
@@ -373,6 +379,12 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		a.fail(w, r, cur, err)
 		return
 	}
+	for _, st := range d.Guide.Steps {
+		if !st.Done {
+			d.SetupLeft++
+		}
+	}
+	d.SetupHidden = a.setupHidden(ctx)
 	// Notifications and HTTPS are steps of the guide here, not banners.
 	v := view{Title: "Overview", Nav: "overview", Data: d, OwnSecurityNote: true}
 	a.page(w, r, cur, http.StatusOK, "overview", v)
@@ -501,8 +513,38 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		RegistryTags                    bool
 		Paths                           []paths.Path
 		History                         []historyEntry
+		// Image is set for a flaw in a package of the container's image.
+		Image *imageFinding
 	}{f, m, a.appName(f.AppID), wl.Name, host, details, a.update(r.Context(), f, m, wl), a.d.Settings.Get().RegistryTags, a.findingPaths(r, f.ID),
-		a.findingHistory(r, f.ID)}})
+		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl)}})
+}
+
+// imageFinding is what the page says about a flaw in a package of a
+// container's image. The versions of such a finding are the package's, not
+// the app's: the page names the container and its image first and says what
+// Varde can and cannot know about a fixed image.
+type imageFinding struct {
+	// Ref is the image the container runs.
+	Ref string
+	// App and AppVersion name what runs in the container, when recognised.
+	App, AppVersion string
+	// Floating is set when the container runs a moving tag, Pinned when
+	// it is created from a digest and so never changes by a pull.
+	Floating, Pinned bool
+	Compose          *remedy.Compose
+}
+
+func (a *app) imageFinding(ctx context.Context, m match.Finding, wl inventory.Workload) *imageFinding {
+	if !m.Image || wl.Container == nil {
+		return nil
+	}
+	v := &imageFinding{Ref: wl.Container.ImageRef, Floating: remedy.Floating(wl.Container), Pinned: remedy.Pinned(wl.Container), Compose: remedy.ComposeOf(wl.Container)}
+	if ids, err := a.d.Store.Identifications(ctx); err == nil {
+		if id, ok := ids[wl.ID]; ok && id.AppID != "" {
+			v.App, v.AppVersion = a.appName(id.AppID), id.Version
+		}
+	}
+	return v
 }
 
 // update is the concrete update for an affected container finding: the
@@ -638,6 +680,10 @@ type gap struct {
 	// "not an app" mark; Marked is set when the user made that mark.
 	Repository string
 	Marked     bool
+	// Pending is set for an unknown version Varde is still finding out by
+	// itself (the registry has not been asked yet); RegistryOff when it
+	// could, but asking the registry is switched off.
+	Pending, RegistryOff bool
 }
 
 type coverageView struct {
@@ -689,8 +735,20 @@ func (a *app) coverageData(s *snapshot) coverageView {
 		unidentified[ug.Repository] = len(c.Unidentified)
 		c.Unidentified = append(c.Unidentified, ug)
 	}
+	registry := a.d.Settings.Get().RegistryTags
+	asked, _ := a.d.Store.ImageTags(context.Background())
 	for _, g := range c.Summary.VersionUnknown {
-		c.VersionUnknown = append(c.VersionUnknown, a.toGap(g))
+		vg := a.toGap(g)
+		if remedy.Floating(g.Workload.Container) {
+			// A moving tag: the registry tells which version the running
+			// image is. The answer is kept per image digest; a container
+			// whose digest is unknown cannot be asked about at all.
+			digest := registrydigest(g.Workload.Container, vg.Repository)
+			_, done := asked[vg.Repository+"@"+digest]
+			vg.RegistryOff = !registry && digest != ""
+			vg.Pending = registry && digest != "" && !done
+		}
+		c.VersionUnknown = append(c.VersionUnknown, vg)
 	}
 	for _, g := range c.Summary.Weak {
 		c.Weak = append(c.Weak, a.toGap(g))
@@ -726,6 +784,16 @@ func (a *app) coverageData(s *snapshot) coverageView {
 	return c
 }
 
+// registrydigest is the registry digest of the image a container runs, for
+// the given repository; empty when the runtime did not report one (an image
+// built locally, for example).
+func registrydigest(c *inventory.Container, repository string) string {
+	if c == nil {
+		return ""
+	}
+	return registry.RepoDigest(c, repository)
+}
+
 // suggestURL opens a prefilled catalog issue. Only the image repository is
 // included: no tag, no host names, nothing else about the installation.
 func suggestURL(image string) string {
@@ -751,8 +819,108 @@ func (a *app) coverage(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	a.page(w, r, cur, http.StatusOK, "coverage", view{Title: "Gaps", Nav: "systems", Tabs: tabs("systems", "/systems/gaps"), Data: c})
 }
 
+// appSources says, for one app Varde recognised, what it is compared with
+// and how much is known: the answer to "is this app checked at all".
+type appSources struct {
+	Name string
+	// Known counts the advisories stored for the app, From names where
+	// they came from (data package, GitHub, NVD, osv.dev).
+	Known int
+	From  []string
+	// Asked names what the catalog says to ask about the app.
+	Asked []string
+	// NoSource is set when nothing is asked about the app at all.
+	NoSource bool
+	// Off names the sources the catalog gives for the app that are
+	// switched off; Active is set when at least one source is asked. An
+	// app with sources but none active is not checked, whatever the
+	// count says.
+	Off    []string
+	Active bool
+}
+
+// sourceNames are the stored source names in words.
+var sourceNames = map[string]string{"feed": "data package", "github": "GitHub", "nvd": "NVD", "osv": "osv.dev", "local": "local catalog"}
+
+func (a *app) appSources(ctx context.Context) ([]appSources, int, int, error) {
+	s, err := a.load(ctx, false)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	counts, err := a.d.Store.AdvisoryCounts(ctx)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	eff, mode := a.d.Settings.Get(), a.mode()
+	total, apps := 0, 0
+	for id, by := range counts {
+		if _, system := distro.SystemName(id); system {
+			continue
+		}
+		apps++
+		for _, n := range by {
+			total += n
+		}
+	}
+	seen := map[string]bool{}
+	var out []appSources
+	for _, wl := range s.workloads {
+		id := s.ids[wl.ID]
+		if id.AppID == "" || seen[id.AppID] {
+			continue
+		}
+		app, ok := a.d.Catalog.Current().App(id.AppID)
+		if !ok {
+			continue
+		}
+		seen[id.AppID] = true
+		row := appSources{Name: app.Name, NoSource: a.d.Package != nil && a.d.Package.NoSource(app)}
+		for src, n := range counts[app.ID] {
+			row.Known += n
+			name := sourceNames[src]
+			if name == "" {
+				name = src
+			}
+			row.From = append(row.From, name)
+		}
+		sort.Strings(row.From)
+		// A full feed carries what the optional sources would bring; in
+		// direct and package mode osv.dev and the NVD are asked only when
+		// switched on.
+		full := mode != "direct" && mode != "package"
+		for _, repo := range app.Advisories.GitHubRepos {
+			row.Asked = append(row.Asked, "advisories of github.com/"+repo)
+			row.Active = row.Active || !row.NoSource
+		}
+		for _, p := range app.Advisories.OSVPackages {
+			if full || eff.DirectOSV {
+				row.Asked, row.Active = append(row.Asked, "osv.dev package "+p.Name), true
+			} else {
+				row.Asked, row.Off = append(row.Asked, "osv.dev package "+p.Name+" (switched off)"), append(row.Off, "osv.dev")
+			}
+		}
+		for _, c := range app.Advisories.CPE {
+			name := "NVD product " + strings.TrimPrefix(c, "cpe:2.3:a:")
+			if full || eff.DirectNVD {
+				row.Asked, row.Active = append(row.Asked, name), true
+			} else {
+				row.Asked, row.Off = append(row.Asked, name+" (switched off)"), append(row.Off, "the NVD")
+			}
+		}
+		row.Off = slices.Compact(row.Off)
+		out = append(out, row)
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out, total, apps, nil
+}
+
 func (a *app) sources(w http.ResponseWriter, r *http.Request, cur *auth.Current) {
 	states, err := a.d.Store.SourceStates(r.Context())
+	if err != nil {
+		a.fail(w, r, cur, err)
+		return
+	}
+	apps, total, known, err := a.appSources(r.Context())
 	if err != nil {
 		a.fail(w, r, cur, err)
 		return
@@ -764,7 +932,11 @@ func (a *app) sources(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		GitHubToken bool
 		Mode        string
 		Direct      bool
-	}{states, eff.DirectOSV, eff.DirectNVD, a.d.GitHubToken, a.mode(), eff.DirectQueries}})
+		// Apps says per recognised app what is known; Total and KnownApps
+		// count every advisory Varde holds and the apps they are about.
+		Apps             []appSources
+		Total, KnownApps int
+	}{states, eff.DirectOSV, eff.DirectNVD, a.d.GitHubToken, a.mode(), eff.DirectQueries, apps, total, known}})
 }
 
 func (a *app) fail(w http.ResponseWriter, r *http.Request, cur *auth.Current, err error) {

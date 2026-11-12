@@ -112,7 +112,9 @@ func TestNotAnApp(t *testing.T) {
 		marked map[string]bool
 		want   string
 	}{
-		{img("postgres:16-alpine"), none, nil, KindDatabase},
+		{img("pgvector/pgvector:pg16"), none, nil, KindDatabase},
+		// PostgreSQL itself is a catalog entry and counts as an app.
+		{img("postgres:16-alpine"), none, nil, ""},
 		{img("tecnativa/docker-socket-proxy:v0.5.0"), none, nil, KindProxy},
 		{img("ghcr.io/linuxserver/socket-proxy:latest"), none, nil, KindProxy},
 		{img("ghcr.io/acme/thing:1"), none, map[string]bool{"ghcr.io/acme/thing": true}, KindUser},
@@ -131,7 +133,7 @@ func TestNotAnApp(t *testing.T) {
 
 func TestPublicRouteNoticesSkipNotAnApp(t *testing.T) {
 	db := routed("db", "Host(`db.example.com`)")
-	db.Container.ImageRef = "postgres:16"
+	db.Container.ImageRef = "pgvector/pgvector:pg16"
 	marked := routed("tool", "Host(`tool.example.com`)")
 	got := PublicRouteNotices([]inventory.Workload{db, marked}, nil, []string{"example.com"}, map[string]bool{"docker.io/example/tool": true})
 	if len(got) != 0 {

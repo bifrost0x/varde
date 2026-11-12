@@ -141,3 +141,92 @@ if [ "$directory" = yes ]; then mkdir -p "$@"; else cp "$1" "$2"; chmod "$mode" 
 		}
 	}
 }
+
+// An identity on the host only counts when the installing server knows it.
+// One from another Varde server, or one revoked here, would keep the agent
+// silent for good: the installer sets it aside and the agent enrolls anew.
+func TestAgentInstallReplacesUnknownEnrollment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("installer uses POSIX filesystem paths")
+	}
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh")
+	}
+	for _, tc := range []struct {
+		name, known string
+		list        bool
+		kept        bool
+	}{
+		{"known to this server", "other-1\nhost-abc\n", true, true},
+		{"of another server", "other-1\nother-2\n", true, false},
+		{"no agent known", "", true, false},
+		{"a prefix is not a match", "host-abcd\nhost-ab\n", true, false},
+		{"older server sends no list", "", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			home, src, stubs := filepath.Join(root, "home"), filepath.Join(root, "upload"), filepath.Join(root, "stubs")
+			for _, dir := range []string{filepath.Join(home, "data"), src, stubs} {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write := func(path, content string, mode os.FileMode) {
+				t.Helper()
+				if err := os.WriteFile(path, []byte(content), mode); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(filepath.Join(home, "data", "agent.json"), `{"host_id": "host-abc", "ca_pin": "aa"}`, 0o600)
+			write(filepath.Join(home, "data", "identity.pem"), "old identity", 0o600)
+			write(filepath.Join(src, "varde"), "#!/bin/sh\necho checked\n", 0o600)
+			write(filepath.Join(src, "agent.env"), "VARDE_SERVER_URL=https://varde.example:8443\nVARDE_DOCKER_HOST=off\n", 0o600)
+			if tc.list {
+				write(filepath.Join(src, "known-agents"), tc.known, 0o600)
+			}
+			write(filepath.Join(stubs, "id"), "#!/bin/sh\nif [ \"${1:-}\" = -gn ]; then echo testgroup; fi\n", 0o700)
+			write(filepath.Join(stubs, "install"), "#!/bin/sh\nset -eu\ndirectory=no\nmode=0755\nwhile [ \"$#\" -gt 0 ]; do\n case \"$1\" in\n -d) directory=yes; shift;;\n -m) mode=$2; shift 2;;\n -o|-g) shift 2;;\n *) break;;\n esac\ndone\nif [ \"$directory\" = yes ]; then mkdir -p \"$@\"; else cp \"$1\" \"$2\"; chmod \"$mode\" \"$2\"; fi\n", 0o700)
+			for _, name := range []string{"systemctl", "rc-update", "rc-service", "sleep"} {
+				write(filepath.Join(stubs, name), "#!/bin/sh\nexit 0\n", 0o700)
+			}
+			script := strings.NewReplacer("/var/lib/varde-agent", home,
+				"/etc/varde-agent.env", filepath.Join(root, "agent.env"),
+				"/etc/systemd/system/varde-agent.service", filepath.Join(root, "agent.service"),
+				"/etc/init.d/varde-agent", filepath.Join(root, "agent.openrc")).Replace(string(agentInstallScript))
+			installer := filepath.Join(root, "install.sh")
+			write(installer, script, 0o600)
+			cmd := exec.CommandContext(t.Context(), sh, installer, src, "systemd") //nolint:gosec // isolated fixture, no host paths
+			cmd.Env = append(os.Environ(), "PATH="+stubs+":/usr/bin:/bin")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("installer failed: %v: %s", err, out)
+			}
+			_, statErr := os.Stat(filepath.Join(home, "data", "agent.json"))
+			kept := statErr == nil
+			if kept != tc.kept {
+				t.Fatalf("identity kept = %v, want %v\n%s", kept, tc.kept, out)
+			}
+			keptMsg, againMsg := strings.Contains(string(out), "kept the existing enrollment"), strings.Contains(string(out), "enrolling again")
+			if keptMsg != tc.kept || againMsg == tc.kept {
+				t.Errorf("output does not say what happened (kept=%v):\n%s", tc.kept, out)
+			}
+			if !tc.kept {
+				// The old identity is set aside, not lost, and the new agent
+				// is tested like a first installation.
+				if b, err := os.ReadFile(filepath.Join(home, "data.stale", "identity.pem")); err != nil || string(b) != "old identity" {
+					t.Errorf("old identity not set aside: %q %v", b, err)
+				}
+				if !strings.Contains(string(out), "checked") {
+					t.Errorf("the new enrollment was not tested:\n%s", out)
+				}
+			}
+		})
+	}
+}
+
+func TestKnownAgentsUpload(t *testing.T) {
+	if got := knownAgents([]string{"a-1", "", "b c", "x\ny", "d_2"}); got != "a-1\nd_2\n" {
+		t.Errorf("known agents = %q", got)
+	}
+}

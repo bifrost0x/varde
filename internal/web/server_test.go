@@ -633,7 +633,7 @@ func TestNotAnAppMark(t *testing.T) {
 	now := time.Now()
 	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
 	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
-		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "db", Container: &inventory.Container{ImageRef: "postgres:16"}},
+		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "db", Container: &inventory.Container{ImageRef: "pgvector/pgvector:pg16"}},
 		{Kind: inventory.KindContainer, RuntimeID: "c2", Name: "tool", Container: &inventory.Container{ImageRef: "ghcr.io/acme/tool:1.0"}},
 		{Kind: inventory.KindContainer, RuntimeID: "c3", Name: "tool-worker", Container: &inventory.Container{ImageRef: "ghcr.io/acme/tool:1.0"}},
 	}, now)
@@ -641,7 +641,7 @@ func TestNotAnAppMark(t *testing.T) {
 	if strings.Count(body, `action="/systems/gaps/not-an-app"`) != 1 || !strings.Contains(body, "tool, tool-worker") {
 		t.Error("containers of one image not listed as one row")
 	}
-	if !strings.Contains(body, "1 helper container not counted") || !strings.Contains(body, "database or cache") {
+	if !strings.Contains(body, "1 supporting container</a>") || !strings.Contains(body, "database or cache") || !strings.Contains(body, "their packages are checked all the same") {
 		t.Fatal("built-in helper not left out of the gaps")
 	}
 	post := func(path, repo string) int {
@@ -655,7 +655,7 @@ func TestNotAnAppMark(t *testing.T) {
 		t.Fatalf("mark: %d", code)
 	}
 	_, body = h.do(t, "GET", "/systems/gaps", nil, nil)
-	if !strings.Contains(body, "3 helper containers not counted") || !strings.Contains(body, "Count again") || !strings.Contains(body, "Every workload matches a catalog entry") {
+	if !strings.Contains(body, "3 supporting containers</a>") || !strings.Contains(body, "Count again") || !strings.Contains(body, "Every workload matches a catalog entry") {
 		t.Error("marked container still counted as a gap")
 	}
 	if code := post("/systems/gaps/not-an-app/delete", "ghcr.io/acme/tool"); code != http.StatusSeeOther {

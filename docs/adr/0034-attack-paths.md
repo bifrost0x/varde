@@ -73,3 +73,19 @@ proxy or a tunnel (cloudflared) may be forwarded to and stays unclear until the 
 read. Containers past the depth bound stay unclear. Paths are explored up to 5,000 and the 200 most
 dangerous are kept, whatever order they were found in, so the result is the same on every run. A
 known exploited flaw is never lowered by its place, except one that needs physical access.
+
+## Amendment (2026-11-12): a library flaw needs a sign of exploitation
+The first real installation showed a path to nearly every container: almost every image has a
+flaw with a remote or unknown vector in some network library (zlib, openssl, curl, the Go
+standard library), and each counted as a way in. Paths that everything has rank nothing.
+
+A flaw in a library of an image, or in a library a host service links, opens a path only when it
+is listed as exploited (CISA KEV) or likely to be (EPSS from 0.10, the threshold the priorities
+use) and its attack vector is known to be remote or adjacent. A flaw of the service itself is
+unchanged, including the marked assumption for an unknown vector. Library flaws that are not
+taken are placed as unclear with that reason, never as noise: nobody knows that the service does
+not use the flawed part.
+
+Paths carry what they end on (subject, where, what the attacker gains); the page names them by
+it and puts paths with one way in and one fix on one card. For a flaw in an image package the
+cut says to update the image, since the fixed version is the package's and not the app's.

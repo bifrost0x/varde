@@ -344,7 +344,8 @@ func newHandler(cfg config.Config, st *store.Store, cat *catalog.Live, set *sett
 		}),
 		Ready: ready, Analyze: analysis.RunLogged, Scan: scan, Notifier: optionalNotifier(notifier), Channels: channels,
 		LastScan: lastScan, AllowDirectSocket: cfg.AllowDirectSocket, CookieNever: mode == auth.CookieNever,
-		BehindTLS: cfg.BehindTLSProxy, GitHubToken: cfg.GitHubToken != "", Log: logger,
+		CatchingUp: func() (bool, bool, bool) { st := refresher.Status(); return st.CatchingUp(), st.Limited, st.Failed },
+		BehindTLS:  cfg.BehindTLSProxy, GitHubToken: cfg.GitHubToken != "", Log: logger,
 		AgentCAPin: caPin(ca), AgentListenAddr: cfg.AgentListenAddr, HostAddresses: cfg.HostAddresses, AgentBinaries: binaries, Network: network, Mode: cfg.Mode, Uplink: uplinkMgr, Package: packageMgr, LocalDocker: syncer != nil,
 	})
 }

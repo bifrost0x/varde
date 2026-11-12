@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <p class="small"><a href="/findings">Findings</a></p>
-    <h1>{{.Data.AppName}}: <span class="mono">{{$f.AdvisoryID}}</span></h1>
+    <h1>{{if .Data.Image}}{{.Data.WorkloadName}}: {{end}}{{.Data.AppName}}: <span class="mono">{{$f.AdvisoryID}}</span></h1>
     <p>{{if $m.Summary}}{{$m.Summary}}{{else}}No summary published.{{end}}</p>
   </div>
   <div class="actions">{{template "prio" $f.Priority}}{{if $m.KEV}}<span class="badge badge--kev">known exploited</span>{{end}}{{template "pathclass" $f.PathClass}}{{template "exposure" $f.Exposure}}<span class="badge badge--muted">{{$f.State}}</span></div>
@@ -20,6 +20,16 @@
       {{else}}
       <p>Varde cannot confirm whether <span class="mono">{{$m.Evidence.Version}}</span> is affected: {{$m.Evidence.Reason}}.</p>
       <p class="small">Next step: compare your version with the affected versions in the advisory. If it does not apply, acknowledge it.</p>
+      {{end}}
+    {{else if .Data.Image}}{{$i := .Data.Image}}
+      <p><strong>Affected: yes.</strong> The image <span class="mono">{{$i.Ref}}</span> that <strong>{{.Data.WorkloadName}}</strong> runs{{if $i.App}} ({{$i.App}}{{if $i.AppVersion}} <span class="mono">{{$i.AppVersion}}</span>{{end}}){{end}} contains {{.Data.AppName}} <span class="mono">{{$m.Evidence.Version}}</span>, which has this flaw.</p>
+      <p><strong>Fixed in:</strong> {{if $f.FixedIn}}the package from <span class="mono">{{$f.FixedIn}}</span> on. That is a version of the package, not of {{if $i.App}}{{$i.App}}{{else}}the app{{end}}: the fix reaches you with an image that was built with the newer package. Varde reads the packages of the image you run, so it cannot tell beforehand which image has it.{{else}}no fixed package is published yet.{{end}}</p>
+      <p><strong>What to do:</strong> {{if $i.Pinned}}the container is pinned to an image digest, so a pull changes nothing: replace the digest in its definition with that of a newer image (or remove it), then recreate the container{{else if $i.Floating}}pull the image again and recreate the container{{else}}update the container to a newer image{{end}}. Varde then reads the packages of the new image and closes this finding by itself when the package is fixed. If it stays open, the image's maker has not rebuilt it yet; you can wait, or limit who can reach the container.</p>
+      {{with $i.Compose}}
+      <div class="update" id="update">
+        <p class="small">It is the Compose service <strong>{{.Service}}</strong> of the project <strong>{{.Project}}</strong>{{if .Files}}, defined in <span class="mono">{{join .Files ", "}}</span>{{end}}.{{if $i.Pinned}} Change the digest in its <code>image:</code> line.{{else if not $i.Floating}} Change the tag of its <code>image:</code> line to a newer release.{{end}} Then{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}:</p>
+        <div class="secret"><pre id="compose-cmd" class="mono install">{{.Pull}}</pre><button class="btn btn--ghost" type="button" data-copy="#compose-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+      </div>
       {{end}}
     {{else if $f.FixedIn}}
       <p>Update <strong>{{.Data.WorkloadName}}</strong> to <span class="mono">{{$f.FixedIn}}</span> or later.</p>
@@ -81,7 +91,9 @@
     <h2 id="evidence-title">Evidence</h2>
     <dl class="evidence">
       <dt>Workload</dt><dd><a href="/systems/apps#w-{{$f.WorkloadID}}">{{.Data.WorkloadName}}</a>{{if .Data.HostName}} on {{.Data.HostName}}{{end}}</dd>
-      <dt>Running version</dt><dd>{{if $m.Evidence.Version}}<span class="mono">{{$m.Evidence.Version}}</span> <span class="muted">({{$m.Evidence.VersionSource}})</span>{{else}}<span class="muted">unknown</span>{{end}}</dd>
+      {{with .Data.Image}}<dt>Image</dt><dd class="mono">{{.Ref}}</dd>
+      {{if .App}}<dt>App in it</dt><dd>{{.App}}{{if .AppVersion}} <span class="mono">{{.AppVersion}}</span>{{else}} <span class="muted">(version unknown)</span>{{end}}</dd>{{end}}{{end}}
+      <dt>{{if .Data.Image}}Package version{{else}}Running version{{end}}</dt><dd>{{if $m.Evidence.Version}}<span class="mono">{{$m.Evidence.Version}}</span>{{if $m.Evidence.VersionSource}} <span class="muted">({{$m.Evidence.VersionSource}})</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}</dd>
       <dt>Affected range</dt><dd class="mono">{{if $m.Evidence.Range}}{{$m.Evidence.Range}}{{else}}not machine-readable{{end}}</dd>
       {{if $m.Evidence.Package}}<dt>Package</dt><dd class="mono">{{$m.Evidence.Package}}</dd>{{end}}
       <dt>Source</dt><dd>{{join $m.Sources ", "}} <span class="muted">(record {{$m.Evidence.RecordID}})</span></dd>

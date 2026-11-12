@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+id: redis
+name: Redis
+homepage: https://redis.io
+tags: [database, cache]
+images:
+  - match: library/redis
+    note: Docker official image
+oci_source:
+  - https://github.com/redis/redis
+version:
+  scheme: semver
+  sources:
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)(?:-(?:alpine|bookworm|bullseye|trixie|noble|jammy|focal|oraclelinux|oracle|debian|slim|ubi|nanoserver|windowsservercore)[a-z0-9.]*)*$'
+advisories:
+  coverage: full
+  github_repos:
+    - redis/redis
+  cpe:
+    - cpe:2.3:a:redis:redis
+    - cpe:2.3:a:redislabs:redis
+  notes: >-
+    Redis publishes repository security advisories (redis/redis) with affected and fixed versions;
+    older CVEs are listed in the NVD under the vendor redislabs as well. Tags: 7.4.1, 7.4.1-alpine
+    are pinned; 7, 7.4, 7-alpine and latest are floating. Written on 2026-11-12 from the project's
+    public facts without a fresh look at the live sources; the CPE, the advisory repository and the
+    tag forms are to be confirmed on the next review of this entry.
+exposure_hints:
+  default_ports: [6379]
+  typical: internal
+eol: redis
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-12

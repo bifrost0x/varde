@@ -115,18 +115,34 @@ func TestLateralFromInternetFoothold(t *testing.T) {
 	if pl.Class != OnPathInternet {
 		t.Fatalf("samba: %+v", pl)
 	}
-	// gnutls on the NAS is a library of samba: another flaw usable at the
-	// same step, after samba's own.
-	var step *Step
-	for i := range r.Paths {
-		for j := range r.Paths[i].Steps {
-			if r.Paths[i].Steps[j].FindingID == "f-smb" {
-				step = &r.Paths[i].Steps[j]
+	// gnutls on the NAS is a library of samba. Without a sign that its flaw
+	// is being exploited it is not a way in: whether samba uses the flawed
+	// part is unknown. It is neither on a path nor noise.
+	stepOf := func(r Result) *Step {
+		var step *Step
+		for i := range r.Paths {
+			for j := range r.Paths[i].Steps {
+				if r.Paths[i].Steps[j].FindingID == "f-smb" {
+					step = &r.Paths[i].Steps[j]
+				}
 			}
 		}
+		return step
 	}
-	if step == nil || step.More != 1 || step.also[0] != "f-ssl" || r.Placements["f-ssl"].Class != OnPathInternet {
-		t.Fatalf("gnutls through samba: %+v %+v", step, r.Placements["f-ssl"])
+	if step := stepOf(r); step == nil || step.More != 0 || r.Placements["f-ssl"].Class != Unclear || !strings.Contains(r.Placements["f-ssl"].Reason, "library of a reachable service") {
+		t.Fatalf("gnutls through samba, no sign of exploitation: %+v %+v", step, r.Placements["f-ssl"])
+	}
+	// Likely to be exploited, it is another flaw usable at the same step,
+	// after samba's own.
+	in := homelab()
+	for i := range in.Findings {
+		if in.Findings[i].ID == "f-ssl" {
+			in.Findings[i].EPSS = 0.4
+		}
+	}
+	likely := Analyze(in)
+	if step := stepOf(likely); step == nil || step.More != 1 || step.also[0] != "f-ssl" || likely.Placements["f-ssl"].Class != OnPathInternet {
+		t.Fatalf("gnutls through samba, likely exploited: %+v %+v", step, likely.Placements["f-ssl"])
 	}
 	// openssl is installed, but nothing reachable on the NAS uses it.
 	if pl := r.Placements["f-openssl"]; pl.Class != Noise {
@@ -393,7 +409,7 @@ func TestOnePathPerImpact(t *testing.T) {
 	r := Analyze(in)
 	n := 0
 	for _, p := range r.Paths {
-		if p.Impact == "control of container db on m" {
+		if p.Impact == "container db on m" && p.Subject == "db" && p.Where == "container on m" {
 			n++
 			if p.Breaker != "fa" {
 				t.Errorf("listed path is not the most dangerous: %+v", p)
@@ -402,5 +418,68 @@ func TestOnePathPerImpact(t *testing.T) {
 	}
 	if n != 1 || r.Placements["fb"].Class != OnPathInternet {
 		t.Fatalf("paths to db: %d, fb: %+v", n, r.Placements["fb"])
+	}
+}
+
+// A flaw in a library of a container's image opens a path only with a sign
+// that it is being exploited and a vector known to be remote. Nearly every
+// image has some library flaw: without this rule every container gets a
+// path and the paths say nothing.
+func TestLibraryFlawNeedsASignOfExploitation(t *testing.T) {
+	build := func(f Finding) Result {
+		f.ID, f.WorkloadID, f.Affected, f.ImagePackage, f.Name = "lib", "c", true, "zlib", "zlib"
+		return Analyze(Input{
+			Machines:    []Machine{{ID: "m", Name: "docker", HostIDs: []string{"h"}}},
+			Hosts:       map[string]Host{"h": {Known: true}},
+			HostMachine: map[string]string{"h": "m"},
+			Workloads:   []Workload{{ID: "c", HostID: "h", Name: "paperless", Container: true, Exposure: "lan"}},
+			Services:    []Service{{MachineID: "m", Entry: LAN, WorkloadID: "c", Port: 8000, Proto: "tcp"}},
+			Findings:    []Finding{f},
+		})
+	}
+	for _, tc := range []struct {
+		name string
+		f    Finding
+		path bool
+	}{
+		{"severe but no sign", Finding{Vector: vecNet, CVSS: 9.8, FixedIn: "1.3.1"}, false},
+		{"known exploited", Finding{Vector: vecNet, CVSS: 7.5, KEV: true, FixedIn: "1.3.1"}, true},
+		{"likely exploited", Finding{Vector: vecNet, CVSS: 7.5, EPSS: 0.10, FixedIn: "1.3.1"}, true},
+		{"just below the threshold", Finding{Vector: vecNet, CVSS: 7.5, EPSS: 0.09}, false},
+		{"exploited but vector unknown", Finding{CVSS: 9.8, KEV: true}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := build(tc.f)
+			if got := len(r.Paths) == 1; got != tc.path {
+				t.Fatalf("path = %v, want %v: %+v", got, tc.path, r.Paths)
+			}
+			pl := r.Placements["lib"]
+			if tc.path {
+				p := r.Paths[0]
+				if pl.Class != OnPathLAN || p.Subject != "paperless" || p.Where != "container on docker" || !strings.HasPrefix(p.Cut, "Update the image of paperless: it contains ") {
+					t.Errorf("placement %+v, path %+v", pl, p)
+				}
+				return
+			}
+			if pl.Class != Unclear || !strings.Contains(pl.Reason, "nothing says it is being exploited") {
+				t.Errorf("placement %+v", pl)
+			}
+		})
+	}
+}
+
+// The server an image is built around is not a library: its flaw opens a
+// path by its vector, whatever its exploitation score.
+func TestServerPackageOfTheImageIsNotALibrary(t *testing.T) {
+	r := Analyze(Input{
+		Machines:    []Machine{{ID: "m", Name: "docker", HostIDs: []string{"h"}}},
+		Hosts:       map[string]Host{"h": {Known: true}},
+		HostMachine: map[string]string{"h": "m"},
+		Workloads:   []Workload{{ID: "c", HostID: "h", Name: "web", Container: true, Exposure: "lan"}},
+		Services:    []Service{{MachineID: "m", Entry: LAN, WorkloadID: "c", Port: 80, Proto: "tcp"}},
+		Findings:    []Finding{{ID: "srv", WorkloadID: "c", Affected: true, ImagePackage: "nginx", Name: "nginx", Vector: vecNet, CVSS: 7.5}},
+	})
+	if len(r.Paths) != 1 || r.Placements["srv"].Class != OnPathLAN || r.Paths[0].Steps[1].Indirect {
+		t.Fatalf("paths %+v, placement %+v", r.Paths, r.Placements["srv"])
 	}
 }

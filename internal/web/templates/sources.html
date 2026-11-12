@@ -9,7 +9,25 @@
   {{else if eq $d.Mode "feed"}}<p>Feed mode: Varde downloads the signed central feed, the same data for every installation. Upstream sources learn nothing about the apps you run.</p>
   {{else if eq $d.Mode "hybrid"}}<p>Hybrid mode: Varde uses the signed central feed. Where direct queries are switched on, it asks GitHub about local catalog entries and apps the feed does not cover; GitHub learns about those apps from the advisory repositories requested.</p>
   {{else}}<p>Direct mode: Varde queries upstream sources itself. GitHub learns which apps you run from the advisory repositories requested. A signed central feed, where every installation downloads the same data, is planned and will avoid this.</p>{{end}}</div>
-<section class="panel">
+<section class="panel" aria-labelledby="apps-title">
+  <h2 id="apps-title">What Varde knows for your apps</h2>
+  <p class="small">Varde holds <strong>{{$d.Total}}</strong> advisories about <strong>{{plural $d.KnownApps "app"}}</strong>{{if eq $d.Mode "package"}}, nearly all of them from the data package: that is the single line "feed" in the table further down{{end}}. Below is every app it recognised on your systems, what it is compared with, and how many advisories exist for it. "None published" means the app is compared and nothing is known against it; "nothing to compare with" means its project publishes no advisories a program can read. The packages and libraries inside container images are checked apart from this, against the distributions' security data.</p>
+  {{if $d.Apps}}
+  <table class="table">
+    <thead><tr><th scope="col">App</th><th scope="col">Known advisories</th><th scope="col">Compared with</th></tr></thead>
+    <tbody>
+    {{range $d.Apps}}<tr>
+      <td data-label="App">{{.Name}}</td>
+      <td data-label="Known advisories">{{if .NoSource}}<span class="badge badge--unverified">not checked</span><span class="cell-sub">The data package does not cover it and direct queries are off. Switch on "Also ask public sources directly" under <a href="/settings#package">Settings</a>.</span>{{else if .Known}}{{.Known}}<span class="cell-sub">from {{join .From ", "}}{{if .Off}}; {{join .Off " and "}} would add more but {{if eq (len .Off) 1}}is{{else}}are{{end}} switched off{{end}}</span>{{else if not .Asked}}<span class="muted">nothing to compare with</span>{{else if not .Active}}<span class="badge badge--unverified">not checked</span><span class="cell-sub">Its advisories come from {{join .Off " and "}}, which {{if eq (len .Off) 1}}is{{else}}are{{end}} switched off. Switch {{if eq (len .Off) 1}}it{{else}}them{{end}} on under <a href="/settings#sources">Settings</a> to have this app compared.</span>{{else}}<span class="muted">none published</span>{{if .Off}}<span class="cell-sub">{{join .Off " and "}} would add more but {{if eq (len .Off) 1}}is{{else}}are{{end}} switched off</span>{{end}}{{end}}</td>
+      <td data-label="Compared with" class="small">{{if .Asked}}{{join .Asked "; "}}{{else}}<span class="muted">the project publishes nothing a program can compare</span>{{end}}</td>
+    </tr>{{end}}
+    </tbody>
+  </table>
+  {{else}}<p class="small muted">No app recognised yet.</p>{{end}}
+</section>
+<section class="panel" aria-labelledby="runs-title">
+  <h2 id="runs-title">Requests Varde sends</h2>
+  <p class="small">One line per thing Varde asks for and when it last got an answer. Most of the data arrives in one request, the data package ("feed"); the other lines are what you switched on beside it.</p>
   <table class="table">
     <thead><tr><th scope="col">Source</th><th scope="col">Key</th><th scope="col">Last success</th><th scope="col">Next check</th><th scope="col">Status</th></tr></thead>
     <tbody>

@@ -9,8 +9,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
+	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/coverage"
 	"github.com/bifrost0x/varde/internal/discovery"
 	"github.com/bifrost0x/varde/internal/identify"
@@ -371,5 +373,131 @@ func TestRestartNeeded(t *testing.T) {
 	_, body = h.do(t, "GET", "/", nil, nil)
 	if !strings.Contains(body, "Waiting for a restart") || !strings.Contains(body, "kernel 6.1.0-28-amd64 is installed") {
 		t.Error("overview without the restart panel")
+	}
+}
+
+// Once Varde has something to show, the setup guide is one line under the
+// numbers, not a block above them, and the user can hide it.
+func TestSetupReminderCompactAndHideable(t *testing.T) {
+	h := newHarness(t, withNetwork(t), withAgentBinaries(t))
+	csrf := h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "immich", Container: &inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.120.0"}},
+	}, now)
+	_, body := h.do(t, "GET", "/", nil, nil)
+	if strings.Contains(body, "Finish getting started") || strings.Contains(body, `class="panel guide"`) {
+		t.Error("the full guide is shown although Varde has something to show")
+	}
+	setup, stats := strings.Index(body, `<details class="panel setup"`), strings.Index(body, `class="stats"`)
+	if setup < 0 || stats < 0 || setup < stats {
+		t.Fatalf("the setup reminder is missing or above the numbers (setup %d, stats %d)", setup, stats)
+	}
+	if !strings.Contains(body, "Setup: ") || !strings.Contains(body, "Next: Allow your networks") || !strings.Contains(body, `action="/setup-guide/hide"`) {
+		t.Error("the reminder does not name what is left or cannot be hidden")
+	}
+	if resp, _ := h.do(t, "POST", "/setup-guide/hide", url.Values{"csrf": {csrf}}, nil); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("hide: %d", resp.StatusCode)
+	}
+	_, body = h.do(t, "GET", "/", nil, nil)
+	if strings.Contains(body, `<details class="panel setup"`) || !strings.Contains(body, `action="/setup-guide/show"`) || !strings.Contains(body, "left, hidden") {
+		t.Error("hidden reminder still shown, or no way to bring it back")
+	}
+	if resp, _ := h.do(t, "POST", "/setup-guide/show", url.Values{"csrf": {csrf}}, nil); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("show: %d", resp.StatusCode)
+	}
+	if _, body = h.do(t, "GET", "/", nil, nil); !strings.Contains(body, `<details class="panel setup"`) {
+		t.Error("reminder not back after show")
+	}
+}
+
+// While advisory data is still being fetched, every page says that what it
+// shows is not yet everything.
+func TestCatchingUpNotice(t *testing.T) {
+	busy, limited, failed := true, false, false
+	h := newHarness(t, func(d *Deps) { d.CatchingUp = func() (bool, bool, bool) { return busy, limited, failed } })
+	h.signIn(t)
+	for _, path := range []string{"/", "/findings", "/systems/gaps"} {
+		if _, body := h.do(t, "GET", path, nil, nil); !strings.Contains(body, "Findings and versions keep arriving") || !strings.Contains(body, "goes away by itself") {
+			t.Errorf("%s does not say that data is still arriving", path)
+		}
+	}
+	limited = true
+	if _, body := h.do(t, "GET", "/", nil, nil); !strings.Contains(body, "limits how many requests") {
+		t.Error("a rate limit is not named")
+	}
+	limited, failed = false, true
+	if _, body := h.do(t, "GET", "/", nil, nil); !strings.Contains(body, "answered with an error") || strings.Contains(body, "goes away by itself") {
+		t.Error("a failed source is not named, or the notice promises to go away")
+	}
+	busy, failed = false, false
+	if _, body := h.do(t, "GET", "/", nil, nil); strings.Contains(body, "keep arriving") {
+		t.Error("the notice stays after the data is complete")
+	}
+}
+
+// The advisory data page says per app what it is compared with and how
+// much is known, instead of leaving one line "feed" for the whole package.
+func TestAdvisoryDataPerApp(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "immich", Container: &inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.120.0"}},
+	}, now)
+	wid := inventory.WorkloadID("local", inventory.KindContainer, "c1")
+	if err := h.store.ReplaceIdentifications(ctx, []identify.Result{{WorkloadID: wid, AppID: "immich", Confidence: identify.Exact, Version: "1.120.0"}}, now); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/settings/sources", nil, nil)
+	body = html.UnescapeString(body)
+	for _, want := range []string{"What Varde knows for your apps", "Immich", "advisories of github.com/immich-app/immich", "none published", "Requests Varde sends"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("advisory data page lacks %q", want)
+		}
+	}
+}
+
+// An app whose only source is switched off is not "compared, none
+// published": the page says that it is not checked and which switch does it.
+func TestAdvisoryDataNamesSwitchedOffSources(t *testing.T) {
+	cat, err := catalog.Load(fstest.MapFS{"pg.yaml": {Data: []byte(`id: postgresql
+name: PostgreSQL
+homepage: https://www.postgresql.org
+images: [{match: library/postgres}]
+version: {scheme: semver}
+advisories: {coverage: limited, cpe: ["cpe:2.3:a:postgresql:postgresql"]}
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-12
+`)}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var set *settings.Service
+	h := newHarness(t, func(d *Deps) { d.Catalog = catalog.NewLive(cat); set = d.Settings })
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "db", Container: &inventory.Container{ImageRef: "postgres:16.4"}},
+	}, now)
+	wid := inventory.WorkloadID("local", inventory.KindContainer, "c1")
+	if err := h.store.ReplaceIdentifications(ctx, []identify.Result{{WorkloadID: wid, AppID: "postgresql", Confidence: identify.Exact, Version: "16.4"}}, now); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/settings/sources", nil, nil)
+	body = html.UnescapeString(body)
+	if !strings.Contains(body, "not checked") || !strings.Contains(body, "the NVD, which is switched off") || strings.Contains(body, "none published") {
+		t.Errorf("an app whose only source is off is shown as compared:\n%s", body)
+	}
+	if err := set.Update(ctx, map[string]string{settings.KeyDirectNVD: "true"}, "admin", now); err != nil {
+		t.Fatal(err)
+	}
+	_, body = h.do(t, "GET", "/settings/sources", nil, nil)
+	body = html.UnescapeString(body)
+	if !strings.Contains(body, "none published") || strings.Contains(body, "switched off") {
+		t.Errorf("with the NVD on the app counts as compared:\n%s", body)
 	}
 }

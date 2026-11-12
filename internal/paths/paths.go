@@ -150,6 +150,12 @@ type Path struct {
 	Steps []Step `json:"steps"`
 	// Impact says what the attacker holds at the end.
 	Impact string `json:"impact"`
+	// Subject is what the path ends on (a container or a machine), Where
+	// says where that is, and Gain what the attacker can do there. The
+	// three name a path by its target.
+	Subject string `json:"subject,omitempty"`
+	Where   string `json:"where,omitempty"`
+	Gain    string `json:"gain,omitempty"`
 	// Target is the machine the path ends on.
 	Target     string `json:"target"`
 	TargetName string `json:"target_name"`
@@ -174,6 +180,10 @@ type Result struct {
 	Paths      []Path               `json:"paths"`
 	Placements map[string]Placement `json:"placements"`
 }
+
+// libraryEPSS is the probability of exploitation from which a flaw in a
+// library counts as a way in (the threshold the priorities use as well).
+const libraryEPSS = 0.10
 
 const (
 	maxPaths = 200
@@ -219,12 +229,15 @@ type analysis struct {
 	recorded  map[string]bool
 	truncated bool
 	entered   map[string]bool // containers with a foothold on some path
-	beyond    map[string]bool // containers past the depth bound
+	// weak are flaws in a library of a reachable service that were not
+	// taken for a way in: nothing says they are being exploited.
+	weak   map[string]bool
+	beyond map[string]bool // containers past the depth bound
 }
 
 func newAnalysis(in Input) *analysis {
 	a := &analysis{in: in, machines: map[string]Machine{}, workloads: map[string]Workload{}, byWork: map[string][]Finding{},
-		systemPkg: map[string]map[string][]string{}, services: map[string][]Service{}, used: map[string]map[string]Class{}, reach: map[string]bool{}, recorded: map[string]bool{}, entered: map[string]bool{}, beyond: map[string]bool{}}
+		systemPkg: map[string]map[string][]string{}, services: map[string][]Service{}, used: map[string]map[string]Class{}, reach: map[string]bool{}, recorded: map[string]bool{}, entered: map[string]bool{}, beyond: map[string]bool{}, weak: map[string]bool{}}
 	for _, m := range in.Machines {
 		a.machines[m.ID] = m
 	}
@@ -301,9 +314,20 @@ func better(x, y candidate) bool {
 func (a *analysis) exploits(svc Service) []exploit {
 	var cands []candidate
 	add := func(f Finding, indirect bool, what string) {
-		if network(vectorOf(f.Vector), svc.Entry) {
-			cands = append(cands, candidate{f, indirect, what})
+		v := vectorOf(f.Vector)
+		if !network(v, svc.Entry) {
+			return
 		}
+		// A flaw in a library is not a flaw in the service: whether the
+		// service uses the flawed part is unknown. Nearly every image has
+		// such a flaw, so taking each for a way in would put a path on every
+		// container and say nothing. It counts only with a sign that it is
+		// being exploited and a vector that is known to be remote.
+		if indirect && (v == "" || !exploited(f)) {
+			a.weak[f.ID] = true
+			return
+		}
+		cands = append(cands, candidate{f, indirect, what})
 	}
 	hold := foothold{machine: svc.MachineID}
 	if svc.WorkloadID != "" {
@@ -312,6 +336,10 @@ func (a *analysis) exploits(svc Service) []exploit {
 			switch {
 			case f.ImagePackage == "":
 				add(f, false, "")
+			case ServerPackage(f.ImagePackage):
+				// The image's own server (nginx in an nginx image): a flaw
+				// in the service, reported through its package.
+				add(f, false, ", the server in the image")
 			case NetworkPackage(f.ImagePackage):
 				// A library of the image the app may use to talk to the
 				// network: weaker evidence than a flaw in the app.
@@ -365,6 +393,10 @@ func (a *analysis) exploits(svc Service) []exploit {
 	}
 	return []exploit{{step: step, hold: hold}}
 }
+
+// exploited reports a sign that a flaw is being used: listed as exploited,
+// or likely to be within a month.
+func exploited(f Finding) bool { return f.KEV || f.EPSS >= libraryEPSS }
 
 // extend follows a foothold: escape a container, escalate to root, reach the
 // node, pivot to other machines. Only the longest paths are recorded; the
@@ -541,14 +573,15 @@ func (a *analysis) record(entry Entry, steps []Step, hold foothold) {
 		return
 	}
 	m := a.machines[hold.machine]
-	impact := "code execution on " + m.Name
+	impact, subject, where, gain := "code execution on "+m.Name, m.Name, "machine", "an attacker runs code on it"
 	switch {
 	case hold.container != "":
-		impact = "control of container " + a.workloads[hold.container].Name + " on " + m.Name
+		subject, where, gain = a.workloads[hold.container].Name, "container on "+m.Name, "an attacker runs code in it"
+		impact = "container " + subject + " on " + m.Name
 	case hold.level == levelRoot && m.Kind == "bare-metal":
-		impact = "root on " + m.Name + ", and every guest on it"
+		impact, gain = "root on "+m.Name+", and every guest on it", "an attacker becomes root, on it and on every guest"
 	case hold.level == levelRoot:
-		impact = "root on " + m.Name
+		impact, gain = "root on "+m.Name, "an attacker becomes root"
 	}
 	key := string(entry) + "|" + impact
 	for _, s := range steps {
@@ -558,7 +591,7 @@ func (a *analysis) record(entry Entry, steps []Step, hold foothold) {
 		return
 	}
 	a.recorded[pathID(key)] = true
-	p := Path{ID: pathID(key), Entry: entry, Steps: clone(steps), Impact: impact, Target: hold.machine, TargetName: m.Name}
+	p := Path{ID: pathID(key), Entry: entry, Steps: clone(steps), Impact: impact, Subject: subject, Where: where, Gain: gain, Target: hold.machine, TargetName: m.Name}
 	p.Score = a.score(p, hold)
 	for _, s := range steps {
 		if s.FindingID != "" {
@@ -574,9 +607,18 @@ func (a *analysis) record(entry Entry, steps []Step, hold foothold) {
 		}
 		f := a.finding(s.FindingID)
 		p.Breaker = f.ID
-		p.Cut = "Fix " + ident(f) + " in " + f.Name
-		if f.FixedIn != "" {
-			p.Cut += " (update to " + f.FixedIn + ")"
+		if w := a.workloads[f.WorkloadID]; f.ImagePackage != "" && w.Container {
+			// The fix is a newer image of the container; the version is
+			// the package's, never the app's.
+			p.Cut = "Update the image of " + w.Name + ": it contains " + ident(f) + " in " + f.Name
+			if f.FixedIn != "" {
+				p.Cut += " (the package is fixed from " + f.FixedIn + " on)"
+			}
+		} else {
+			p.Cut = "Fix " + ident(f) + " in " + f.Name
+			if f.FixedIn != "" {
+				p.Cut += " (update to " + f.FixedIn + ")"
+			}
 		}
 		if s.More > 0 {
 			p.Cut += fmt.Sprintf(", and the %d other flaws usable there", s.More)
@@ -713,6 +755,8 @@ func (a *analysis) place(f Finding) Placement {
 	switch {
 	case v == "P":
 		return Placement{Class: Noise, Reason: "needs physical access to the machine"}
+	case a.weak[f.ID]:
+		return Placement{Class: Unclear, Reason: "a library of a reachable service; nothing says it is being exploited, and Varde cannot tell whether the service uses the flawed part"}
 	case a.truncated:
 		return Placement{Class: Unclear, Reason: "too many attack paths to follow them all"}
 	case w.Container && a.beyond[w.ID] && !a.entered[w.ID]:

@@ -200,6 +200,36 @@ var (
 	composeService = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
 )
 
+// ComposeOf names where the Compose service of a container is defined; nil
+// for containers not created by Compose.
+func ComposeOf(c *inventory.Container) *Compose {
+	if c == nil {
+		return nil
+	}
+	return compose(c.Labels)
+}
+
+// Floating reports whether a container runs a tag that moves ("latest", no
+// tag): pulling it again can bring a newer image without changing the line.
+// A reference with a digest never moves, whatever tag stands beside it.
+func Floating(c *inventory.Container) bool {
+	if c == nil {
+		return false
+	}
+	ref, err := imageref.Parse(c.ImageRef)
+	return err == nil && ref.Digest == "" && (ref.Tag == "" || version.IsFloating(ref.Tag))
+}
+
+// Pinned reports whether a container is created from a digest: it keeps
+// running that image until the digest in its definition is changed.
+func Pinned(c *inventory.Container) bool {
+	if c == nil {
+		return false
+	}
+	ref, err := imageref.Parse(c.ImageRef)
+	return err == nil && ref.Digest != ""
+}
+
 // compose reads where a Compose service is defined; nil for containers not
 // created by Compose. The labels come from the image as well (an image can
 // set any label), so they must follow the Compose grammar; paths are shown

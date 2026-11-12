@@ -46,6 +46,54 @@ type pathCard struct {
 	Steps []pathStep
 	// Open counts the findings on the path still open.
 	Open int
+	// Same are further paths that start with the same way in and are cut
+	// by the same fix: they are listed with this one instead of repeating
+	// it line by line.
+	Same []pathCard
+}
+
+// Targets names what the card's paths end on.
+func (c pathCard) Targets() []string {
+	out := []string{c.Name()}
+	for _, o := range c.Same {
+		out = append(out, o.Name())
+	}
+	return out
+}
+
+// Name is what the path ends on; a path stored before paths had a subject
+// is named by its impact.
+func (c pathCard) Name() string {
+	if c.Subject != "" {
+		return c.Subject
+	}
+	return c.Impact
+}
+
+// MaxSteps is the longest of the card's paths.
+func (c pathCard) MaxSteps() int {
+	n := len(c.Steps)
+	for _, o := range c.Same {
+		n = max(n, len(o.Steps))
+	}
+	return n
+}
+
+// groupPaths puts paths with one way in and one fix on one card, in the
+// order of the first of each group (the most dangerous first).
+func groupPaths(cards []pathCard) []pathCard {
+	var out []pathCard
+	at := map[string]int{}
+	for _, c := range cards {
+		key := c.Breaker + "\x00" + c.Cut + "\x00" + c.Gain
+		if i, ok := at[key]; ok && c.Breaker != "" {
+			out[i].Same = append(out[i].Same, c)
+			continue
+		}
+		at[key] = len(out)
+		out = append(out, c)
+	}
+	return out
 }
 
 type pathsData struct {
@@ -121,6 +169,7 @@ func (a *app) attackPaths(w http.ResponseWriter, r *http.Request, cur *auth.Curr
 		}
 	}
 	d.Shown = len(d.Internet) + len(d.LAN)
+	d.Internet, d.LAN = groupPaths(d.Internet), groupPaths(d.LAN)
 	d.Root = len(root)
 	a.page(w, r, cur, http.StatusOK, "paths", view{Title: "Attack paths", Nav: "findings", Tabs: tabs("findings", "/findings/paths"), Data: d})
 }

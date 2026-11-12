@@ -1,7 +1,8 @@
 {{/* SPDX-License-Identifier: Apache-2.0 */}}
 {{define "content"}}
 {{$d := .Data}}
-{{if not $d.Guide.Started}}{{template "guide" $d}}{{end}}
+{{/* The full guide leads only while Varde knows nothing: once there is something to show, it does not push that aside. */}}
+{{if and $d.Empty (not $d.Guide.Started)}}{{template "guide" $d}}{{end}}
 {{if $d.Empty}}{{else if eq $d.State "urgent"}}
 <section class="hero hero--alert" aria-labelledby="status-title">
   <img class="hero__mark" src="/static/brand/mark.svg" alt="">
@@ -46,6 +47,8 @@
 </div>
 {{if $d.Acknowledged}}<p class="small muted"><a href="/findings?state=acknowledged">{{plural $d.Acknowledged "acknowledged or snoozed finding"}}</a> not counted above.</p>{{end}}{{end}}
 
+{{if or (not $d.Empty) $d.Guide.Started}}{{template "setup" .}}{{end}}
+
 {{if $d.Todo}}
 <section aria-labelledby="urgent-title">
   <div class="panel__head"><h2 id="urgent-title">Update these first</h2><a class="small" href="/findings">All updates to do</a></div>
@@ -53,8 +56,6 @@
 </section>
 {{end}}
 
-{{if $d.Guide.Started}}{{template "guiderest" $d.Guide}}{{end}}
-{{if $d.Guide.Started}}{{template "setupsteps" $d.Steps}}{{end}}
 
 {{if $d.Notices}}
 <section class="panel" aria-labelledby="blind-title">
@@ -107,7 +108,7 @@
       {{if $d.Coverage.Weak}}<li><a href="/systems/gaps#weak">{{plural (len $d.Coverage.Weak) "probable match"}} to confirm</a></li>{{end}}
       {{if $d.Coverage.PublicRoutes}}<li><a href="/systems/gaps#routes">{{plural (len $d.Coverage.PublicRoutes) "public route"}} Varde cannot check</a></li>{{end}}
       {{if and (not $d.Coverage.BlindSpots) (not $d.Empty)}}<li>No blind spots found.</li>{{end}}
-      {{if $d.Coverage.NotApps}}<li><a href="/systems/gaps#not-apps">{{plural (len $d.Coverage.NotApps) "helper container"}} not counted</a></li>{{end}}
+      {{if $d.Coverage.NotApps}}<li><a href="/systems/gaps#not-apps">{{plural (len $d.Coverage.NotApps) "supporting container"}}</a>, packages checked</li>{{end}}
     </ul>
   </section>
   <section class="panel" aria-labelledby="sources-title">

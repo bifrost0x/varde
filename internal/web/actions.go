@@ -215,3 +215,28 @@ func (a *app) unmarkNotAnApp(w http.ResponseWriter, r *http.Request, cur *auth.C
 	a.d.Analyze(ctx)
 	http.Redirect(w, r, "/systems/gaps?ok=is-an-app#unidentified", http.StatusSeeOther)
 }
+
+// setupHiddenKey is the stored mark that the setup reminder on the
+// overview is hidden. It is kept with the settings, on the server: Varde
+// has one operator, and a mark in the browser would need a cookie of its
+// own. The settings service does not know the key and leaves it alone.
+const setupHiddenKey = "UI_SETUP_HIDDEN"
+
+// setupGuide hides or shows the setup reminder of the overview.
+func (a *app) setupGuide(w http.ResponseWriter, r *http.Request, cur *auth.Current) {
+	value := ""
+	if r.PathValue("action") == "hide" {
+		value = "true"
+	}
+	if err := a.d.Store.PutSettings(r.Context(), map[string]string{setupHiddenKey: value}, cur.User.Username, a.d.Now()); err != nil {
+		a.fail(w, r, cur, err)
+		return
+	}
+	http.Redirect(w, r, "/#get-started", http.StatusSeeOther)
+}
+
+// setupHidden reports whether the setup reminder is hidden.
+func (a *app) setupHidden(ctx context.Context) bool {
+	stored, err := a.d.Store.Settings(ctx)
+	return err == nil && stored[setupHiddenKey] == "true"
+}
