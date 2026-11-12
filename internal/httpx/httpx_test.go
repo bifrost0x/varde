@@ -144,3 +144,32 @@ func TestStatusErrorsAndRateLimits(t *testing.T) {
 		t.Errorf("http-date Retry-After: %v", rl.RetryAfter)
 	}
 }
+
+func TestOpenFollowsCrossHostHTTPSRedirectWithoutAuthorization(t *testing.T) {
+	var got string
+	cdn := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte("data"))
+	}))
+	t.Cleanup(cdn.Close)
+	srv, _ := tlsServer(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, cdn.URL, http.StatusFound)
+	})
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+	pool.AddCert(cdn.Certificate())
+	c := New(Options{RootCAs: pool, Timeout: 5 * time.Second})
+	st, err := c.Open(t.Context(), Request{URL: srv.URL, Header: http.Header{"Authorization": {"Bearer x"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Body.Close() }()
+	if got != "" {
+		t.Errorf("authorization sent to the other host: %q", got)
+	}
+
+	blocked := New(Options{RootCAs: pool, AllowHosts: []string{"127.0.0.1"}, Timeout: 5 * time.Second})
+	if _, err := blocked.Open(t.Context(), Request{URL: "https://example.invalid/x"}); !errors.Is(err, ErrHostNotAllowed) {
+		t.Errorf("allowlist ignored: %v", err)
+	}
+}

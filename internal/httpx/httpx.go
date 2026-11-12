@@ -265,3 +265,72 @@ func NextLink(h http.Header) string {
 	}
 	return ""
 }
+
+// Stream is a response whose body is read by the caller, for downloads too
+// large to hold in memory.
+type Stream struct {
+	Status    int
+	Header    http.Header
+	Body      io.ReadCloser
+	RateLimit RateLimit
+}
+
+// Open performs a GET and returns the body unread. It has no total timeout
+// (the caller bounds a download with ctx and the transport's header timeout),
+// and unlike Do it follows redirects to other hosts, as registries answer
+// blob requests with a redirect to a CDN. The scheme must stay https, the
+// allowlist still applies to every hop, and an Authorization header is never
+// carried to another host.
+func (c *Client) Open(ctx context.Context, r Request) (*Stream, error) {
+	u, err := url.Parse(r.URL)
+	if err != nil {
+		return nil, fmt.Errorf("httpx: parse url: %w", err)
+	}
+	if u.Scheme != "https" && (!c.allowHTTP || u.Scheme != "http") {
+		return nil, fmt.Errorf("httpx: refusing non-https url %s", u.Redacted())
+	}
+	if !c.hostAllowed(u.Hostname()) {
+		return nil, fmt.Errorf("%w: %s", ErrHostNotAllowed, u.Hostname())
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("httpx: build request: %w", err)
+	}
+	for k, vs := range r.Header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	req.Header.Set("User-Agent", buildinfo.UserAgent())
+	hc := *c.hc
+	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return errors.New("httpx: too many redirects")
+		}
+		if req.URL.Scheme != "https" {
+			return fmt.Errorf("httpx: refusing redirect to %s", req.URL.Redacted())
+		}
+		if !c.hostAllowed(req.URL.Hostname()) {
+			return fmt.Errorf("%w: %s", ErrHostNotAllowed, req.URL.Hostname())
+		}
+		if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+			req.Header.Del("Authorization")
+		}
+		return nil
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("httpx: GET %s: %w", u.Redacted(), err)
+	}
+	rl := parseRateLimit(resp.Header, time.Now())
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+		_ = resp.Body.Close()
+		return nil, &StatusError{URL: u.Redacted(), Status: resp.StatusCode, RateLimit: rl, Header: resp.Header}
+	}
+	return &Stream{Status: resp.StatusCode, Header: resp.Header, Body: resp.Body, RateLimit: rl}, nil
+}
+
+func (c *Client) hostAllowed(host string) bool {
+	return c.allow == nil || c.allow[strings.ToLower(host)]
+}

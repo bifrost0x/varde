@@ -9,6 +9,7 @@ package registry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/publicsuffix"
 
@@ -39,13 +41,82 @@ const (
 	pageSize = 1000
 )
 
-// Client resolves digests to tags.
+// Client resolves digests to tags and reads image manifests and layers.
 type Client struct {
 	http *httpx.Client
+
+	credHost, credUser, credToken string
+
+	mu    sync.Mutex
+	usage Usage
+}
+
+// Option configures a Client.
+type Option func(*Client)
+
+// WithCredentials makes the client authenticate to the token service of one
+// registry with a user name and an access token (Docker Hub raises its pull
+// limit for authenticated clients). host is the registry as written in an
+// image reference ("docker.io"); the credentials are sent only while talking
+// to that registry's token service, never to another registry.
+func WithCredentials(host, user, token string) Option {
+	return func(c *Client) {
+		if user == "" || token == "" {
+			return
+		}
+		c.credHost, c.credUser, c.credToken = registryHost(host), user, token
+	}
 }
 
 // New returns a client using the hardened HTTP client.
-func New(hc *httpx.Client) *Client { return &Client{http: hc} }
+func New(hc *httpx.Client, opts ...Option) *Client {
+	c := &Client{http: hc}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
+}
+
+// registryHost maps a registry as written in a reference to its API host.
+func registryHost(h string) string {
+	h = strings.ToLower(strings.TrimSpace(h))
+	if h == "docker.io" || h == "index.docker.io" {
+		return "registry-1.docker.io"
+	}
+	return h
+}
+
+// Usage is what a client has spent so far, so a caller can stay within the
+// registry's limits.
+type Usage struct {
+	// ManifestRequests counts manifest GETs (Docker Hub counts those as
+	// pulls); HEAD requests and token requests are not included.
+	ManifestRequests int
+	// Bytes is the size of response bodies read.
+	Bytes int64
+	// RateRemaining is the last ratelimit-remaining header seen, verbatim
+	// (Docker Hub sends "98;w=21600").
+	RateRemaining string
+}
+
+// Budget returns the usage so far.
+func (c *Client) Budget() Usage {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.usage
+}
+
+func (c *Client) note(h http.Header, bytes int64, manifest bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if manifest {
+		c.usage.ManifestRequests++
+	}
+	c.usage.Bytes += bytes
+	if v := h.Get("RateLimit-Remaining"); v != "" {
+		c.usage.RateRemaining = v
+	}
+}
 
 // endpoint maps a normalised repository ("docker.io/library/nginx",
 // "ghcr.io/org/app") to the registry API host and the repository name.
@@ -68,7 +139,9 @@ type session struct {
 	token string
 }
 
-func (s *session) do(ctx context.Context, method, path string, hdr http.Header, max int64) (*httpx.Response, error) {
+// withAuth runs call with the session's token and, after one 401 with a
+// Bearer challenge, again with a fresh token.
+func (s *session) withAuth(ctx context.Context, hdr http.Header, call func(h http.Header) error) error {
 	for attempt := 0; attempt < 2; attempt++ {
 		h := hdr.Clone()
 		if h == nil {
@@ -77,17 +150,52 @@ func (s *session) do(ctx context.Context, method, path string, hdr http.Header, 
 		if s.token != "" {
 			h.Set("Authorization", "Bearer "+s.token)
 		}
-		resp, err := s.c.http.Do(ctx, httpx.Request{Method: method, URL: "https://" + s.host + path, Header: h, MaxBytes: max})
+		err := call(h)
 		var se *httpx.StatusError
 		if attempt == 0 && errors.As(err, &se) && se.Status == http.StatusUnauthorized && se.Header != nil {
 			if terr := s.authenticate(ctx, se.Header.Get("WWW-Authenticate")); terr != nil {
-				return nil, terr
+				return terr
 			}
 			continue
 		}
-		return resp, err
+		return err
 	}
-	return nil, errors.New("registry: authentication failed")
+	return errors.New("registry: authentication failed")
+}
+
+func (s *session) do(ctx context.Context, method, path string, hdr http.Header, max int64) (*httpx.Response, error) {
+	var resp *httpx.Response
+	err := s.withAuth(ctx, hdr, func(h http.Header) error {
+		r, err := s.c.http.Do(ctx, httpx.Request{Method: method, URL: "https://" + s.host + path, Header: h, MaxBytes: max})
+		var se *httpx.StatusError
+		switch {
+		case err == nil:
+			s.c.note(r.Header, int64(len(r.Body)), method == http.MethodGet && strings.Contains(path, "/manifests/"))
+		case errors.As(err, &se):
+			s.c.note(se.Header, 0, false)
+		}
+		resp = r
+		return err
+	})
+	return resp, err
+}
+
+// open starts a streamed GET; the registry may redirect to a CDN.
+func (s *session) open(ctx context.Context, path string) (*httpx.Stream, error) {
+	var st *httpx.Stream
+	err := s.withAuth(ctx, nil, func(h http.Header) error {
+		r, err := s.c.http.Open(ctx, httpx.Request{URL: "https://" + s.host + path, Header: h})
+		var se *httpx.StatusError
+		switch {
+		case err == nil:
+			s.c.note(r.Header, 0, false)
+		case errors.As(err, &se):
+			s.c.note(se.Header, 0, false)
+		}
+		st = r
+		return err
+	})
+	return st, err
 }
 
 // authenticate follows a Bearer challenge anonymously (read scope only).
@@ -117,7 +225,14 @@ func (s *session) authenticate(ctx context.Context, challenge string) error {
 	// Only pull (read) access is ever requested.
 	q.Set("scope", "repository:"+s.name+":pull")
 	realm.RawQuery = q.Encode()
-	resp, err := s.c.http.Do(ctx, httpx.Request{URL: realm.String(), MaxBytes: 64 << 10})
+	treq := httpx.Request{URL: realm.String(), MaxBytes: 64 << 10}
+	if s.c.credUser != "" && strings.EqualFold(s.host, s.c.credHost) {
+		// The realm passed realmAllowed above, and the credentials belong to
+		// exactly this registry; httpx refuses redirects to other hosts, so
+		// they cannot travel further.
+		treq.Header = http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(s.c.credUser+":"+s.c.credToken))}}
+	}
+	resp, err := s.c.http.Do(ctx, treq)
 	if err != nil {
 		return fmt.Errorf("registry: token: %w", err)
 	}
