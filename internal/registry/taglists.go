@@ -59,7 +59,7 @@ func TagListJobs(cat *catalog.Catalog, ws []inventory.Workload, ids map[string]i
 		if k, ok := known[ref.Repository]; ok && now.Sub(k.Checked) < tagListsEvery {
 			continue
 		}
-		out = append(out, TagListJob{App: app, Repository: ref.Repository})
+		out = append(out, TagListJob{App: identify.AppForImage(app, ref.Repository), Repository: ref.Repository})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Repository < out[j].Repository })
 	return out

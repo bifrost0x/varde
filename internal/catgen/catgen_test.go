@@ -861,6 +861,12 @@ func TestC6EvalWorseFails(t *testing.T) {
 	if err := checkNoRegression(widgetEntry(t, ""), widgetDerived(t), "", nil, []eval.ContainerCase{better, other}); err != nil {
 		t.Fatalf("better: %v", err)
 	}
+	// Per case: what the variant case gains does not make up for the
+	// four-part case (in sum both entries get three right, and the
+	// generated one fewer wrong).
+	if err := checkNoRegression(widgetEntry(t, ""), widgetDerived(t), "", nil, []eval.ContainerCase{worse, better}); failedCheck(err) != CheckNoRegression || !strings.Contains(err.Error(), "four parts") {
+		t.Fatalf("worse and better: %v", err)
+	}
 	// An image with the project's source label only counts too.
 	labelled := worse
 	labelled.Image = "docker.io/acme/widget-worker:1.2.0.7"

@@ -187,17 +187,21 @@ func Identify(cat *catalog.Catalog, w inventory.Workload) Result {
 	}
 	r.WorkloadID = w.ID
 	r.PURL = componentPURL(w)
-	if app, ok := cat.App(r.AppID); ok && app.Origin == catalog.OriginDerived && !strings.HasPrefix(r.Rule, "label "+LabelApp) {
+	if app, ok := cat.App(r.AppID); ok && !strings.HasPrefix(r.Rule, "label "+LabelApp) && w.Container != nil {
 		// The publisher's own statement or two lists confirm a derived
 		// app; anything less is a report the user settles (ADR 0038).
 		// Confirmation is per image: this image may be one a single list
 		// reports, or one that only inherited the app's source label. A
 		// workload without an image (a manual entry) names the app itself.
-		if w.Container != nil {
-			var d *catalog.Derivation
-			if ref, err := imageref.Parse(w.Container.ImageRef); err == nil {
-				d = app.DerivationFor(ref.Repository)
-			}
+		// A generated entry is confirmed the same way for the images it
+		// stands in for its derived entry (ReadsAsDerived).
+		var repo string
+		var d *catalog.Derivation
+		if ref, err := imageref.Parse(w.Container.ImageRef); err == nil {
+			repo = ref.Repository
+			d = app.DerivationFor(repo)
+		}
+		if app.Origin == catalog.OriginDerived || ReadsAsDerived(app, repo) {
 			if d == nil || !d.Confirmed {
 				r.Derived = true
 				r.DerivedFrom = derivedFrom(d)
@@ -286,14 +290,14 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 			return Result{Confidence: None, Note: "label " + LabelApp + "=" + id + " does not name a catalog app"}
 		}
 		r := Result{AppID: app.ID, Confidence: Exact, Rule: "label " + LabelApp}
-		resolveContainerVersion(&r, app, labels, ref, refErr == nil, c)
+		resolveContainerVersion(&r, AppForImage(app, imageRepository(ref, refErr)), labels, ref, refErr == nil, c)
 		return r
 	}
 	// 2. Image repository.
 	if refErr == nil {
 		if app, ok := cat.ByImage(ref.Repository); ok {
 			r := Result{AppID: app.ID, Confidence: Exact, Rule: "image " + ref.Repository}
-			resolveContainerVersion(&r, app, labels, ref, true, c)
+			resolveContainerVersion(&r, AppForImage(app, ref.Repository), labels, ref, true, c)
 			return r
 		}
 	}
@@ -301,11 +305,7 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 	if src := strings.TrimSpace(c.ImageLabels[LabelOCISource]); src != "" {
 		if app, ok := cat.ByOCISource(src); ok {
 			r := Result{AppID: app.ID, Confidence: Strong, Rule: LabelOCISource + " " + src}
-			if app.Origin == catalog.OriginGenerated {
-				labelOfGenerated(&r, app, src, labels, ref, refErr == nil, c)
-				return r
-			}
-			resolveContainerVersion(&r, app, labels, ref, refErr == nil, c)
+			resolveContainerVersion(&r, AppForImage(app, imageRepository(ref, refErr)), labels, ref, refErr == nil, c)
 			return r
 		}
 	}
@@ -334,23 +334,42 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 	return Result{Confidence: None, Note: note}
 }
 
-// labelOfGenerated identifies an image that a generated entry knows only
-// through its source label, the way the derived entry the generated one
-// stands in for would (catalog.Derive, coverage.DeriveAppsWith): the
-// generator checked the entry's tag rule on the entry's own images, not on
-// this one, so the version comes from the derived chain (the image's
-// version label, then the default tag pattern); and the label confirms
-// the app only when the image is named like the project. An image that may
-// have inherited the label from its base image stays a report, as it would
-// with the derived entry, and does not alert.
-func labelOfGenerated(r *Result, app *catalog.App, src string, labels map[string]string, ref imageref.Ref, haveRef bool, c *inventory.Container) {
+// ReadsAsDerived reports an image of a generated entry that the
+// generator did not check: one the entry knows through its source label,
+// one it took over from the entry derived for its project, or one named
+// by the user's varde.app label. The generated entry stands in for the
+// derived entry there, so such an image is read as the derived entry
+// would read it: its version chain and scheme (AppForImage), confirmed
+// only as the derivation of the image says (DerivationFor).
+func ReadsAsDerived(app *catalog.App, repository string) bool {
+	if app == nil || app.Origin != catalog.OriginGenerated {
+		return false
+	}
+	return repository == "" || !app.HasImage(repository) || app.DerivationFor(repository) != nil
+}
+
+// AppForImage returns app as Varde reads an image repository of it: a
+// generated entry with the derived entry's version (semver, the default
+// chain of label and tag pattern) for an image the generator did not
+// check (ReadsAsDerived), app itself otherwise. Identification, the
+// registry resolver, matching and update suggestions use it, so they
+// all read such an image the same way.
+func AppForImage(app *catalog.App, repository string) *catalog.App {
+	if !ReadsAsDerived(app, repository) {
+		return app
+	}
 	derived := *app
 	derived.Version = catalog.VersionSpec{Scheme: version.SemVer}
-	resolveContainerVersion(r, &derived, labels, ref, haveRef, c)
-	if _, tied := catalog.Derive(src, ref.Repository); !haveRef || !tied {
-		r.Derived = true
-		r.DerivedFrom = derivedFrom(nil)
+	return &derived
+}
+
+// imageRepository is the repository of a parsed reference, empty when it
+// did not parse.
+func imageRepository(ref imageref.Ref, err error) string {
+	if err != nil {
+		return ""
 	}
+	return ref.Repository
 }
 
 // mergedLabels returns image labels overlaid with container labels. Docker

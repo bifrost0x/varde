@@ -555,8 +555,12 @@ func (g *Generator) checkGroup(ctx context.Context, gr *group, reviewed *catalog
 		}
 		newest = append(newest, tds...)
 	}
+	derived, err := derivedEntry(gr, id)
+	if err != nil {
+		return o, err
+	}
 	entry := catalog.Entry{Name: id + ".yaml", Data: string(data)}
-	if err := checkNoRegression(entry, derivedEntry(gr, id), cpe, newest, g.EvalCases); err != nil {
+	if err := checkNoRegression(entry, derived, cpe, newest, g.EvalCases); err != nil {
 		return verdict(err)
 	}
 	o.yaml = string(data)

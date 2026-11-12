@@ -480,10 +480,10 @@ func (g *Generator) newestTags(ctx context.Context, gen *catalog.App, image stri
 // derivedEntry is the entry an installation derives for the images of a
 // group from the index, without the generated one: what C6 compares with.
 // Nil when the installation would derive none.
-func derivedEntry(gr *group, id string) *catalog.App {
+func derivedEntry(gr *group, id string) (*catalog.App, error) {
 	empty, err := catalog.Build(nil, catalog.OriginBuiltin, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	rows := map[string]applists.Entry{}
 	ws := make([]inventory.Workload, 0, len(gr.entries))
@@ -497,10 +497,10 @@ func derivedEntry(gr *group, id string) *catalog.App {
 	}
 	for _, a := range coverage.DeriveAppsWith(empty, coverage.Lookups{Index: index}, ws) {
 		if a.ID == id {
-			return a
+			return a, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // checkNoRegression is C6. A generated entry stands in for the entry an
@@ -648,31 +648,30 @@ func noWorseEval(genCat *catalog.Catalog, gen, derived *catalog.App, cases []eva
 	if err != nil {
 		return err
 	}
-	corpus := &eval.Corpus{Containers: mine}
-	withGen, err := eval.Run(corpus, genCat)
-	if err != nil {
-		return err
-	}
-	withDerived, err := eval.Run(corpus, derivedCat)
-	if err != nil {
-		return err
-	}
-	g, d := withGen.Counts, withDerived.Counts
+	// Case by case: one case getting worse is a regression, whatever
+	// another gains.
 	good := func(c eval.Counts) int { return c.AppTP + c.VersionCorrect }
 	bad := func(c eval.Counts) int { return c.AppFP + c.VersionWrong + c.TrustWrong }
-	if good(g) < good(d) || bad(g) > bad(d) {
-		return fail(CheckNoRegression, "eval cases %s: %d right and %d wrong with the entry, %d and %d with the derived one",
-			caseNames(mine), good(g), bad(g), good(d), bad(d))
+	var worse []string
+	for _, cs := range mine {
+		corpus := &eval.Corpus{Containers: []eval.ContainerCase{cs}}
+		withGen, err := eval.Run(corpus, genCat)
+		if err != nil {
+			return err
+		}
+		withDerived, err := eval.Run(corpus, derivedCat)
+		if err != nil {
+			return err
+		}
+		g, d := withGen.Counts, withDerived.Counts
+		if good(g) < good(d) || bad(g) > bad(d) {
+			worse = append(worse, fmt.Sprintf("%s (%d right, %d wrong; derived %d, %d)", cs.Name, good(g), bad(g), good(d), bad(d)))
+		}
+	}
+	if len(worse) > 0 {
+		return fail(CheckNoRegression, "eval cases worse than with the derived entry: %s", strings.Join(worse, "; "))
 	}
 	return nil
-}
-
-func caseNames(cases []eval.ContainerCase) string {
-	names := make([]string, 0, len(cases))
-	for _, c := range cases {
-		names = append(names, c.Name)
-	}
-	return strings.Join(names, ", ")
 }
 
 func containsFold(list []string, s string) bool {

@@ -1030,16 +1030,20 @@ func (a *app) workloadRow(s *snapshot, wl inventory.Workload, open map[string]in
 		Exposure: string(s.exposure.Detect(wl).Exposure), Open: open[wl.ID], Manual: wl.Kind == inventory.KindManual,
 		Trust: string(id.Trust), Doubt: id.Doubt(), Derived: id.Derived, Unfixed: id.Unfixed,
 	}
-	if app, ok := a.d.Catalog.Current().App(id.AppID); ok && app.Origin == catalog.OriginDerived {
+	if app, ok := a.d.Catalog.Current().App(id.AppID); ok && (app.Origin == catalog.OriginDerived || app.Origin == catalog.OriginGenerated) {
 		// The stored identification does not carry this; the catalog does.
 		var d *catalog.Derivation
+		repo := ""
 		if wl.Container != nil {
 			if ref, err := imageref.Parse(wl.Container.ImageRef); err == nil {
-				d = app.DerivationFor(ref.Repository)
+				repo = ref.Repository
+				d = app.DerivationFor(repo)
 			}
 		}
-		// A manual entry names the app itself: nothing to confirm.
-		if wl.Container != nil {
+		// A manual entry names the app itself: nothing to confirm. A
+		// generated entry is confirmed per image only where it stands in
+		// for its derived entry (identify.ReadsAsDerived).
+		if wl.Container != nil && (app.Origin == catalog.OriginDerived || identify.ReadsAsDerived(app, repo)) {
 			row.Basis = derivationBasis(d)
 			confirmedByUser := strings.HasPrefix(id.Rule, "label "+identify.LabelApp)
 			row.Derived = !confirmedByUser && (d == nil || !d.Confirmed)

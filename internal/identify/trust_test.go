@@ -125,9 +125,9 @@ func TestDerivedAppNeedsConfirmation(t *testing.T) {
 // checked its tag rule on the entry's own images only, so an image that
 // the entry knows only through that label is identified as the derived
 // entry would identify it: with the derived version chain, and confirmed
-// only when the publisher's label ties the image to the project by name.
-// An image that may have inherited the label from its base image stays a
-// report, as with the derived entry, and never alerts.
+// only when its derivation (the publisher's label naming the project)
+// confirms it. An image that may have inherited the label from its base
+// image stays a report, as with the derived entry, and never alerts.
 func TestGeneratedSourceLabelActsAsDerived(t *testing.T) {
 	gen := `id: gh-acme-widget
 name: widget
@@ -196,7 +196,21 @@ verified: "2026-11-12"
 		{"inherited", "docker.io/someone/addon:2.0.0", "", true, "2.0.0"},
 	} {
 		w := container(c.ref, src, nil)
-		got, want := Identify(genCat, w), Identify(derivedWorld(c.labelImage), w)
+		// With the generated entry, the installation derives the label
+		// image as before (coverage.DeriveAppsWith) and the derived entry
+		// joins the generated one.
+		genWorld := genCat
+		if c.labelImage != "" {
+			d, ok := catalog.Derive(src[LabelOCISource], c.labelImage)
+			if !ok {
+				t.Fatal("not derived")
+			}
+			d.AddDerivedImage(c.labelImage, *d.Derivation)
+			if genWorld, err = genCat.WithDerived([]*catalog.App{d}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, want := Identify(genWorld, w), Identify(derivedWorld(c.labelImage), w)
 		if got.AppID != "gh-acme-widget" || got.Derived != c.derived || got.Version != c.version {
 			t.Errorf("%s: %+v", c.name, got)
 		}

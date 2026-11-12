@@ -173,3 +173,62 @@ func mustCatalog(t *testing.T) *catalog.Catalog {
 	}
 	return c
 }
+
+// An image a generated entry knows only through its source label was
+// identified with the derived entry's chain; the resolver keeps and orders
+// its tags the same way, not with the entry's checked tag rule, and so do
+// the tag lists for update suggestions.
+func TestJobsReadUncheckedImageAsDerived(t *testing.T) {
+	gen := `id: gh-acme-widget
+name: widget
+homepage: https://github.com/acme/widget
+images:
+  - match: ghcr.io/acme/widget
+oci_source:
+  - https://github.com/acme/widget
+version:
+  scheme: semver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)$'
+advisories:
+  coverage: partial
+  github_repos: [acme/widget]
+maintainers_of_entry: [generator]
+verified: "2026-11-12"
+`
+	cat, err := catalog.BuildLayered(nil, catalog.OriginBuiltin, []catalog.Entry{{Name: "gh-acme-widget.yaml", Data: gen}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := map[string]string{identify.LabelOCISource: "https://github.com/acme/widget"}
+	ws := []inventory.Workload{
+		{ID: "own", Kind: inventory.KindContainer, Container: &inventory.Container{ImageRef: "ghcr.io/acme/widget:latest", RepoDigests: []string{"ghcr.io/acme/widget@sha256:aaa"}}},
+		{ID: "label", Kind: inventory.KindContainer, Container: &inventory.Container{ImageRef: "docker.io/acme/widget-worker:latest", ImageLabels: src, RepoDigests: []string{"docker.io/acme/widget-worker@sha256:bbb"}}},
+	}
+	ids := map[string]identify.Result{}
+	for _, w := range ws {
+		ids[w.ID] = identify.Identify(cat, w)
+	}
+	jobs := Jobs(cat, ws, ids, nil, time.Now())
+	if len(jobs) != 2 {
+		t.Fatalf("jobs %+v", jobs)
+	}
+	for _, j := range jobs {
+		keep, less := TagOrder(j.App, j.Repository)
+		ranked := strings.Join(Rank([]string{"1.2.0", "1.2.0.7", "latest", "1.10.0"}, keep, less), ",")
+		want := "1.10.0,1.2.0"
+		if j.Repository == "docker.io/acme/widget-worker" {
+			// The derived chain's default pattern reads four parts.
+			want = "1.10.0,1.2.0.7,1.2.0"
+		}
+		if ranked != want {
+			t.Errorf("%s: ranked %s, want %s", j.Repository, ranked, want)
+		}
+	}
+	findings := []store.Finding{{WorkloadID: "label", MatchState: "affected"}}
+	tl := TagListJobs(cat, ws, ids, findings, nil, time.Now())
+	if len(tl) != 1 || tl[0].App.Version.Sources != nil {
+		t.Errorf("tag list jobs %+v", tl)
+	}
+}

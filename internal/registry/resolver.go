@@ -108,7 +108,9 @@ func Jobs(cat *catalog.Catalog, ws []inventory.Workload, ids map[string]identify
 			continue
 		}
 		seen[key] = true
-		out = append(out, Job{App: app, Repository: ref.Repository, Digest: digest})
+		// The app as identify read this image: a generated entry's tag
+		// rule only for the images the generator checked.
+		out = append(out, Job{App: identify.AppForImage(app, ref.Repository), Repository: ref.Repository, Digest: digest})
 	}
 	return out
 }

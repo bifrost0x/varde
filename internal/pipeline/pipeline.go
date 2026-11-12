@@ -240,7 +240,7 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 	for id, a := range systemApps {
 		all[id] = a
 	}
-	findings, unfixed, err := p.match(ctx, results, images, all)
+	findings, unfixed, err := p.match(ctx, matchInput{results: results, images: images, apps: all, repos: imageRepositories(ws)})
 	if err != nil {
 		return Summary{}, err
 	}
@@ -412,7 +412,32 @@ type imageTarget struct {
 	pkg        distro.Package
 }
 
-func (p *Pipeline) match(ctx context.Context, results []identify.Result, images []imageTarget, apps map[string]*catalog.App) ([]store.FindingInput, map[string]int, error) {
+// matchInput is what match compares: the identifications, the image
+// packages, the apps by ID and the image repository of each container
+// workload.
+type matchInput struct {
+	results []identify.Result
+	images  []imageTarget
+	apps    map[string]*catalog.App
+	repos   map[string]string
+}
+
+// imageRepositories maps each container workload to its image repository.
+func imageRepositories(ws []inventory.Workload) map[string]string {
+	out := map[string]string{}
+	for _, w := range ws {
+		if w.Container == nil {
+			continue
+		}
+		if ref, err := imageref.Parse(w.Container.ImageRef); err == nil {
+			out[w.ID] = ref.Repository
+		}
+	}
+	return out
+}
+
+func (p *Pipeline) match(ctx context.Context, in matchInput) ([]store.FindingInput, map[string]int, error) {
+	results, images, apps := in.results, in.images, in.apps
 	unfixed := map[string]int{}
 	if len(apps) == 0 {
 		return nil, unfixed, nil
@@ -445,6 +470,10 @@ func (p *Pipeline) match(ctx context.Context, results []identify.Result, images 
 			continue
 		}
 		system := strings.HasPrefix(app.ID, distro.SystemPrefix)
+		// An image a generated entry knows only as its derived entry
+		// would is compared under the derived entry's scheme, as it was
+		// identified (identify.AppForImage).
+		app = identify.AppForImage(app, in.repos[r.WorkloadID])
 		for _, f := range match.Match(match.Input{App: app, Version: r.Version, VersionSource: r.VersionSource, Doubt: r.Doubt(), Distro: r.DistroPackage}, advisories[app.ID], enr) {
 			// A system package is reported when an update fixes it: the
 			// distribution's unfixed and minor issues would bury the
