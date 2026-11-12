@@ -518,3 +518,18 @@ func TestGuestMACPattern(t *testing.T) {
 		}
 	}
 }
+
+// The scanner retries probes that stayed silent, so more probes are done
+// than the first pass holds. The progress must not pass 100 percent.
+func TestScanProgressFollowsRetries(t *testing.T) {
+	s := ScanState{Running: true, Total: 254 * 10}
+	for _, step := range []struct{ done, total int }{{1000, 2540}, {2540, 2540}, {2700, 2980}, {2980, 2980}} {
+		s.progress(step.done, step.total)
+		if s.Done > s.Total {
+			t.Fatalf("done %d of %d after step %+v", s.Done, s.Total, step)
+		}
+	}
+	if s.Done != 2980 || s.Total != 2980 {
+		t.Errorf("final state %d of %d", s.Done, s.Total)
+	}
+}

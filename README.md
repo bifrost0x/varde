@@ -61,20 +61,23 @@ account.
 
 A deployment is two containers, a read-only Docker socket proxy and Varde:
 
-1. Download [`deploy/compose.yaml`](deploy/compose.yaml) into an empty directory. Set
-   `VARDE_HOST_ADDRESS` in the file to this machine's address in your network, and `TZ` for the
-   digest time. The image is `ghcr.io/bifrost0x/varde:latest`: the newest release, and the state
-   of the branch `main` while no release exists. To stay on one version, put it in a `.env` next
-   to the file, for example `VARDE_VERSION=0.1.0`.
+1. Download [`deploy/compose.yaml`](deploy/compose.yaml) into an empty directory. Nothing in it
+   has to be changed to start.
 2. `docker compose up -d`, then read the one-time setup token:
    `docker compose logs varde | grep setup_token` (on Windows: `findstr setup_token`).
-3. Open `http://127.0.0.1:8080` on that machine, create the account with the token and follow the
-   overview: it offers a short tour, and Connections walks you through allowing your networks,
-   scanning and connecting what it found. For the full inventory of a host, Varde installs its
-   agent there with one SSH sign-in (it can also run by hand, see
-   [`deploy/compose.agent.yaml`](deploy/compose.agent.yaml)).
-4. To use Varde from other machines, put a TLS reverse proxy in front of port 8080; the agent port
-   8443 is published directly and only accepts agents' client certificates.
+3. Open `http://<address of that machine>:8080` in a browser, from that machine or any other in
+   your network, create the account with the token and follow the overview: it offers a short
+   tour, and Connections walks you through allowing your networks, scanning and connecting what
+   it found. For the full inventory of a host, Varde installs its agent there with one SSH
+   sign-in (it can also run by hand, see [`deploy/compose.agent.yaml`](deploy/compose.agent.yaml)).
+4. For HTTPS, put a reverse proxy in front of port 8080 and remove the `#` of the two lines the
+   file marks for it. The agent port 8443 is published directly and only accepts agents' client
+   certificates.
+
+The image is `ghcr.io/bifrost0x/varde:latest`: the newest release, and the state of the branch
+`main` while no release exists. To stay on one version, put it in a `.env` next to the file, for
+example `VARDE_VERSION=0.1.0`. On a machine that is reachable from the internet, bind port 8080
+to `127.0.0.1` as the file describes.
 
 Backups, restores and upgrades: [`docs/configuration.md`](docs/configuration.md#backup-restore-and-upgrades).
 

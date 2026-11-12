@@ -147,7 +147,7 @@ func (a *app) renderNetwork(w http.ResponseWriter, r *http.Request, cur *auth.Cu
 		d.Scope = append(d.Scope, p.String())
 	}
 	if d.Scan.Total > 0 {
-		d.Percent = d.Scan.Done * 100 / d.Scan.Total
+		d.Percent = min(100, d.Scan.Done*100/d.Scan.Total)
 	}
 	ins, err := a.d.Store.Integrations(ctx)
 	if err != nil {

@@ -673,3 +673,33 @@ func TestNotAnAppMark(t *testing.T) {
 		t.Errorf("audit log: %s", actions)
 	}
 }
+
+// Opened over plain http while cookies are HTTPS-only, the sign-in cannot
+// work: the answer says so instead of asking to reload.
+func TestHTTPSOnlyCookiesOverHTTPExplained(t *testing.T) {
+	h := newHarness(t, func(d *Deps) {
+		proxies, _ := auth.NewProxies(nil, true)
+		d.Proxies = proxies
+		d.Sessions = auth.NewSessions(d.Store, auth.CookieAlways, proxies)
+	})
+	// A browser does not keep a Secure cookie of a plain-http address in
+	// the network. The test client would, for the loopback address of the
+	// test server, so it gets no jar.
+	h.c.Jar = nil
+	form := url.Values{"token": {setupToken}, "username": {"admin"}, "password": {"correct horse battery"}, "password2": {"correct horse battery"}}
+	resp, body := h.do(t, "POST", "/setup", form, nil)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status %d (Location %q), want 403", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	for _, want := range []string{"https address", "VARDE_BEHIND_TLS_PROXY", "plain http"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("answer lacks %q:\n%s", want, body)
+		}
+	}
+	// A cross-site post in the default setup keeps the short answer.
+	h = newHarness(t)
+	_, body = h.do(t, "POST", "/setup", form, map[string]string{"Origin": "http://evil.example"})
+	if strings.Contains(body, "VARDE_BEHIND_TLS_PROXY") || !strings.Contains(body, "Request blocked") {
+		t.Errorf("cross-site answer: %s", body)
+	}
+}

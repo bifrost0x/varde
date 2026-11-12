@@ -249,9 +249,23 @@ func (a *app) sameOrigin(w http.ResponseWriter, r *http.Request) bool {
 	a.d.Log.Warn("cross-site request blocked", "path", r.URL.Path, "host", r.Host,
 		"origin", r.Header.Get("Origin"), "sec_fetch_site", r.Header.Get("Sec-Fetch-Site"),
 		"form_token", auth.FormTokenValid(r))
-	http.Error(w, "Request blocked. Reload the page and try again.", http.StatusForbidden)
+	msg := "Request blocked. Reload the page and try again."
+	if _, err := r.Cookie(auth.FormCookieName); err != nil && r.TLS == nil && a.d.Sessions.Secure(r) {
+		// The usual cause is not an attack: Varde is set to HTTPS-only
+		// cookies and was opened over plain http, so the browser never
+		// stored the form's cookie. Reloading would not help.
+		msg = httpsOnlyHint
+	}
+	http.Error(w, msg, http.StatusForbidden)
 	return false
 }
+
+// httpsOnlyHint explains a sign-in that cannot work: the form's cookie did
+// not come back while cookies are HTTPS-only.
+const httpsOnlyHint = "Request blocked: your browser did not send back this form's cookie.\n\n" +
+	"This Varde is set up for HTTPS (VARDE_BEHIND_TLS_PROXY=true or VARDE_COOKIE_SECURE=always), " +
+	"so its cookies only work over https. Open Varde through its https address, not over http.\n\n" +
+	"To use plain http in your local network instead, remove that setting and restart Varde."
 
 func (a *app) formToken(w http.ResponseWriter, r *http.Request) (string, bool) {
 	tok, err := a.d.Sessions.FormToken(w, r)

@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The Compose examples start on hosts without IPv6: the socket proxy binds IPv4 only
+  (`DISABLE_IPV6`). It exited in a loop where the kernel has IPv6 switched off.
+- The network scan no longer shows more than 100 percent: probes that are tried again count
+  towards the total.
+- Opened over plain http while cookies are HTTPS-only (`VARDE_BEHIND_TLS_PROXY`,
+  `VARDE_COOKIE_SECURE=always`), the sign-in says so and names the two ways out, instead of
+  "Request blocked. Reload the page and try again."
 - The builder's store is published compressed on the branch `data`. It holds the text of public
   advisories, whose proofs of concept quote credentials; as plain text it raised a
   secret-scanning alert on the repository with every build.
@@ -26,6 +33,12 @@ All notable changes to this project are documented here. The format follows
   suffixes: a registry and a token service that are separate names directly under such a suffix
   (two hosts under `duckdns.org`, for example) no longer count as one domain, and the image check
   names the refused realm. The roadmap now describes the language metadata readers already implemented.
+
+### Changed
+
+- `deploy/compose.yaml` starts without any edit and publishes the web interface on port 8080 for
+  the local network (before: `127.0.0.1` only). The reverse-proxy settings are one marked block.
+  On a machine that is reachable from the internet, bind the port to `127.0.0.1`.
 
 ### Added
 
