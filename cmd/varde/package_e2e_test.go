@@ -17,6 +17,7 @@ import (
 	"github.com/bifrost0x/varde/internal/advisory/sources"
 	"github.com/bifrost0x/varde/internal/applists"
 	"github.com/bifrost0x/varde/internal/catalog"
+	"github.com/bifrost0x/varde/internal/config"
 	"github.com/bifrost0x/varde/internal/feed"
 	"github.com/bifrost0x/varde/internal/settings"
 	"github.com/bifrost0x/varde/internal/store"
@@ -81,8 +82,37 @@ func TestPackageIsDefaultWithRoot(t *testing.T) {
 	}
 }
 
+// A build with the production trust root reads the data package without
+// any configuration: the default mirror, no public source.
+func TestEmbeddedRootMakesThePackageTheDefault(t *testing.T) {
+	if feed.EmbeddedRoot() == nil {
+		t.Skip("this build embeds no trust root")
+	}
+	ctx := context.Background()
+	// No root file, no mirror: only what the binary brings. The harness
+	// allows no outbound host, so the check of the default mirror fails
+	// here; what counts is which sources are chosen.
+	in := startUplinkInstall(t, map[string]string{"VARDE_PACKAGE_URLS": config.DefaultPackageURL})
+	if st := in.pkg.Status(ctx); !st.Available {
+		t.Fatalf("package status: %+v", st)
+	}
+	if names := in.sourceNames(); !strings.HasPrefix(names, "feed") || strings.Contains(names, "kev") {
+		t.Fatalf("sources: %s", names)
+	}
+	local := &catalog.App{ID: "mine", Origin: catalog.OriginLocal, Advisories: catalog.Advisories{GitHubRepos: []string{"me/mine"}}}
+	if res, err := in.source(t, "github").Refresh(ctx, []*catalog.App{local}); err != nil || res.Requests != 0 {
+		t.Fatalf("github asked by default: %+v, %v", res, err)
+	}
+	if _, err := in.pkg.UpdateNow(ctx); err == nil {
+		t.Fatal("the default mirror was reached from a test")
+	}
+}
+
 // Without a trust root nothing changes: Varde asks the public sources.
 func TestNoRootBehavesAsBefore(t *testing.T) {
+	if feed.EmbeddedRoot() != nil {
+		t.Skip("this build embeds a trust root; see TestEmbeddedRootMakesThePackageTheDefault")
+	}
 	g := newUplinkGate(t)
 	in := startUplinkInstall(t, map[string]string{"VARDE_PACKAGE_URLS": g.packageDir(t, 100, "")})
 	st := in.pkg.Status(context.Background())
