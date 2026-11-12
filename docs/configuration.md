@@ -337,10 +337,11 @@ table itself. An installation that reads it asks nobody else about its apps: one
 requests a day, and the changed parts of the package when there are any. The mirror sees an IP
 address and that it fetches the Varde package, not which apps run there.
 
-**The package is used once this build has a trust root.** Releases do not carry one yet (the key
-ceremony is described in [data-package.md](data-package.md)), so until then Settings › Data
-package says "not available" and Varde asks the public sources itself, as before. With a trust
-root, and `VARDE_MODE` unset, the package is the default.
+**The package is the default.** Varde carries the project's trust root
+(`internal/feed/roots/production.json`, made in the key ceremony of
+[data-package.md](data-package.md)), so with `VARDE_MODE` unset it reads the package and asks no
+public source about your apps. A build without that file has no trust root: Settings › Data
+package then says "not available" and Varde asks the public sources itself.
 
 - **Where it comes from.** `VARDE_PACKAGE_URLS`, by default the branch `data` of the project's
   repository on `raw.githubusercontent.com`. The mirror is not trusted: every package is verified

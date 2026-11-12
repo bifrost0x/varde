@@ -25,9 +25,9 @@ All notable changes to this project are documented here. The format follows
   EPSS scores and the recognition table from one signed package the project builds once a day,
   and asks no other source about its apps. Settings › Data package shows what is in use and
   updates it on demand; asking GitHub about apps the package does not cover is a switch, off by
-  default (`VARDE_DIRECT_QUERIES`). Releases carry no trust root yet, so nothing changes until
-  the key ceremony of `docs/data-package.md`. The package is built by `cmd/packagebuilder` and a
-  daily workflow that stays idle until it is switched on; `cmd/vardekeys` makes the keys offline.
+  default (`VARDE_DIRECT_QUERIES`). The project's trust root is built in, so this is the
+  default; `VARDE_MODE=direct` keeps the direct queries. The package is built by `cmd/packagebuilder` and a
+  daily workflow; `cmd/vardekeys` makes the keys offline (`docs/data-package.md`).
 - Recognition beyond the catalog (ADR 0038): a first-party index of image repositories and the
   projects that publish them is built into the binary, so apps without a catalog entry are
   recognised and checked against their project's advisories without any download. The uplink
