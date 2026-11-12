@@ -5,9 +5,10 @@ history of what was built is in `CHANGELOG.md`; design decisions are in `docs/ad
 
 ## Known limitations
 
-- Advisory mode defaults to `direct`: the central feed is not published yet, so there is no
-  embedded production trust root. Feed mode works with a self-hosted feed and
-  `VARDE_FEED_ROOT_FILE` (`docs/feed-trust.md`).
+- The production trust root is embedded, so the signed data package is the default. A current
+  package must be published on the configured mirror before it can provide advisory data;
+  embedding the root alone provides none. `VARDE_MODE=direct` retains direct queries
+  (`docs/data-package.md`, `docs/configuration.md`).
 - Notification channels are configured through environment variables only; the settings page shows
   them read-only, so channel secrets never pass through the UI.
 - Resolved findings are reported in the weekly digest only, not in a message of their own.
