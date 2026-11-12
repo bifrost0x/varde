@@ -111,15 +111,16 @@ if [ "$directory" = yes ]; then mkdir -p "$@"; else cp "$1" "$2"; chmod "$mode" 
 						t.Errorf("installer executed agent-controlled binary: %v", err)
 					}
 					got, err := os.ReadFile(trusted)
-					if enrolled {
+					switch {
+					case enrolled:
 						if !os.IsNotExist(err) || !strings.Contains(string(out), "kept the existing enrollment") {
 							t.Fatalf("existing enrollment not retained: %v %s", err, out)
 						}
-					} else if tc.stageFailure != "" {
+					case tc.stageFailure != "":
 						if !os.IsNotExist(err) || !strings.Contains(string(out), "connectivity check skipped") || !strings.Contains(string(out), "agent installed") {
 							t.Errorf("diagnostic staging failure must not fail installation: %q %v %s", got, err, out)
 						}
-					} else if err != nil || string(got) != "check-server https://varde.example:8443" || !strings.Contains(string(out), "diagnostic-output") {
+					case err != nil || string(got) != "check-server https://varde.example:8443" || !strings.Contains(string(out), "diagnostic-output"):
 						t.Errorf("trusted diagnostic not run with configured environment: %q %v %s", got, err, out)
 					}
 					if !enrolled && err == nil {
