@@ -27,10 +27,11 @@ func TestAgentInstallDiagnosticUsesTrustedUpload(t *testing.T) {
 	for _, init := range []string{"systemd", "openrc"} {
 		for _, enrolled := range []bool{false, true} {
 			for _, tc := range []struct {
-				checkExit int
-				noexec    bool
-			}{{0, false}, {1, false}, {0, true}} {
-				t.Run(fmt.Sprintf("%s/enrolled=%v/check=%d/noexec=%v", init, enrolled, tc.checkExit, tc.noexec), func(t *testing.T) {
+				checkExit    int
+				noexec       bool
+				stageFailure string
+			}{{0, false, ""}, {1, false, ""}, {0, true, ""}, {0, false, "mktemp"}, {0, false, "install"}} {
+				t.Run(fmt.Sprintf("%s/enrolled=%v/check=%d/noexec=%v/staging=%s", init, enrolled, tc.checkExit, tc.noexec, tc.stageFailure), func(t *testing.T) {
 					root := t.TempDir()
 					home, src, stubs := filepath.Join(root, "home"), filepath.Join(root, "upload"), filepath.Join(root, "stubs")
 					for _, dir := range []string{home, src, stubs} {
@@ -82,8 +83,10 @@ while [ "$#" -gt 0 ]; do
  *) break;;
  esac
 done
+if [ "${FAIL_STAGE:-}" = install ] && [ "$mode" = 0700 ]; then exit 1; fi
 if [ "$directory" = yes ]; then mkdir -p "$@"; else cp "$1" "$2"; chmod "$mode" "$2"; fi
 `, 0o700)
+					write(filepath.Join(stubs, "mktemp"), "#!/bin/sh\nif [ \"${FAIL_STAGE:-}\" = mktemp ]; then exit 1; fi\nexec /usr/bin/mktemp \"$@\"\n", 0o700)
 					for _, name := range []string{"systemctl", "rc-service"} {
 						write(filepath.Join(stubs, name), "#!/bin/sh\nfor arg do\n if [ \"$arg\" = restart ]; then cp \"$PAYLOAD\" \"$AGENT_BIN\"; chmod 0750 \"$AGENT_BIN\"; fi\ndone\n", 0o700)
 					}
@@ -99,7 +102,7 @@ if [ "$directory" = yes ]; then mkdir -p "$@"; else cp "$1" "$2"; chmod "$mode" 
 					cmd := exec.CommandContext(t.Context(), sh, installer, src, init) //nolint:gosec // isolated fixture, no host paths
 					cmd.Env = append(os.Environ(), "PATH="+stubs+":/usr/bin:/bin", "PAYLOAD="+filepath.Join(root, "payload"),
 						"AGENT_BIN="+filepath.Join(home, "bin", "varde"), "TRUSTED_MARKER="+trusted, "HOSTILE_MARKER="+hostile,
-						"INVOKED_PATH="+invoked, fmt.Sprintf("CHECK_EXIT=%d", tc.checkExit))
+						"INVOKED_PATH="+invoked, "FAIL_STAGE="+tc.stageFailure, fmt.Sprintf("CHECK_EXIT=%d", tc.checkExit))
 					out, err := cmd.CombinedOutput()
 					if err != nil {
 						t.Fatalf("installer failed: %v: %s", err, out)
@@ -111,6 +114,10 @@ if [ "$directory" = yes ]; then mkdir -p "$@"; else cp "$1" "$2"; chmod "$mode" 
 					if enrolled {
 						if !os.IsNotExist(err) || !strings.Contains(string(out), "kept the existing enrollment") {
 							t.Fatalf("existing enrollment not retained: %v %s", err, out)
+						}
+					} else if tc.stageFailure != "" {
+						if !os.IsNotExist(err) || !strings.Contains(string(out), "connectivity check skipped") || !strings.Contains(string(out), "agent installed") {
+							t.Errorf("diagnostic staging failure must not fail installation: %q %v %s", got, err, out)
 						}
 					} else if err != nil || string(got) != "check-server https://varde.example:8443" || !strings.Contains(string(out), "diagnostic-output") {
 						t.Errorf("trusted diagnostic not run with configured environment: %q %v %s", got, err, out)
