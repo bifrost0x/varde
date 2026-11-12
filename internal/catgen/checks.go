@@ -425,6 +425,11 @@ func first(s []string, n int) []string {
 	return s
 }
 
+// ReviewedRepos are the GitHub repositories CheckReviewed compares a
+// reviewed entry with. Without one it cannot check the entry's tags (C3,
+// C4), and C5 only asks whether its CPEs exist.
+func ReviewedRepos(app *catalog.App) []string { return reviewedRepos(app) }
+
 // reviewedRepos are the GitHub repositories of a reviewed entry: those it
 // reads advisories from, else its GitHub source.
 func reviewedRepos(app *catalog.App) []string {

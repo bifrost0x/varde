@@ -119,6 +119,23 @@ func (e storeError) Unwrap() error { return e.err }
 // candidate, and a source that refuses with a rate limit is not asked
 // again in this build; only the store failing ends the run.
 func (g *Generator) Run(ctx context.Context, idx *applists.Table, reviewed *catalog.Catalog) (Report, error) {
+	rg, l := g.limited()
+	rep, err := rg.run(ctx, idx, reviewed, l)
+	rep.Stopped = l.order
+	return rep, err
+}
+
+// WithRateLimits returns a copy of g whose sources, like those of a build,
+// are not asked again once they refused because of their rate limit; the
+// weekly check of the reviewed entries (cmd/catalogcheck) runs its
+// CheckReviewed calls on it. stopped names the sources it stopped asking,
+// in order.
+func (g *Generator) WithRateLimits() (limited *Generator, stopped func() []string) {
+	rg, l := g.limited()
+	return rg, func() []string { return append([]string(nil), l.order...) }
+}
+
+func (g *Generator) limited() (*Generator, *limits) {
 	l := &limits{stopped: map[string]bool{}}
 	rg := *g
 	rg.Registry = limitedRegistry{inner: g.Registry, l: l}
@@ -129,9 +146,7 @@ func (g *Generator) Run(ctx context.Context, idx *applists.Table, reviewed *cata
 	if g.Hub != nil {
 		rg.Hub = limitedHub{inner: g.Hub, l: l}
 	}
-	rep, err := rg.run(ctx, idx, reviewed, l)
-	rep.Stopped = l.order
-	return rep, err
+	return &rg, l
 }
 
 func (g *Generator) run(ctx context.Context, idx *applists.Table, reviewed *catalog.Catalog, l *limits) (Report, error) {

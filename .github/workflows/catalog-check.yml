@@ -1,0 +1,186 @@
+name: catalog-check
+
+# Runs the generator's checks C1, C3, C4 and C5 (ADR 0040) on the reviewed
+# catalog entries in catalog/apps once a week and puts what they find into
+# one pull request, "catalog: weekly check", on the branch
+# catalog/weekly-check. The branch is reset from main every week and the
+# pull request is updated in place; it is never merged automatically. With
+# nothing to act on, an open pull request of an earlier week is closed.
+#
+# Two jobs. "check" holds no secret: it runs cmd/catalogcheck against the
+# registries, GitHub (with the read-only workflow token) and NVD, and
+# uploads the corrected entries and report.md as an artifact. "pr" runs no
+# code of the repository or of that artifact: it copies the corrected files
+# over existing catalog/apps/*.yaml files and uses report.md as the pull
+# request's text.
+#
+# "pr" pushes and opens the pull request with a fine-grained token of the
+# maintainer (contents and pull requests: write on this repository only),
+# so that CI runs on the pull request: the secret CATALOG_CHECK_TOKEN in the
+# environment "catalog-check". Limiting that environment to the branch main
+# is a repository setting this file cannot make. Until the secret exists
+# the job does nothing.
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: catalog-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      found: ${{ steps.check.outputs.found }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Check the reviewed entries
+        id: check
+        env:
+          # Raises GitHub's rate limit for the release lists; read only.
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run ./cmd/catalogcheck -catalog catalog/apps -out work/check | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ -f work/check/report.md ]]; then
+            { echo; cat work/check/report.md; } >> "$GITHUB_STEP_SUMMARY"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Keep the corrections and the report
+        if: steps.check.outputs.found == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: catalog-check
+          path: work/check/
+          if-no-files-found: error
+          retention-days: 30
+
+  pr:
+    needs: check
+    # The token's environment is limited to main; a run started on another
+    # branch has nothing to propose there.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: catalog-check
+    # Everything that writes uses CATALOG_CHECK_TOKEN; the workflow token
+    # gets no permission.
+    permissions: {}
+    env:
+      BRANCH: catalog/weekly-check
+      TITLE: "catalog: weekly check"
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Look for the token
+        id: token
+        env:
+          TOKEN: ${{ secrets.CATALOG_CHECK_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "${TOKEN}" ]]; then
+            echo "::notice::The secret CATALOG_CHECK_TOKEN of the environment catalog-check is not set: no pull request."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Close the pull request of an earlier week
+        if: steps.token.outputs.present == 'true' && needs.check.outputs.found != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CATALOG_CHECK_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          number="$(gh pr list --base main --head "${BRANCH}" --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "${number}" ]]; then
+            gh pr close "${number}" --comment "This week's check found nothing to act on." --delete-branch
+          fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.token.outputs.present == 'true' && needs.check.outputs.found == 'true'
+        with:
+          name: catalog-check
+          path: ${{ runner.temp }}/check
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.token.outputs.present == 'true' && needs.check.outputs.found == 'true'
+        with:
+          token: ${{ secrets.CATALOG_CHECK_TOKEN }}
+      - name: Apply the corrections and open or update the pull request
+        if: steps.token.outputs.present == 'true' && needs.check.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CATALOG_CHECK_TOKEN }}
+          CHECK: ${{ runner.temp }}/check
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The artifact is data: report.md and apps/<name>.yaml for entries
+          # that exist on main, plain files within the catalog's size limit.
+          # Anything else stops the job before a file is touched.
+          max=$((64 * 1024))
+          bad=0
+          while IFS= read -r -d '' p; do
+            rel="${p#"${CHECK}"/}"
+            if [[ -L "${p}" ]]; then
+              echo "::error::${rel} is a symlink"; bad=1
+            elif [[ "${rel}" == apps && -d "${p}" ]]; then
+              :
+            elif [[ "${rel}" == report.md && -f "${p}" ]]; then
+              [[ "$(stat -c %s "${p}")" -le "${max}" ]] || { echo "::error::report.md is too large"; bad=1; }
+            elif [[ "${rel}" =~ ^apps/[a-z0-9][a-z0-9-]*\.yaml$ && -f "${p}" ]]; then
+              target="catalog/${rel}"
+              if [[ -L "${target}" || ! -f "${target}" ]] || ! git ls-files --error-unmatch -- "${target}" >/dev/null 2>&1; then
+                echo "::error::${rel} is not an existing entry of catalog/apps"; bad=1
+              elif [[ "$(stat -c %s "${p}")" -gt "${max}" ]]; then
+                echo "::error::${rel} is too large"; bad=1
+              fi
+            else
+              echo "::error::unexpected entry in the artifact: ${rel}"; bad=1
+            fi
+          done < <(find "${CHECK}" -mindepth 1 -print0)
+          [[ -f "${CHECK}/report.md" && ! -L "${CHECK}/report.md" ]] || { echo "::error::the artifact has no report.md"; bad=1; }
+          if [[ "${bad}" -ne 0 ]]; then
+            exit 1
+          fi
+
+          git switch -C "${BRANCH}"
+          if [[ -d "${CHECK}/apps" ]]; then
+            for src in "${CHECK}"/apps/*.yaml; do
+              [[ -e "${src}" ]] || continue
+              # Writes the content into the tracked file; mode and type stay.
+              cat -- "${src}" > "catalog/apps/$(basename -- "${src}")"
+            done
+          fi
+          git add -- catalog/apps
+          if ! git diff --cached --quiet; then
+            changes="the corrections it proposes"
+          else
+            # Problems without a correction still go to the maintainer; a
+            # pull request needs a commit.
+            changes="no file changes, only the problems in the description"
+          fi
+          git -c user.name=bifrost0x -c user.email=dwight@scranton.de \
+            commit --allow-empty -q -m "${TITLE}" -m "Weekly check of the reviewed entries: ${changes}."
+          # The branch belongs to this workflow and is reset every week.
+          git push --force origin "HEAD:refs/heads/${BRANCH}"
+
+          number="$(gh pr list --base main --head "${BRANCH}" --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "${number}" ]]; then
+            gh pr edit "${number}" --title "${TITLE}" --body-file "${CHECK}/report.md"
+            echo "updated pull request #${number}"
+          else
+            gh pr create --base main --head "${BRANCH}" --title "${TITLE}" --body-file "${CHECK}/report.md"
+          fi
