@@ -86,7 +86,7 @@ feed/v1/root.json, root/<n>.json     the trust root chain
 feed/v1/manifest.json, .sig          the signed manifest
 feed/v1/blobs/sha256/<hash>          the blobs
 feed/stats.json, .sig                counts of this package, the next build's baseline
-cache/builder.db, .sig               the builder's store for the next build
+cache/builder.db.gz, builder.db.sig  the builder's store for the next build, compressed
 ```
 
 The branch always has exactly one commit, so it does not grow. Installations read

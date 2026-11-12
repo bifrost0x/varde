@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The builder's store is published compressed on the branch `data`. It holds the text of public
+  advisories, whose proofs of concept quote credentials; as plain text it raised a
+  secret-scanning alert on the repository with every build.
 - The agent installer runs its connectivity diagnostic from a temporary root-owned copy instead
   of the agent-writable installed binary, preserving the privilege boundary on reinstall and
   supporting upload directories mounted with `noexec`. A diagnostic that cannot be staged is

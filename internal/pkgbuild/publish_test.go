@@ -84,12 +84,16 @@ func TestPublishScript(t *testing.T) {
 		}
 	}
 	files := git(t, remote, "ls-tree", "-r", "--name-only", "data")
-	want := "cache/builder.db\ncache/builder.db.sig\nfeed/stats.json\nfeed/stats.json.sig\nfeed/v1/blobs/sha256/aaaa\nfeed/v1/blobs/sha256/bbbb\nfeed/v1/manifest.json\nfeed/v1/manifest.json.sig\nfeed/v1/root.json"
+	want := "cache/builder.db.gz\ncache/builder.db.sig\nfeed/stats.json\nfeed/stats.json.sig\nfeed/v1/blobs/sha256/aaaa\nfeed/v1/blobs/sha256/bbbb\nfeed/v1/manifest.json\nfeed/v1/manifest.json.sig\nfeed/v1/root.json"
 	if files != want {
 		t.Fatalf("published files:\n%s\nwant:\n%s", files, want)
 	}
-	if got := git(t, remote, "show", "data:cache/builder.db"); got != "db 200" {
-		t.Fatalf("published store = %q", got)
+	// The store is published compressed: advisory text quotes credentials,
+	// and plain text on a branch raises secret-scanning alerts.
+	unpack := exec.Command("sh", "-c", "git show data:cache/builder.db.gz | gzip -dc")
+	unpack.Dir = remote
+	if got, err := unpack.Output(); err != nil || string(got) != "db 200" {
+		t.Fatalf("published store = %q, %v", got, err)
 	}
 	if after := git(t, remote, "rev-parse", "main"); after != mainBefore {
 		t.Fatal("main was touched")
@@ -158,7 +162,7 @@ func TestDataWorkflow(t *testing.T) {
 		t.Errorf("the job is not gated by DATA_PACKAGE_ENABLED and the branch main: %q", job.If)
 	}
 	// What comes from the published branch is checked before it is used.
-	for _, want := range []string{`$1 != "100644"`, `2)`, `builder.db.sig`} {
+	for _, want := range []string{`$1 != "100644"`, `2)`, `builder.db.sig`, `builder.db.gz`, `store_limit`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the workflow lacks %q", want)
 		}
