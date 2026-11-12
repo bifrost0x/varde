@@ -8,9 +8,11 @@ and what to do when something goes wrong. What an installation does with the pac
 [feed-trust.md](feed-trust.md). The decision is recorded in
 [ADR 0039](adr/0039-daily-data-package.md).
 
-**State: prepared, not switched on.** The builder, the workflow and the key tool exist. No keys
-exist, no trust root is embedded and the workflow is idle. Nothing is published and no
-installation fetches anything until the [key ceremony](#the-key-ceremony) below is done.
+**State.** The trust root of the project is embedded (version 1, valid through 2028-11-12; see
+[the key ceremony](#the-key-ceremony)). The daily workflow runs once the repository variable
+`DATA_PACKAGE_ENABLED` is `true` and the feed key is stored as the secret `VARDE_FEED_KEY`. Until
+the first package is published on the branch `data`, an installation built from this state finds
+no package, says so under Settings › Data package and has no advisory data from it.
 
 ## What it holds
 

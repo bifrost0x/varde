@@ -18,6 +18,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/net/publicsuffix"
+
 	"github.com/bifrost0x/varde/internal/httpx"
 )
 
@@ -292,11 +294,12 @@ func hostOnly(h string) string {
 	return h
 }
 
-// baseDomain is the last two labels of a host name ("docker.io").
+// baseDomain is the registrable domain, including private suffix boundaries
+// such as github.io. Sharing a public suffix never establishes trust.
 func baseDomain(h string) string {
-	parts := strings.Split(h, ".")
-	if len(parts) < 2 {
+	domain, err := publicsuffix.EffectiveTLDPlusOne(h)
+	if err != nil {
 		return ""
 	}
-	return strings.Join(parts[len(parts)-2:], ".")
+	return domain
 }

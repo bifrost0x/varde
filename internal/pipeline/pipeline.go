@@ -465,7 +465,7 @@ func (p *Pipeline) match(ctx context.Context, results []identify.Result, images 
 	// the image fixes them. A container keeps one finding per advisory.
 	seen := map[string]bool{}
 	for _, f := range out {
-		seen[f.WorkloadID+"\x00"+f.AdvisoryID] = true
+		seen[f.ID()] = true
 	}
 	for _, t := range images {
 		app := apps[distro.SystemAppID(t.pkg.Ecosystem, t.pkg.Name)]

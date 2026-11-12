@@ -101,8 +101,9 @@ and matches locally. There is no telemetry, no account and no phone-home.
 In direct mode, Varde queries upstream sources such as the GitHub advisory API itself, which reveals
 to those services which apps you run. Sources that reveal more (osv.dev with package names and
 releases, the NVD, endoflife.date, the image registries) are off until you switch them on, and
-each says what it reveals. Feed mode avoids this and becomes the default once the central feed is
-available.
+each says what it reveals. With the embedded production trust root, the signed data package is
+the default; direct queries require an explicit mode or opt-in fallback. See
+[data package configuration](docs/configuration.md#the-data-package).
 
 ## Documentation
 

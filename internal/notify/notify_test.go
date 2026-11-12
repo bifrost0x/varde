@@ -293,6 +293,8 @@ type memStore struct {
 	queued   map[string]string
 	log      []store.NotificationEntry
 	states   map[string]store.SourceState
+	// markErr makes MarkNotified fail, as a database that refuses writes.
+	markErr error
 }
 
 func newMemStore() *memStore {
@@ -302,6 +304,9 @@ func newMemStore() *memStore {
 func (m *memStore) MarkNotified(_ context.Context, ids []string, p string, _ time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.markErr != nil {
+		return m.markErr
+	}
 	for _, id := range ids {
 		m.notified[id] = p
 		delete(m.queued, id)

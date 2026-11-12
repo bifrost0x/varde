@@ -22,6 +22,12 @@ func TestRealmAllowed(t *testing.T) {
 		{"10.0.0.5:5000", "10.0.0.6", false},
 		{"10.0.0.5:5000", "10.0.0.5", true},
 		{"ghcr.io", "auth.docker.io", false},
+		{"registry.example.co.uk", "auth.example.co.uk", true},
+		{"registry.example.co.uk", "attacker.co.uk", false},
+		{"registry.example.com.au", "attacker.com.au", false},
+		{"alice.github.io", "bob.github.io", false},
+		{"registry.alice.github.io", "auth.alice.github.io", true},
+		{"registry.co.uk", "co.uk", false},
 	} {
 		if got := realmAllowed(c.registry, c.realm); got != c.ok {
 			t.Errorf("%s -> %s: %v, want %v", c.registry, c.realm, got, c.ok)

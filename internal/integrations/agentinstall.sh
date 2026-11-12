@@ -9,7 +9,8 @@ set -eu
 exec </dev/null
 src=$1
 init=$2
-trap 'rm -rf "$src"' EXIT
+check=
+trap 'rm -rf "$src"; if [ -n "$check" ]; then rm -f "$check"; fi' EXIT
 
 user=varde-agent
 home=/var/lib/varde-agent
@@ -124,6 +125,16 @@ else
 	# A new agent must reach the server to enroll: test it now, with the
 	# agent's own binary and configuration, so a firewall or a router in
 	# the way shows up in Varde instead of a silent "not connected".
-	(set -a; . /etc/varde-agent.env; set +a; "$home/bin/varde" check-server) || true
+	# The installed binary and bin are agent-writable for self-updates.
+	# Stage the trusted upload in the root-owned home instead: root never
+	# executes agent-writable code, and a noexec /tmp remains supported.
+	# The agent is installed and running by now: a diagnostic that cannot
+	# be staged is skipped, it never fails the installation.
+	if check=$(mktemp "$home/.varde-check.XXXXXX") &&
+		install -m 0700 -o root -g root "$src/varde" "$check"; then
+		(set -a; . /etc/varde-agent.env; set +a; "$check" check-server) || true
+	else
+		echo "varde: connectivity check skipped, it could not be staged" >&2
+	fi
 fi
 echo "varde: agent installed"

@@ -66,7 +66,7 @@ func Decide(cands []Candidate, now time.Time) Decision {
 			d.Immediate = append(d.Immediate, c.Item)
 			continue
 		}
-		if p.Rank() > c.DigestPending.Rank() {
+		if p != c.DigestPending {
 			d.Queue[p] = append(d.Queue[p], c.Item.FindingID)
 		}
 	}
@@ -250,17 +250,43 @@ func (s *Service) digestsDue(ctx context.Context) {
 	}
 	now := s.cfg.Now()
 	slot := s.lastSlot(now)
+	success := true
 	switch {
 	case st.LastSuccess.IsZero():
 	case !st.LastSuccess.Before(slot):
 		return
+	case now.Before(st.NextRun):
+		// A failed digest waits for its retry time.
+		return
 	default:
-		s.RunDigests(ctx)
+		success = s.RunDigests(ctx)
 	}
-	st.LastSuccess, st.LastAttempt = now, now
+	if success {
+		st.LastSuccess, st.NextRun = now, time.Time{}
+	} else {
+		st.NextRun = now.Add(retryDelay(st))
+	}
+	st.LastAttempt = now
 	if err := s.cfg.Store.PutSourceState(ctx, st); err != nil {
 		s.cfg.Log.Error("digest: writing state failed", "err", err)
 	}
+}
+
+// Retries of a failed digest start a minute apart and double up to an
+// hour, so a channel that stays down is not called every minute all day.
+const (
+	digestRetryMin = time.Minute
+	digestRetryMax = time.Hour
+)
+
+// retryDelay is the wait after a failed digest: twice the wait that
+// preceded this attempt, a minute after a first failure. st is the state
+// before this attempt is recorded.
+func retryDelay(st store.SourceState) time.Duration {
+	if st.NextRun.IsZero() || !st.NextRun.After(st.LastAttempt) {
+		return digestRetryMin
+	}
+	return min(max(2*st.NextRun.Sub(st.LastAttempt), digestRetryMin), digestRetryMax)
 }
 
 // lastSlot is the most recent digest hour at or before now, in the
@@ -339,30 +365,39 @@ func (s *Service) schedule() (int, time.Weekday) {
 }
 
 // RunDigests sends the daily digest and, on the configured weekday, the
-// weekly one. Empty digests are not sent.
-func (s *Service) RunDigests(ctx context.Context) {
+// weekly one. Empty digests are not sent. It reports whether all due work
+// completed, so a failed digest stays eligible for the next minute's retry.
+func (s *Service) RunDigests(ctx context.Context) bool {
 	if !s.Enabled() {
-		return
+		return true
 	}
 	cands, err := s.cfg.Candidates(ctx)
 	if err != nil {
 		s.cfg.Log.Error("digest: loading findings failed", "err", err)
-		return
+		return false
 	}
 	now := s.cfg.Now()
+	success := true
 	var notices []Notice
 	if s.cfg.Notices != nil {
 		if notices, err = s.cfg.Notices(ctx); err != nil {
 			s.cfg.Log.Error("digest: loading notices failed", "err", err)
 			notices = nil
+			success = false
 		}
 	}
-	if _, delivered := s.sendDigest(ctx, KindDigestDaily, pending(cands, policy.P2), nil, notices, nil); delivered && len(notices) > 0 && s.cfg.NoticesSent != nil {
+	sent, delivered := s.sendDigest(ctx, KindDigestDaily, pending(cands, policy.P2), nil, notices, nil)
+	if sent && !delivered {
+		success = false
+	}
+	if delivered && len(notices) > 0 && s.cfg.NoticesSent != nil {
 		keys := make([]string, 0, len(notices))
 		for _, n := range notices {
 			keys = append(keys, n.Key)
 		}
 		if err := s.cfg.NoticesSent(ctx, keys); err != nil {
+			// Delivered already: a retry would send the digest again every
+			// minute for as long as the write fails.
 			s.cfg.Log.Error("digest: recording notices failed", "err", err)
 		}
 	}
@@ -370,20 +405,27 @@ func (s *Service) RunDigests(ctx context.Context) {
 	st, err := s.cfg.Store.SourceState(ctx, "notify", "weekly")
 	if err != nil {
 		s.cfg.Log.Error("digest: reading state failed", "err", err)
-		return
+		return false
 	}
 	// The weekly digest is due on its weekday, or later when that day's
-	// digest hour passed while Varde was down.
-	if s.weeklyDue(now, weekday, st.LastSuccess) {
+	// digest hour passed while Varde was down. A failed first attempt must
+	// remain due across midnight even though no weekly success exists yet.
+	retryFirst := st.LastSuccess.IsZero() && !st.LastAttempt.IsZero()
+	if retryFirst || s.weeklyDue(now, weekday, st.LastSuccess) {
 		attention := needsAttention(cands, st.LastSuccess)
 		sent, delivered := s.sendDigest(ctx, KindDigestWeekly, pending(cands, policy.P3), attention, nil, resolvedSince(cands, st.LastSuccess))
 		if delivered || !sent {
-			st.LastSuccess, st.LastAttempt = now, now
-			if err := s.cfg.Store.PutSourceState(ctx, st); err != nil {
-				s.cfg.Log.Error("digest: writing state failed", "err", err)
-			}
+			st.LastSuccess = now
+		} else {
+			success = false
+		}
+		st.LastAttempt = now
+		if err := s.cfg.Store.PutSourceState(ctx, st); err != nil {
+			s.cfg.Log.Error("digest: writing state failed", "err", err)
+			success = false
 		}
 	}
+	return success
 }
 
 // weeklyDue reports whether the weekly digest is due: on its weekday, or
@@ -403,7 +445,10 @@ func (s *Service) weeklyDue(now time.Time, weekday time.Weekday, last time.Time)
 }
 
 // sendDigest renders and sends a digest. sent is false for an empty digest;
-// delivered reports whether at least one channel accepted it. Only the
+// delivered reports whether at least one channel accepted it. A digest
+// that went out but could not be recorded counts as delivered: its items
+// stay queued for the next digest, and it is not sent again every minute
+// while the database refuses writes. Only the
 // prioritised items are recorded as notified: attention items are
 // unverified and stay eligible if they later become affected.
 func (s *Service) sendDigest(ctx context.Context, kind string, items, attention []Item, notices []Notice, resolved []Item) (sent, delivered bool) {

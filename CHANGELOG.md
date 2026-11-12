@@ -6,15 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The agent installer runs its connectivity diagnostic from a temporary root-owned copy instead
+  of the agent-writable installed binary, preserving the privilege boundary on reinstall and
+  supporting upload directories mounted with `noexec`. A diagnostic that cannot be staged is
+  skipped and no longer fails an installation that already succeeded.
+- Rejected JAR entries consume their decompression allowance, including CRC errors and false
+  size declarations, so malformed archives cannot bypass the shared package-reader budgets.
+- A failed digest is retried after a minute, then at doubling intervals up to an hour; only
+  completed work advances the daily success time. A digest that was delivered but could not be
+  recorded is not sent again. Unsent findings follow a priority downgrade into the appropriate
+  digest.
+- App and image-package findings use the same identity when counting overlapping advisories.
+- Registry token realms respect registrable domains, including multi-label and private public
+  suffixes: a registry and a token service that are separate names directly under such a suffix
+  (two hosts under `duckdns.org`, for example) no longer count as one domain, and the image check
+  names the refused realm. The roadmap now describes the language metadata readers already implemented.
+
 ### Added
 
 - Data package (ADR 0039): with a trust root, an installation reads its advisories, the KEV list,
   EPSS scores and the recognition table from one signed package the project builds once a day,
   and asks no other source about its apps. Settings › Data package shows what is in use and
   updates it on demand; asking GitHub about apps the package does not cover is a switch, off by
-  default (`VARDE_DIRECT_QUERIES`). Releases carry no trust root yet, so nothing changes until
-  the key ceremony of `docs/data-package.md`. The package is built by `cmd/packagebuilder` and a
-  daily workflow that stays idle until it is switched on; `cmd/vardekeys` makes the keys offline.
+  default (`VARDE_DIRECT_QUERIES`). The project's trust root is built in, so this is the
+  default; `VARDE_MODE=direct` keeps the direct queries. The package is built by `cmd/packagebuilder` and a
+  daily workflow; `cmd/vardekeys` makes the keys offline (`docs/data-package.md`).
 - Recognition beyond the catalog (ADR 0038): a first-party index of image repositories and the
   projects that publish them is built into the binary, so apps without a catalog entry are
   recognised and checked against their project's advisories without any download. The uplink

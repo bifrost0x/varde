@@ -5,9 +5,10 @@ history of what was built is in `CHANGELOG.md`; design decisions are in `docs/ad
 
 ## Known limitations
 
-- Advisory mode defaults to `direct`: the central feed is not published yet, so there is no
-  embedded production trust root. Feed mode works with a self-hosted feed and
-  `VARDE_FEED_ROOT_FILE` (`docs/feed-trust.md`).
+- The production trust root is embedded, so the signed data package is the default. A current
+  package must be published on the configured mirror before it can provide advisory data;
+  embedding the root alone provides none. `VARDE_MODE=direct` retains direct queries
+  (`docs/data-package.md`, `docs/configuration.md`).
 - Notification channels are configured through environment variables only; the settings page shows
   them read-only, so channel secrets never pass through the UI.
 - Resolved findings are reported in the weekly digest only, not in a message of their own.
@@ -21,15 +22,18 @@ history of what was built is in `CHANGELOG.md`; design decisions are in `docs/ad
 - Exposure reads Traefik labels and the routes of connected reverse proxies (Traefik API, Nginx
   Proxy Manager); other proxies and router port forwards stay invisible.
 - Distribution packages are compared with their distribution's security data on Debian, Ubuntu,
-  Alpine, AlmaLinux, Rocky Linux and openSUSE Leap only, and only with `DIRECT_OSV` on; RHEL and
-  Fedora packages stay not comparable (ADR 0028).
+  Alpine, AlmaLinux, Rocky Linux, openSUSE Leap and Tumbleweed, RHEL/UBI, Wolfi and Chainguard,
+  with `DIRECT_OSV` on (ADR 0028, ADR 0036). Distributions without usable package data, such as
+  Fedora, stay not comparable.
 - Attack paths are a model (ADR 0034): router port forwards and firewalls are invisible, the
   port-to-package map and library lists are heuristics, and a path through a library is marked
   indirect. Without listening sockets (agents, SSH inventories) a host's findings stay unclear.
-- App dependencies are read in container images only, and only Go programs (from the image's
-  entrypoint or command) and npm lock files next to the app's `package.json`; Python, Java and
-  Rust dependencies, binaries on hosts outside the package manager, snaps and flatpaks are not
-  checked. rpm databases before rpm 4.16 (Berkeley DB, NDB) are not read.
+- App dependencies are read in container images only: Go build information and npm lock files,
+  installed Python metadata, PHP Composer metadata, Ruby gem specifications, .NET dependency
+  manifests, Maven coordinates in Java archives, and Rust programs built with cargo-auditable
+  (ADR 0036). Reads have size, file-count and nesting limits; arbitrary Rust binaries, dependencies
+  without supported metadata, programs on hosts outside the package manager, snaps and flatpaks
+  are not checked. rpm databases before rpm 4.16 (Berkeley DB, NDB) are not read.
 - Device firmware is reported only where a controller says an update is available (UniFi); no
   advisory feed covers it.
 
@@ -63,15 +67,16 @@ the acceptance of the previous one is met; `make eval` measures it (ADR 0023).
    relations; measured in the corpus, still to be confirmed on a real Proxmox cluster.
 2. **Versions (in progress).** Done: floating tags through the registry, apps derived from source
    labels (ADR 0025), package databases and app manifests of images with dpkg/rpm/apk comparison
-   (ADR 0026), container drift (ADR 0027); corpus coverage 0.935. Go build information was measured
-   and not adopted (mostly `(devel)`). Open: Python metadata, a central digest index in the feed.
+   (ADR 0026), container drift (ADR 0027), Go build information and the language metadata readers
+   of ADR 0036. A Go binary built as `(devel)` does not provide a usable app version, but its
+   toolchain and versioned modules can still be checked. Open: a central digest index in the feed.
    Acceptance: version coverage target in the corpus.
 3. **Distribution advisories and library (in progress).** Done: Debian, Ubuntu and Alpine security
    data, AlmaLinux, Rocky Linux and openSUSE Leap notices through osv.dev with the dpkg, apk and
    rpm order, vendor builds left out, OpenVEX export, nginx in the catalog (ADR 0028); in the
    corpus, patched distribution packages yield no false findings; twelve more verified catalog
-   entries with corpus cases. Open: RHEL (data split by repository). Acceptance: patched
-   distribution packages yield no false findings.
+   entries with corpus cases; RHEL/UBI, Wolfi, Chainguard and openSUSE Tumbleweed (ADR 0036).
+   Acceptance: patched distribution packages yield no false findings.
 4. **Remediation.** Done: the release tag that fixes a container, from the registry's tag list and
    in the running tag's form, Compose lines and commands, end of life from endoflife.date, Discord
    and Telegram, the product tour (ADR 0029); integration management on the network page.
@@ -79,7 +84,7 @@ the acceptance of the previous one is met; `make eval` measures it (ADR 0023).
 ## Later
 
 - More integrations: Docker over TLS, Portainer, the Caddy API, Home Assistant.
-- Dependencies beyond Go and npm (Python, Java, Rust), programs on hosts outside the package
-  manager, snaps and flatpaks; rpm databases before rpm 4.16.
+- More dependency metadata formats and dependencies on hosts outside the package manager;
+  snaps and flatpaks; rpm databases before rpm 4.16.
 - Roles (read-only users) and notification channels configured in the UI.
 - v2: the central feed pipeline (`bifrost0x/varde-feed`) and feed mode as the default.
