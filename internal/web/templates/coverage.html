@@ -8,6 +8,7 @@
   <p>Of {{plural $d.Summary.Total "app"}} on your systems, Varde recognises {{$d.Summary.Identified}} and compares {{$d.Summary.Assessable}} with advisories · {{len $d.Summary.VersionUnknown}} with unknown version · {{plural (len $d.Summary.PublicRoutes) "public route"}} Varde cannot check</p>
   {{if $d.Summary.NotApps}}<p class="small">These numbers count apps: containers and entries that are an app of their own. The Systems page counts every container. <a href="#not-apps">{{plural (len $d.Summary.NotApps) "supporting container"}}</a> (socket proxies, update helpers) {{if eq (len $d.Summary.NotApps) 1}}is{{else}}are{{end}} listed apart; their packages are checked all the same.</p>{{end}}
   <div class="meter" role="img" aria-label="{{$d.Summary.Percent}} percent identified"><span class="meter__fill {{meterClass $d.Summary.Percent}}"></span></div>
+  <p class="small"><strong>{{$d.Summary.Percent}} %</strong> of your apps are recognised.</p>
   <p class="small">{{if $d.Machines.Hosts}}Varde knows what is installed on <a href="/systems">{{$d.Machines.Read}} of {{plural $d.Machines.Hosts "system"}}</a>{{if $d.Machines.Devices}} · {{plural $d.Machines.Devices "further device"}} found in the network{{end}}.{{else}}No host known yet.{{end}}</p>
 </section>
 
@@ -22,7 +23,7 @@
 {{end}}
 
 <section class="panel" id="unidentified" aria-labelledby="un-title">
-  <h2 id="un-title">Not in the catalog</h2>
+  <h2 id="un-title">Not in the catalog{{if $d.Unidentified}} <span class="muted">({{len $d.Unidentified}})</span>{{end}}</h2>
   {{if $d.Unidentified}}
   <table class="table"><thead><tr><th scope="col">Containers</th><th scope="col">Image</th><th scope="col">Next step</th></tr></thead><tbody>
   {{range $d.Unidentified}}<tr><td data-label="Container">{{.Workload}}</td><td data-label="Image" class="mono">{{.Image}}</td><td data-label="Next step"><a href="{{.SuggestURL}}" rel="noopener noreferrer" target="_blank">Suggest a catalog entry</a><span class="cell-sub">Opens GitHub with only the image name filled in.</span>{{if .Repository}}<form class="form--inline" method="post" action="/systems/gaps/not-an-app">{{template "csrf" $.CSRF}}<input type="hidden" name="repository" value="{{.Repository}}"><button class="btn btn--ghost" type="submit">Not an app</button></form><span class="cell-sub">For databases, proxies and other helpers: stops counting this image as a gap.</span>{{end}}</td></tr>{{end}}
@@ -31,17 +32,17 @@
 </section>
 
 <section class="panel" id="version" aria-labelledby="v-title">
-  <h2 id="v-title">Version unknown</h2>
+  <h2 id="v-title">Version unknown{{if $d.VersionUnknown}} <span class="muted">({{len $d.VersionUnknown}})</span>{{end}}</h2>
   {{if $d.VersionUnknown}}
   <p class="small">Varde knows the app but not which version runs, so it cannot tell which advisories apply.</p>
   <table class="table"><thead><tr><th scope="col">Container</th><th scope="col">App</th><th scope="col">Why</th><th scope="col">Next step</th></tr></thead><tbody>
-  {{range $d.VersionUnknown}}<tr><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="App">{{.AppName}}</td><td data-label="Why" class="small">{{.Note}}</td><td data-label="Next step" class="small">{{if .Pending}}Nothing to do: Varde is asking the registry which version this tag points to. The version appears here by itself.{{else if .RegistryOff}}Switch on <a href="/settings#registry">registry versions</a>: Varde then asks the registry which version this tag points to, and you change nothing on the container.{{else}}No release of this image matches what runs: it is a development build, or the tag was moved since. Use an image tag with a version number, or add the label <code>varde.version=&lt;version&gt;</code>. Until then Varde checks the packages inside the image, not the app itself.{{end}}</td></tr>{{end}}
+  {{range $d.VersionUnknown}}<tr><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="App">{{.AppName}}</td><td data-label="Why" class="small">{{.Why}}</td><td data-label="Next step" class="small">{{if .Pending}}Nothing to do: Varde is asking the registry which version this tag points to. The version appears here by itself.{{else if .RegistryOff}}Switch on <a href="/settings#registry">registry versions</a>: Varde then asks the registry which version this tag points to, and you change nothing on the container.{{else}}No release of this image matches what runs: it is a development build, or the tag was moved since. Use an image tag with a version number, or add the label <code>varde.version=&lt;version&gt;</code>. Until then Varde checks the packages inside the image, not the app itself.{{end}}</td></tr>{{end}}
   </tbody></table>
   {{else}}<p class="small muted">Every identified workload has a readable version.</p>{{end}}
 </section>
 
 <section class="panel" id="weak" aria-labelledby="w-title">
-  <h2 id="w-title">Probable matches to confirm</h2>
+  <h2 id="w-title">Probable matches to confirm{{if $d.Weak}} <span class="muted">({{len $d.Weak}})</span>{{end}}</h2>
   {{if $d.Weak}}
   <table class="table"><thead><tr><th scope="col">Container</th><th scope="col">Probably</th><th scope="col">Confirm with</th></tr></thead><tbody>
   {{range $d.Weak}}<tr><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="Probably">{{.AppName}}</td><td data-label="Confirm with"><code>varde.app={{.AppID}}</code></td></tr>{{end}}
@@ -51,10 +52,10 @@
 
 {{if $d.NotApps}}
 <section class="panel" id="not-apps" aria-labelledby="na-title">
-  <h2 id="na-title">Supporting containers</h2>
+  <h2 id="na-title">Supporting containers{{if $d.NotApps}} <span class="muted">({{len $d.NotApps}})</span>{{end}}</h2>
   <p class="small">Socket proxies, update helpers and images that others build on a database have no advisories of their own that Varde could compare, so they are not counted among the apps above. They are not skipped: the packages and libraries inside their images are checked like those of every container, and what is found is in the <a href="/findings">findings</a>. PostgreSQL, Redis, Valkey, MariaDB, MySQL, MongoDB and Memcached in their official images are apps and are checked as such.</p>
   <table class="table"><thead><tr><th scope="col">Container</th><th scope="col">Why</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead><tbody>
-  {{range $d.NotApps}}<tr><td data-label="Container">{{.Workload}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="Why" class="small">{{.Note}}</td><td data-label="Action">{{if .Marked}}<form class="form--inline" method="post" action="/systems/gaps/not-an-app/delete">{{template "csrf" $.CSRF}}<input type="hidden" name="repository" value="{{.Repository}}"><button class="btn btn--ghost" type="submit">Count again</button></form>{{end}}</td></tr>{{end}}
+  {{range $d.NotApps}}<tr><td data-label="Container">{{.Workload}}{{if .On}} <span class="muted">on {{.On}}</span>{{end}}<span class="cell-sub mono">{{.Image}}</span></td><td data-label="Why" class="small">{{.Note}}</td><td data-label="Action">{{if .Marked}}<form class="form--inline" method="post" action="/systems/gaps/not-an-app/delete">{{template "csrf" $.CSRF}}<input type="hidden" name="repository" value="{{.Repository}}"><button class="btn btn--ghost" type="submit">Count again</button></form>{{end}}</td></tr>{{end}}
   </tbody></table>
 </section>
 {{end}}
@@ -68,7 +69,7 @@
 {{end}}
 
 <section class="panel" aria-labelledby="lim-title">
-  <h2 id="lim-title">Apps with limited advisory data</h2>
+  <h2 id="lim-title">Apps with limited advisory data{{if $d.Limited}} <span class="muted">({{len $d.Limited}})</span>{{end}}</h2>
   {{if $d.Limited}}<p class="small">These apps are checked, but their projects do not publish every flaw in a form a program can compare, so Varde may learn of one late or not at all. That is a limit of what the project publishes, not a setting you can change. The packages and libraries inside their images are checked in full either way.</p>
   <ul class="small">{{range $d.Limited}}<li>{{.Name}}: {{if eq .Coverage "partial"}}<span class="muted">the project publishes advisories on its repository; flaws it only mentions in release notes are missed</span>{{else}}<span class="muted">the project publishes no advisories a program can read; Varde relies on the CVE database, which lags and is incomplete</span>{{end}}</li>{{end}}</ul>
   {{else}}<p class="small muted">All identified apps publish structured advisories.</p>{{end}}

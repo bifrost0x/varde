@@ -20,6 +20,15 @@ name: data
 on:
   schedule:
     - cron: "17 2 * * *"
+  # The package carries the catalog and the index, and an installation uses
+  # the package's catalog in place of its built-in one. A new catalog entry
+  # therefore reaches installations with the next package: build one when
+  # the catalog or the index changes on main, not a day later.
+  push:
+    branches: [main]
+    paths:
+      - "catalog/**"
+      - "internal/applists/**"
   workflow_dispatch:
     inputs:
       force:

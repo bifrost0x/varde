@@ -121,9 +121,11 @@ func (s *Sessions) Load(ctx context.Context, r *http.Request) (*Current, error) 
 		return nil, err
 	}
 	if now.Sub(sess.LastSeen) > touchInterval {
-		if err := s.store.TouchSession(ctx, hash, now); err != nil {
-			return nil, err
-		}
+		// Recording the visit is a write. While Varde stores a large
+		// inventory the database can be busy for longer than a request
+		// waits; a page must not fail for that. The session is valid, the
+		// visit is recorded by a later request.
+		_ = s.store.TouchSession(ctx, hash, now)
 	}
 	return &Current{User: u, IDHash: hash, CSRFToken: sess.CSRFToken}, nil
 }

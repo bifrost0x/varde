@@ -302,3 +302,42 @@ func TestHashingBusyIsBounded(t *testing.T) {
 		t.Fatalf("busy: %v after %s", err, time.Since(start))
 	}
 }
+
+// busyStore fails to record a visit, as a database that is busy storing a
+// large inventory does.
+type busyStore struct{ Store }
+
+func (busyStore) TouchSession(context.Context, string, time.Time) error {
+	return errors.New("database is locked (SQLITE_BUSY)")
+}
+
+// A page must load while the database is too busy to record the visit: the
+// session is valid, only its last-seen time is not written.
+func TestSessionLoadsWhileTheDatabaseIsBusy(t *testing.T) {
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "v.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	now := time.Now()
+	if err := st.CreateUser(t.Context(), store.User{ID: "u1", Username: "admin", PasswordHash: "x", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	proxies, _ := NewProxies(nil, false)
+	s := NewSessions(st, CookieAuto, proxies)
+	w := httptest.NewRecorder()
+	if err := s.Start(t.Context(), w, httptest.NewRequest(http.MethodGet, "/", nil), "u1"); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	for _, c := range w.Result().Cookies() {
+		r.AddCookie(c)
+	}
+	busy := NewSessions(busyStore{st}, CookieAuto, proxies)
+	// Long enough after the last visit that it would be recorded.
+	busy.now = func() time.Time { return now.Add(2 * touchInterval) }
+	cur, err := busy.Load(t.Context(), r)
+	if err != nil || cur == nil || cur.User.ID != "u1" {
+		t.Fatalf("session not loaded while the database is busy: %+v, %v", cur, err)
+	}
+}

@@ -680,6 +680,9 @@ type gap struct {
 	// "not an app" mark; Marked is set when the user made that mark.
 	Repository string
 	Marked     bool
+	// On is the machine the workload runs on, for lists where the same
+	// container name appears on several machines.
+	On string
 	// Pending is set for an unknown version Varde is still finding out by
 	// itself (the registry has not been asked yet); RegistryOff when it
 	// could, but asking the registry is switched off.
@@ -701,6 +704,15 @@ type coverageView struct {
 	NoSource []string
 	// Machines counts the hosts whose workloads Varde reads.
 	Machines systemCounts
+}
+
+// Why says why a version is unknown, without the advice the identification
+// appends: the page gives its own next step, which depends on what Varde is
+// still finding out.
+func (g gap) Why() string {
+	why := strings.TrimPrefix(g.Note, "version unknown: ")
+	why = strings.TrimSuffix(why, "; set label varde.version to pin it")
+	return why
 }
 
 func (a *app) toGap(g coverage.Gap) gap {
@@ -756,6 +768,9 @@ func (a *app) coverageData(s *snapshot) coverageView {
 	for _, g := range c.Summary.NotApps {
 		ng := a.toGap(g)
 		ng.Note, ng.Marked = g.NotAppKind, g.NotAppKind == coverage.KindUser
+		if m := s.hostOf[g.Workload.HostID]; m != nil {
+			ng.On = m.Name
+		}
 		c.NotApps = append(c.NotApps, ng)
 	}
 	limited := map[string]bool{}
