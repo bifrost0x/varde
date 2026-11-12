@@ -8,9 +8,13 @@
 package eval
 
 import (
+	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -167,33 +171,70 @@ func Load(dir string) (*Corpus, error) {
 		if err != nil {
 			return nil, err
 		}
-		var part struct {
-			Corpus `yaml:",inline"`
-			Cases  []ContainerCase `yaml:"cases"`
+		if err := c.add(filepath.Base(f), raw); err != nil {
+			return nil, err
 		}
-		dec := yaml.NewDecoder(strings.NewReader(string(raw)))
-		dec.KnownFields(true)
-		if err := dec.Decode(&part); err != nil {
-			return nil, fmt.Errorf("%s: %w", filepath.Base(f), err)
-		}
-		c.Containers = append(c.Containers, part.Containers...)
-		c.Containers = append(c.Containers, part.Cases...)
-		c.Topologies = append(c.Topologies, part.Topologies...)
-		c.Packages = append(c.Packages, part.Packages...)
-		if part.Distro.Records != "" {
-			c.Distro.Records = part.Distro.Records
-		}
-		c.Distro.Upstream = append(c.Distro.Upstream, part.Distro.Upstream...)
-		c.Distro.Cases = append(c.Distro.Cases, part.Distro.Cases...)
-		for app, advs := range part.Matching.Advisories {
-			if c.Matching.Advisories == nil {
-				c.Matching.Advisories = map[string][]MatchAdvisory{}
-			}
-			c.Matching.Advisories[app] = append(c.Matching.Advisories[app], advs...)
-		}
-		c.Matching.Cases = append(c.Matching.Cases, part.Matching.Cases...)
 	}
 	return c, nil
+}
+
+// corpusFiles is the corpus as built into the binary, for the package
+// builder: its catalog generator compares every entry it makes with the
+// derived one on the container cases of its images (check C6), and it
+// runs from a binary, not from a checkout.
+//
+//go:embed testdata/corpus/*.yaml
+var corpusFiles embed.FS
+
+// ContainerCases returns the container cases of the corpus built into the
+// binary.
+func ContainerCases() ([]ContainerCase, error) {
+	names, err := fs.Glob(corpusFiles, "testdata/corpus/*.yaml")
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(names)
+	c := &Corpus{}
+	for _, n := range names {
+		raw, err := corpusFiles.ReadFile(n)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.add(path.Base(n), raw); err != nil {
+			return nil, err
+		}
+	}
+	return c.Containers, nil
+}
+
+// add merges one corpus file into c.
+func (c *Corpus) add(name string, raw []byte) error {
+	var part struct {
+		Corpus `yaml:",inline"`
+		Cases  []ContainerCase `yaml:"cases"`
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
+	if err := dec.Decode(&part); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	c.Containers = append(c.Containers, part.Containers...)
+	c.Containers = append(c.Containers, part.Cases...)
+	c.Topologies = append(c.Topologies, part.Topologies...)
+	c.Packages = append(c.Packages, part.Packages...)
+	if part.Distro.Records != "" {
+		c.Distro.Records = part.Distro.Records
+	}
+	c.Distro.Upstream = append(c.Distro.Upstream, part.Distro.Upstream...)
+	c.Distro.Cases = append(c.Distro.Cases, part.Distro.Cases...)
+	for app, advs := range part.Matching.Advisories {
+		if c.Matching.Advisories == nil {
+			c.Matching.Advisories = map[string][]MatchAdvisory{}
+		}
+		c.Matching.Advisories[app] = append(c.Matching.Advisories[app], advs...)
+	}
+	c.Matching.Cases = append(c.Matching.Cases, part.Matching.Cases...)
+	return nil
 }
 
 // Counts are the outcomes of one measurement.

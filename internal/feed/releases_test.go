@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/registry"
+	"github.com/bifrost0x/varde/internal/store"
 )
 
 var (
@@ -270,4 +273,77 @@ func TestSnapshotUnpackedLimit(t *testing.T) {
 
 func testOSV(now time.Time, id string) advisory.Vulnerability {
 	return advisory.Vulnerability{SchemaVersion: "1.6.0", ID: id, Modified: now}
+}
+
+// failingReleases is a store that cannot keep release package lists.
+type failingReleases struct {
+	*store.Store
+	calls int
+}
+
+func (s *failingReleases) ReplaceReleasePackages(context.Context, []store.ReleasePackageRow) error {
+	s.calls++
+	return errors.New("disk full")
+}
+
+// The installation keeps the release package lists of the applied package
+// in its store, replaced with each package and on startup; a package
+// without them clears the table. Failing to keep them is logged and does
+// not cost the catalog or the advisories.
+func TestClientStoresReleases(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	f.publishLayered(5, nil, []ReleaseLine{testRelease("immich", "amd64"), testRelease("immich", "arm64")})
+	if _, err := f.update(); err != nil {
+		t.Fatal(err)
+	}
+	lines, err := f.st.ReleasePackagesFor(ctx, "immich", "ghcr.io/immich-app/immich-server")
+	if err != nil || len(lines) != 2 {
+		t.Fatalf("stored lines = %d, %v", len(lines), err)
+	}
+	var got ReleaseLine
+	if err := json.Unmarshal(lines[1], &got); err != nil || got.Platform.Arch != "arm64" || got.Tag != "v1.120.0" || len(got.Packages) != 1 {
+		t.Fatalf("stored line = %+v, %v", got, err)
+	}
+
+	// Startup writes the table from the installed package again: a store
+	// restored from a backup or an older Varde gets the lists back.
+	if err := f.st.ReplaceReleasePackages(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	again := &Client{Mirrors: f.client.Mirrors, Dir: f.client.Dir, Store: f.st, Catalog: catalog.NewLive(nil),
+		Log: f.client.Log, Now: f.client.Now, AllowDevelopment: true}
+	if err := again.LoadActive(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if lines, err := f.st.ReleasePackagesFor(ctx, "immich", "ghcr.io/immich-app/immich-server"); err != nil || len(lines) != 2 {
+		t.Fatalf("after startup: %d lines, %v", len(lines), err)
+	}
+
+	// A package without the blob clears them.
+	f.publishLayered(6, nil, nil)
+	if _, err := f.update(); err != nil {
+		t.Fatal(err)
+	}
+	if lines, err := f.st.ReleasePackagesFor(ctx, "immich", "ghcr.io/immich-app/immich-server"); err != nil || len(lines) != 0 {
+		t.Fatalf("after a package without releases: %d lines, %v", len(lines), err)
+	}
+
+	// A store that refuses them: the package still applies, the failure
+	// is logged.
+	var logged bytes.Buffer
+	bad := &failingReleases{Store: f.st}
+	f.client.Store = bad
+	f.client.Log = slog.New(slog.NewTextHandler(&logged, nil))
+	f.publishLayered(7, nil, []ReleaseLine{testRelease("immich", "amd64")})
+	res, err := f.update()
+	if err != nil || !res.Applied {
+		t.Fatalf("update with a failing release store: %+v, %v", res, err)
+	}
+	if bad.calls != 1 || !strings.Contains(logged.String(), "disk full") {
+		t.Fatalf("calls = %d, log = %q", bad.calls, logged.String())
+	}
+	if _, ok := f.client.Catalog.Current().App("immich"); !ok || f.feedAdvisories() != 1 || len(f.client.Releases()) != 1 {
+		t.Fatal("catalog, advisories or releases lost with the release store")
+	}
 }

@@ -7,6 +7,25 @@
 // the result with the client an installation uses. The daily workflow
 // runs it; it is not part of the server.
 //
+// Before the advisories it generates catalog entries for the index images
+// no reviewed entry covers (internal/catgen) and reads the package lists
+// of the newest release of every catalog app (internal/releases); both go
+// into the package. The readable list of generated entries is written to
+// catalog/generated.json and catalog/generated.md beside the package.
+//
+// Time: the data workflow stops the job after 350 minutes. The generator
+// starts no project after -generate-time (90 min), the release reads start
+// no image after -releases-until (150 min), both from the start of the
+// build; the advisory collection gets the rest, and its waits for GitHub's
+// rate limit (-max-wait) are shortened by the time already spent.
+//
+// Registries: GITHUB_TOKEN raises GitHub's rate limit for the generator
+// too (without it the generator stops asking GitHub at the first rate
+// limit and re-checks less). VARDE_DOCKERHUB_USER and
+// VARDE_DOCKERHUB_TOKEN, when both are set, authenticate to Docker Hub;
+// without them the release reads make at most 90 manifest requests, below
+// Docker Hub's anonymous limit of 100 pulls in 6 hours per address.
+//
 //	VARDE_FEED_KEY="$(cat feed.key)" go run ./cmd/packagebuilder \
 //	    -db cache/builder.db -previous published/feed -out work/feed
 //
@@ -19,6 +38,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"flag"
@@ -30,6 +50,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,9 +58,13 @@ import (
 	"github.com/bifrost0x/varde/index"
 	"github.com/bifrost0x/varde/internal/applists"
 	"github.com/bifrost0x/varde/internal/catalog"
+	"github.com/bifrost0x/varde/internal/catgen"
+	"github.com/bifrost0x/varde/internal/eval"
 	"github.com/bifrost0x/varde/internal/feed"
 	"github.com/bifrost0x/varde/internal/httpx"
 	"github.com/bifrost0x/varde/internal/pkgbuild"
+	"github.com/bifrost0x/varde/internal/registry"
+	"github.com/bifrost0x/varde/internal/releases"
 	"github.com/bifrost0x/varde/internal/store"
 )
 
@@ -49,11 +74,40 @@ type config struct {
 	force                               bool
 	allowDevelopment                    bool
 	githubURL, kevURL, epssURL          string
-	// http, now and table are replaced in tests.
-	http  *httpx.Client
-	now   func() time.Time
-	table *applists.Table
+	// generate and releases switch the catalog generator and the release
+	// reads on; generateFor and releasesUntil bound them from the start of
+	// the build, maxManifests the manifest requests of the release reads
+	// (0: by whether Docker Hub credentials are set).
+	generate, releases         bool
+	generateFor, releasesUntil time.Duration
+	maxManifests               int
+	// http, now, table, sources and readReleases are replaced in tests.
+	http    *httpx.Client
+	now     func() time.Time
+	table   *applists.Table
+	sources *genSources
+	// readReleases reads the release package lists (releases.Reader.Run).
+	readReleases func(ctx context.Context, cat *catalog.Catalog, order []string) ([]feed.ReleaseLine, releases.Stats, error)
 }
+
+// genSources are what the generator asks; nil fields are left unset.
+type genSources struct {
+	registry catgen.RegistryAPI
+	github   catgen.GitHubAPI
+	nvd      catgen.NVDAPI
+	hub      catgen.HubAPI
+}
+
+// Defaults of the time and request bounds (see the package comment).
+const (
+	defaultGenerateFor   = 90 * time.Minute
+	defaultReleasesUntil = 150 * time.Minute
+	// anonymousManifests stays below Docker Hub's 100 anonymous pulls in
+	// 6 hours; manifest GETs count as pulls.
+	anonymousManifests = 90
+	// registryTimeout bounds one registry request, a layer blob included.
+	registryTimeout = 10 * time.Minute
+)
 
 func main() {
 	var c config
@@ -63,12 +117,17 @@ func main() {
 	flag.StringVar(&c.root, "root", "", "trust root to publish with the package (default: the root built into this binary)")
 	flag.StringVar(&c.catalogDir, "catalog", "", "catalog directory (default: the built-in catalog)")
 	flag.DurationVar(&c.valid, "valid", 7*24*time.Hour, "how long the package is valid")
-	flag.DurationVar(&c.maxWait, "max-wait", 5*time.Hour, "longest total wait for GitHub's rate limit to reset")
+	flag.DurationVar(&c.maxWait, "max-wait", 5*time.Hour, "longest total wait for GitHub's rate limit to reset, less the time the generator and the release reads took")
 	flag.BoolVar(&c.force, "force", false, "sign although the package shrank a lot (after checking why)")
 	flag.BoolVar(&c.allowDevelopment, "allow-development-root", false, "build under a development root (tests only; installations refuse such a package)")
 	flag.StringVar(&c.githubURL, "github-url", "", "GitHub API endpoint (tests)")
 	flag.StringVar(&c.kevURL, "kev-url", "", "KEV endpoint (tests)")
 	flag.StringVar(&c.epssURL, "epss-url", "", "EPSS endpoint (tests)")
+	flag.BoolVar(&c.generate, "generate", true, "generate and check catalog entries for index images without a reviewed entry")
+	flag.BoolVar(&c.releases, "releases", true, "read the package lists of the newest release of every catalog app")
+	flag.DurationVar(&c.generateFor, "generate-time", defaultGenerateFor, "the generator starts no project this long after the start of the build")
+	flag.DurationVar(&c.releasesUntil, "releases-until", defaultReleasesUntil, "the release reads start no image this long after the start of the build")
+	flag.IntVar(&c.maxManifests, "max-manifests", 0, "manifest requests of the release reads (default 600 with Docker Hub credentials, 90 without)")
 	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	err := run(ctx, c, os.Getenv, os.Stdout)
@@ -108,6 +167,13 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	}
 	now := c.now().UTC()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	var cases []eval.ContainerCase
+	if c.generate {
+		var err error
+		if cases, err = eval.ContainerCases(); err != nil {
+			return fmt.Errorf("eval corpus: %w", err)
+		}
+	}
 
 	// Everything that can be wrong without asking anyone comes first.
 	key, err := parseKey(env("VARDE_FEED_KEY"))
@@ -202,8 +268,58 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if hc == nil {
 		hc = httpx.New(httpx.Options{})
 	}
+
+	// The generator and the release reads first: they have deadlines,
+	// the advisory collection only a bound on its waits.
+	prevGenerated, err := readPreviousGenerated(c.previous)
+	if err != nil {
+		logger.Warn("the published list of generated entries does not read; the summary compares with the builder's store", "err", err)
+	}
+	reg := c.registry(env)
+	var (
+		rep       catgen.Report
+		generated []catalog.Entry
+	)
+	if c.generate {
+		g := c.generator(st, hc, reg, env, cases, now)
+		if rep, err = g.Run(ctx, table, cat); err != nil {
+			return fmt.Errorf("catalog generator: %w", err)
+		}
+		// Not nil: a package without generated entries says so.
+		generated = append([]catalog.Entry{}, rep.Shipped...)
+	}
+	candidates, err := st.AllCandidates(ctx)
+	if err != nil {
+		return err
+	}
+	var (
+		lines    []feed.ReleaseLine
+		relStats releases.Stats
+	)
+	if c.releases {
+		layered, err := catalog.BuildLayered(entries, catalog.OriginBuiltin, generated, nil)
+		if err != nil {
+			return fmt.Errorf("catalog with generated entries: %w", err)
+		}
+		for _, d := range layered.DroppedGenerated() {
+			logger.Warn("generated entry left out beside the reviewed ones", "entry", d)
+		}
+		read := c.readReleases
+		if read == nil {
+			r := &releases.Reader{Store: st, Registry: reg, Now: c.now, MaxManifests: c.manifests(env),
+				Deadline: now.Add(orDefault(c.releasesUntil, defaultReleasesUntil)), Log: logger}
+			read = r.Run
+		}
+		if lines, relStats, err = read(ctx, layered, releases.Priority(layered, appWeights(candidates))); err != nil {
+			return fmt.Errorf("release reads: %w", err)
+		}
+		lines = append([]feed.ReleaseLine{}, lines...)
+	}
+
+	// The waits for GitHub's rate limit share the time left.
+	wait := max(c.maxWait-c.now().Sub(now), time.Minute)
 	stats, err := pkgbuild.Collect(ctx, repos, pkgbuild.Options{Store: st, HTTP: hc, Token: env("GITHUB_TOKEN"),
-		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: c.maxWait, Log: logger})
+		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: wait, Log: logger})
 	if err != nil {
 		return err
 	}
@@ -211,6 +327,7 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if err != nil {
 		return err
 	}
+	snap.Generated, snap.Releases = generated, lines
 	counts := pkgbuild.CountsOf(snap, table.Len())
 	if err := pkgbuild.Guard(stats, previous, havePrevious, counts, c.force); err != nil {
 		return err
@@ -235,7 +352,14 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if err := feed.WriteRoot(staging, root.Version, rootData); err != nil {
 		return err
 	}
-	if _, err := feed.WriteSnapshot(staging, snap, key); err != nil {
+	manifest, err := feed.WriteSnapshot(staging, snap, key)
+	if err != nil {
+		return err
+	}
+	if counts.ReleasesBytes, err = blobSize(manifest, "releases"); err != nil {
+		return err
+	}
+	if err := pkgbuild.GuardReleases(counts.ReleasesBytes); err != nil {
 		return err
 	}
 	if err := pkgbuild.WriteCounts(staging, counts); err != nil {
@@ -264,9 +388,35 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if err := os.Chmod(c.out, 0o755); err != nil { //nolint:gosec // published layout
 		return err
 	}
+	var diff genDiff
+	if c.generate {
+		cur := generatedState(candidates, rep, now, counts.Sequence)
+		diff = diffGenerated(prevGenerated, cur, rep)
+		if err := writeGenerated(parent, cur, renderGenerated(cur, diff, rep)); err != nil {
+			return fmt.Errorf("list of generated entries: %w", err)
+		}
+	}
 	if _, err = fmt.Fprintf(out, "package %d: %d repositories (%d failed), %d advisories, %d KEV, %d EPSS, %d index rows; %d requests, %d waits\n",
 		counts.Sequence, stats.Repos, stats.Failed, counts.Advisories, counts.KEV, counts.EPSS, counts.Index, stats.Requests, stats.Waits); err != nil {
 		return err
+	}
+	if c.generate {
+		if _, err := fmt.Fprintf(out, "generated: %d entries (%d new, %d changed, %d dropped images; %d failed, %d not checked)\n",
+			len(generated), len(diff.New), len(diff.Changed), len(diff.Dropped), len(rep.Failed), len(rep.Skipped)); err != nil {
+			return err
+		}
+		if len(rep.Stopped) > 0 {
+			if _, err := fmt.Fprintln(out, "generator stopped early:", strings.Join(rep.Stopped, ", ")); err != nil {
+				return err
+			}
+		}
+	}
+	if c.releases {
+		if _, err := fmt.Fprintf(out, "releases: %d lines, %d bytes (%d images: %d read, %d unchanged, %d failed, %d not started, %d too large; %d partial, %d stale); %d manifest requests\n",
+			relStats.Lines, counts.ReleasesBytes, relStats.Images, relStats.Read, relStats.Unchanged, relStats.Failed, relStats.NotStarted,
+			relStats.TooLarge, relStats.Partial, relStats.Stale, relStats.Manifests); err != nil {
+			return err
+		}
 	}
 	// What is published for a failing repository is as old as its last
 	// successful read: say so where the maintainer looks.
@@ -441,4 +591,82 @@ func verify(ctx context.Context, dir string, rootData []byte, root *feed.Root, n
 		return errors.New("the client did not install it")
 	}
 	return nil
+}
+
+// registry is the registry client of the generator and the release reads,
+// with the Docker Hub credentials when both are set.
+func (c config) registry(env func(string) string) *registry.Client {
+	return registry.New(httpx.New(httpx.Options{Timeout: registryTimeout}),
+		registry.WithCredentials("docker.io", env("VARDE_DOCKERHUB_USER"), env("VARDE_DOCKERHUB_TOKEN")))
+}
+
+// manifests is the manifest budget of the release reads.
+func (c config) manifests(env func(string) string) int {
+	switch {
+	case c.maxManifests > 0:
+		return c.maxManifests
+	case env("VARDE_DOCKERHUB_USER") != "" && env("VARDE_DOCKERHUB_TOKEN") != "":
+		return releases.DefaultMaxManifests
+	}
+	return anonymousManifests
+}
+
+// generator sets up the catalog generator; its sources are the real
+// clients unless a test replaced them.
+func (c config) generator(st *store.Store, hc *httpx.Client, reg *registry.Client, env func(string) string, cases []eval.ContainerCase, start time.Time) *catgen.Generator {
+	g := &catgen.Generator{Store: st, Now: c.now, Deadline: start.Add(orDefault(c.generateFor, defaultGenerateFor)), EvalCases: cases}
+	if c.sources == nil {
+		g.Registry = reg
+		g.GitHub = &catgen.GitHub{HTTP: hc, Token: env("GITHUB_TOKEN"), BaseURL: c.githubURL}
+		g.NVD = &catgen.NVD{HTTP: hc}
+		g.Hub = &catgen.Hub{HTTP: hc}
+		return g
+	}
+	g.Registry, g.GitHub = c.sources.registry, c.sources.github
+	if c.sources.nvd != nil {
+		g.NVD = c.sources.nvd
+	}
+	if c.sources.hub != nil {
+		g.Hub = c.sources.hub
+	}
+	return g
+}
+
+// appWeights are the weights of the generated apps for the order of the
+// release reads: the heaviest image of each project.
+func appWeights(candidates []store.Candidate) map[string]int64 {
+	w := map[string]int64{}
+	for _, cand := range candidates {
+		owner, name, ok := strings.Cut(cand.Repo, "/")
+		if !ok {
+			continue
+		}
+		id := catalog.DerivedID(owner, name)
+		w[id] = max(w[id], cand.Weight)
+	}
+	return w
+}
+
+// blobSize is the compressed size of the named blob of a manifest; 0 when
+// the package has none.
+func blobSize(manifest []byte, name string) (int64, error) {
+	var m feed.Manifest
+	if err := json.Unmarshal(manifest, &m); err != nil {
+		return 0, fmt.Errorf("written manifest: %w", err)
+	}
+	for _, b := range m.Blobs {
+		if b.Name == name {
+			return b.Size, nil
+		}
+	}
+	return 0, nil
+}
+
+// orDefault is d, or def when d is not positive: a zero bound would stop
+// the work before it starts.
+func orDefault(d, def time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return def
 }

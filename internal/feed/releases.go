@@ -61,6 +61,15 @@ func (p ReleasePlatform) Registry() registry.Platform {
 	return registry.Platform{OS: p.OS, Arch: p.Arch, Variant: p.Variant}
 }
 
+// Key is the platform as "os/architecture" or "os/architecture/variant",
+// the form an installation keeps a release package list under.
+func (p ReleasePlatform) Key() string {
+	if p.Variant == "" {
+		return p.OS + "/" + p.Arch
+	}
+	return p.OS + "/" + p.Arch + "/" + p.Variant
+}
+
 var (
 	versionRe  = regexp.MustCompile(`^[A-Za-z0-9._+~:-]{1,128}$`)
 	digestRe   = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)

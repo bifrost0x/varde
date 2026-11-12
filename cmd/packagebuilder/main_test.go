@@ -21,9 +21,13 @@ import (
 
 	"github.com/bifrost0x/varde/internal/advisory"
 	"github.com/bifrost0x/varde/internal/applists"
+	"github.com/bifrost0x/varde/internal/catalog"
+	"github.com/bifrost0x/varde/internal/catgen"
 	"github.com/bifrost0x/varde/internal/feed"
 	"github.com/bifrost0x/varde/internal/httpx"
+	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/pkgbuild"
+	"github.com/bifrost0x/varde/internal/releases"
 	"github.com/bifrost0x/varde/internal/store"
 )
 
@@ -494,5 +498,155 @@ func TestRefusesADevelopmentRoot(t *testing.T) {
 	out, err := h.run(h.keyPEM)
 	if err != nil || !strings.Contains(out, "DEVELOPMENT trust root") {
 		t.Fatalf("allowed development build: %v\n%s", err, out)
+	}
+}
+
+// genRegistry, genGitHub and genHub serve the generator in tests.
+type genRegistry struct{ tags map[string][]string }
+
+func (r genRegistry) AllTags(_ context.Context, repository string) ([]string, bool, error) {
+	t, ok := r.tags[repository]
+	if !ok {
+		return nil, false, catgen.ErrNotFound
+	}
+	return t, true, nil
+}
+
+func (r genRegistry) Digest(_ context.Context, repository, tag string) (string, error) {
+	if repository == "docker.io/other/tool" && tag == "1.2.0" {
+		return "sha256:" + strings.Repeat("a", 64), nil
+	}
+	return "", catgen.ErrNotFound
+}
+
+type genGitHub struct{ releases map[string][]catgen.Release }
+
+func (g *genGitHub) Releases(_ context.Context, repo, etag string) ([]catgen.Release, string, bool, error) {
+	rels, ok := g.releases[repo]
+	if !ok {
+		return nil, "", false, catgen.ErrNotFound
+	}
+	cur := fmt.Sprintf(`"%d"`, len(rels))
+	if etag == cur {
+		return nil, cur, true, nil
+	}
+	return rels, cur, false, nil
+}
+
+type genHub struct{}
+
+func (genHub) PullCount(context.Context, string) (int64, error) { return 5000, nil }
+
+func readGenerated(t *testing.T, dir string) (genState, string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, "catalog", "generated.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s genState
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatal(err)
+	}
+	md, err := os.ReadFile(filepath.Join(dir, "catalog", "generated.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s, string(md)
+}
+
+func TestBuildWritesGeneratedFiles(t *testing.T) {
+	h := newHarness(t)
+	gh := &genGitHub{releases: map[string][]catgen.Release{"other/tool": {{Tag: "1.2.0"}, {Tag: "1.1.0"}, {Tag: "1.0.0"}}}}
+	h.cfg.generate, h.cfg.releases = true, true
+	h.cfg.sources = &genSources{registry: genRegistry{tags: map[string][]string{"docker.io/other/tool": {"latest", "1.0.0", "1.1.0", "1.2.0"}}},
+		github: gh, hub: genHub{}}
+	var order []string
+	h.cfg.readReleases = func(_ context.Context, cat *catalog.Catalog, o []string) ([]feed.ReleaseLine, releases.Stats, error) {
+		order = o
+		if a, ok := cat.App("gh-other-tool"); ok && a.Origin != catalog.OriginGenerated {
+			t.Errorf("generated entry read as %s", a.Origin)
+		}
+		return []feed.ReleaseLine{{AppID: "widget", Image: "ghcr.io/acme/widget", Tag: "v2.0.0", Version: "2.0.0",
+				Platform: feed.ReleasePlatform{OS: "linux", Arch: "amd64"}, ManifestDigest: "sha256:" + strings.Repeat("b", 64), Read: h.now,
+				Packages: []inventory.Package{{Manager: "dpkg", Name: "openssl", Version: "3.0.15-1", Distro: "debian-12", Source: "openssl"}}}},
+			releases.Stats{Images: 2, Read: 1, Lines: 1}, nil
+	}
+	work := filepath.Dir(h.cfg.out)
+
+	out, err := h.run(h.keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reviewed apps first, then the generated ones.
+	if len(order) != 2 || order[0] != "widget" || order[1] != "gh-other-tool" {
+		t.Errorf("release order = %v", order)
+	}
+	if !strings.Contains(out, "generated: 1 entries (1 new, 0 changed, 0 dropped images; 0 failed, 0 not checked)") || !strings.Contains(out, "releases: 1 lines") {
+		t.Errorf("summary: %s", out)
+	}
+	counts, _, err := pkgbuild.ReadCounts(h.cfg.out)
+	if err != nil || counts.Generated != 1 || counts.Releases != 1 || counts.ReleasesBytes == 0 {
+		t.Fatalf("counts = %+v, %v", counts, err)
+	}
+	s, md := readGenerated(t, work)
+	if len(s.Entries) != 1 || s.Entries[0].ID != "gh-other-tool" || !strings.Contains(s.Entries[0].YAML, "maintainers_of_entry: [generator]") {
+		t.Fatalf("entries = %+v", s.Entries)
+	}
+	if len(s.Images) != 1 || s.Images[0].Status != genShipped || s.Images[0].Entry != "gh-other-tool" || len(s.Images[0].Checks) != 6 ||
+		s.Images[0].Checks[5] != (genCheck{"C6", checkPass}) || s.Images[0].Hash == "" {
+		t.Fatalf("images = %+v", s.Images)
+	}
+	for _, want := range []string{"| Entries shipped | 1 |", "| New | 1 |", "## New\n\n- docker.io/other/tool\n", "no list published before"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("generated.md lacks %q:\n%s", want, md)
+		}
+	}
+
+	// The next day: a project that fails C3 joins; the shipped one stays
+	// and is compared with the list published before.
+	h.cfg.previous, h.cfg.out = h.cfg.out, filepath.Join(work, "next")
+	h.now = h.now.Add(24 * time.Hour)
+	table, err := applists.Unmarshal([]byte("docker.io/other/tool\tgithub.com/other/tool\thub,readme\ndocker.io/third/app\tgithub.com/third/app\thub,readme\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.cfg.table = table
+	if _, err := h.run(h.keyPEM); err != nil {
+		t.Fatal(err)
+	}
+	s, md = readGenerated(t, work)
+	if len(s.Images) != 2 || s.Images[1].Image != "docker.io/third/app" || s.Images[1].Status != genFailed || s.Images[1].FailedCheck != "C3" ||
+		s.Images[1].Checks[2] != (genCheck{"C3", checkFail}) || s.Images[1].Checks[3] != (genCheck{"C4", checkNotRun}) {
+		t.Fatalf("images = %+v", s.Images)
+	}
+	for _, want := range []string{"Compared with the list of the build of 2026-11-11 02:17 UTC", "| New | 0 |", "| Failed C3 | 1 |",
+		"## Failures\n\n- docker.io/third/app: C3: "} {
+		if !strings.Contains(md, want) {
+			t.Errorf("generated.md lacks %q:\n%s", want, md)
+		}
+	}
+	if strings.Contains(md, "## New") {
+		t.Errorf("unchanged entry listed as new:\n%s", md)
+	}
+
+	// A new GitHub release the tags do not follow fails C4: the only
+	// entry drops, which the guard refuses without -force. The list
+	// published before stays as it was.
+	gh.releases["other/tool"] = append([]catgen.Release{{Tag: "2.0.0"}}, gh.releases["other/tool"]...)
+	h.cfg.previous, h.cfg.out = h.cfg.out, filepath.Join(work, "third")
+	h.now = h.now.Add(24 * time.Hour)
+	if _, err := h.run(h.keyPEM); err == nil || !strings.Contains(err.Error(), "generated entries fell from 1 to 0") {
+		t.Fatalf("dropped entries: %v", err)
+	}
+	if again, _ := readGenerated(t, work); again.Sequence != s.Sequence {
+		t.Fatal("a refused build replaced the published list")
+	}
+	h.cfg.force = true
+	if _, err := h.run(h.keyPEM); err != nil {
+		t.Fatalf("forced build: %v", err)
+	}
+	s, md = readGenerated(t, work)
+	if len(s.Entries) != 0 || !strings.Contains(md, "## Dropped\n\n- docker.io/other/tool\n") || !strings.Contains(md, "| Dropped | 1 |") {
+		t.Fatalf("after the drop: %+v\n%s", s.Entries, md)
 	}
 }

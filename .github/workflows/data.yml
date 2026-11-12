@@ -16,6 +16,16 @@ name: data
 #
 # A build that looks broken is refused by the builder; the job then fails
 # and the package published before stays.
+#
+# The build also generates catalog entries for index images without a
+# reviewed entry and reads the package lists of the newest releases (ADR
+# 0040). Docker Hub limits anonymous pulls per address, and hosted runners
+# share addresses: the optional secrets VARDE_DOCKERHUB_USER and
+# VARDE_DOCKERHUB_TOKEN (a read-only access token) in the environment
+# "data-package" let the builder read more; without them it stays under
+# the anonymous limit. The list of generated entries (catalog/generated.json
+# and generated.md) is published with the package and kept as a run
+# artifact for 90 days, the history beyond the one commit of the branch.
 
 on:
   schedule:
@@ -108,8 +118,11 @@ jobs:
             cp published/cache/builder.db.sig work/cache/builder.db.sig
           fi
       - name: Build, check and sign
+        id: build
         env:
           VARDE_FEED_KEY: ${{ secrets.VARDE_FEED_KEY }}
+          VARDE_DOCKERHUB_USER: ${{ secrets.VARDE_DOCKERHUB_USER }}
+          VARDE_DOCKERHUB_TOKEN: ${{ secrets.VARDE_DOCKERHUB_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force && '-force' || '' }}
         shell: bash
@@ -117,8 +130,24 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC2086 # FORCE is one flag or nothing
           go run ./cmd/packagebuilder -db work/cache/builder.db -previous published/feed -out work/feed ${FORCE} | tee -a "$GITHUB_STEP_SUMMARY"
+          # The step summary takes up to 1 MiB.
+          if [[ -f work/catalog/generated.md ]]; then
+            head -c 900000 work/catalog/generated.md >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Publish
         shell: bash
         run: |
           set -euo pipefail
           scripts/publish-data.sh work
+      # After the publish, so a failing upload never holds a package back;
+      # also when the publish failed, as long as the build succeeded.
+      - name: Keep the list of generated entries
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: generated-catalog
+          path: |
+            work/catalog/generated.json
+            work/catalog/generated.md
+          if-no-files-found: error
+          retention-days: 90

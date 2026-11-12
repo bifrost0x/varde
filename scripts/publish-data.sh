@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Publishes a built data package: one commit that holds exactly feed/,
-# the builder's store and its signature, pushed over the branch "data". The
+# the builder's store and its signature, and the list of generated catalog
+# entries (catalog/generated.json and generated.md, when the build wrote
+# them), pushed over the branch "data". The
 # branch never grows: every build replaces it. Run from inside a checkout of
 # the repository.
 #
 #   scripts/publish-data.sh <work-dir>
 #
-# <work-dir> holds feed/ (written by cmd/packagebuilder) and
+# <work-dir> holds feed/ and catalog/ (written by cmd/packagebuilder) and
 # cache/builder.db (the builder's store, kept for the next build).
 #
 # The store is published compressed, as cache/builder.db.gz. It holds the
@@ -39,6 +41,19 @@ for needed in feed/v1/manifest.json feed/v1/manifest.json.sig feed/v1/root.json 
   fi
 done
 
+# The list of generated entries is optional (a build without the
+# generator has none); what is there must be plain files.
+generated=()
+for f in catalog/generated.json catalog/generated.md; do
+  if [[ -L "${work}/${f}" || ( -e "${work}/${f}" && ! -f "${work}/${f}" ) ]]; then
+    echo "${f} in ${work} is not a plain file: nothing published" >&2
+    exit 1
+  fi
+  if [[ -f "${work}/${f}" ]]; then
+    generated+=("${f}")
+  fi
+done
+
 index_file="$(mktemp)"
 trap 'rm -f "${index_file}"' EXIT
 rm -f "${index_file}" # git wants to create it itself
@@ -52,7 +67,7 @@ export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-${GIT_AUTHOR_EMAIL}}"
 gzip -9 -n -c "${work}/cache/builder.db" > "${work}/cache/builder.db.gz"
 
 # -f: the repository's .gitignore is about the source tree, not about this.
-git --work-tree="${work}" add -f -- feed cache/builder.db.gz cache/builder.db.sig
+git --work-tree="${work}" add -f -- feed cache/builder.db.gz cache/builder.db.sig ${generated[@]+"${generated[@]}"}
 tree="$(git write-tree)"
 sequence="$(sed -n 's/^ *"sequence": *\([0-9][0-9]*\).*/\1/p' "${work}/feed/stats.json" | head -n 1)"
 commit="$(git commit-tree "${tree}" -m "data: package ${sequence:-unknown}")"

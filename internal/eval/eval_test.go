@@ -208,3 +208,18 @@ func TestEveryCatalogAppHasACase(t *testing.T) {
 		}
 	}
 }
+
+// The corpus built into the binary is the one in testdata.
+func TestContainerCasesBuiltIn(t *testing.T) {
+	c, err := Load("testdata/corpus")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ContainerCases()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || len(got) != len(c.Containers) {
+		t.Fatalf("built-in cases = %d, corpus = %d", len(got), len(c.Containers))
+	}
+}

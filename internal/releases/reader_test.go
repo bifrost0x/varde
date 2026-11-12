@@ -737,3 +737,30 @@ func TestUndecodableRowCounted(t *testing.T) {
 		t.Fatalf("stats %+v lines %+v", st, lines)
 	}
 }
+
+// Past the deadline no image starts; what was read ships, and so do the
+// earlier lines of the images left for the next build.
+func TestDeadlineStopsNewReads(t *testing.T) {
+	f := newRegistry(t)
+	f.push(t, "org/a", "1.0.0", false, debian("amd64", "", "a=1"), debian("arm64", "", "a=1"))
+	f.push(t, "org/b", "2.0.0", false, debian("amd64", "", "b=2"), debian("arm64", "", "b=2"))
+	cat := newCatalog(t, []catalog.Entry{reviewedEntry("a", regHost+"/org/a"), reviewedEntry("b", regHost+"/org/b")}, nil)
+	r, _ := newReader(t, f)
+	clock := now0
+	r.Now = func() time.Time { return clock }
+	r.Deadline = now0.Add(time.Minute)
+	lines, st := run(t, r, cat, "a", "b")
+	if st.Read != 2 || st.DeadlinePassed || len(lines) != 4 {
+		t.Fatalf("before the deadline: stats %+v, %d lines", st, len(lines))
+	}
+	f.push(t, "org/a", "1.1.0", false, debian("amd64", "", "a=2"), debian("arm64", "", "a=2"))
+	clock = now0.Add(time.Minute)
+	f.take()
+	lines, st = run(t, r, cat, "a", "b")
+	if reqs := f.take(); len(reqs) != 0 {
+		t.Fatalf("asked the registry after the deadline: %v", reqs)
+	}
+	if !st.DeadlinePassed || st.NotStarted != 2 || len(lines) != 4 || lines[0].Tag != "1.0.0" {
+		t.Fatalf("after the deadline: stats %+v, lines %+v", st, lines)
+	}
+}

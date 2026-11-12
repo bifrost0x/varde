@@ -92,6 +92,10 @@ type Reader struct {
 	// zero.
 	Limits imagelayers.Limits
 	Log    *slog.Logger
+	// Deadline, when set, ends the run's registry work: no image starts
+	// after it, as when a budget is spent. It keeps the data build inside
+	// its time limit; the images left are read by a later build.
+	Deadline time.Time
 
 	// registryRepo maps an image to the repository asked of the registry;
 	// tests point it at a server, whose host a catalog image cannot name.
@@ -122,6 +126,8 @@ type Stats struct {
 	// spent; BudgetSpent says one was.
 	NotStarted  int
 	BudgetSpent bool
+	// DeadlinePassed says the Deadline stopped the run.
+	DeadlinePassed bool
 	// TooLarge counts images whose layers alone exceed MaxBytes; they
 	// are skipped and the run goes on.
 	TooLarge int
@@ -145,9 +151,9 @@ type job struct {
 // Run reads the newest release of each image of the catalog's apps, in
 // the order of order (app IDs by priority; reviewed apps go before
 // generated ones whatever order says, and apps order leaves out follow by
-// ID), and returns the lines to ship. A budget spent stops new reads; what
-// was read by then ships, and so does every earlier line of an app image
-// that is still in the catalog, with its read time. A registry failure
+// ID), and returns the lines to ship. A budget spent or the Deadline stops
+// new reads; what was read by then ships, and so does every earlier line of
+// an app image that is still in the catalog, with its read time. A registry failure
 // costs the image; only a store failure or the end of ctx ends the run.
 func (r *Reader) Run(ctx context.Context, cat *catalog.Catalog, order []string) ([]feed.ReleaseLine, Stats, error) {
 	var st Stats
@@ -159,7 +165,10 @@ func (r *Reader) Run(ctx context.Context, cat *catalog.Catalog, order []string) 
 		if err := ctx.Err(); err != nil {
 			return nil, st, err
 		}
-		if st.BudgetSpent {
+		if !r.Deadline.IsZero() && !r.Now().Before(r.Deadline) {
+			st.DeadlinePassed = true
+		}
+		if st.BudgetSpent || st.DeadlinePassed {
 			st.NotStarted += len(jobs) - i
 			break
 		}
