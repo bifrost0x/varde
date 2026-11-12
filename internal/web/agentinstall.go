@@ -257,14 +257,14 @@ func (a *app) agentInstall(w http.ResponseWriter, r *http.Request, cur *auth.Cur
 	// The agents this server knows: an identity found on a host that is
 	// not among them is from another server or revoked, and is replaced.
 	known := []string{}
-	if all, err := a.d.Store.Hosts(ctx); err != nil {
+	all, err := a.d.Store.Hosts(ctx)
+	if err != nil {
 		a.fail(w, r, cur, err)
 		return
-	} else {
-		for _, h := range all {
-			if h.Source == inventory.SourceAgent && h.State != inventory.HostRevoked {
-				known = append(known, h.ID)
-			}
+	}
+	for _, h := range all {
+		if h.Source == inventory.SourceAgent && h.State != inventory.HostRevoked {
+			known = append(known, h.ID)
 		}
 	}
 	each(len(d.Hosts), func(i int) {
