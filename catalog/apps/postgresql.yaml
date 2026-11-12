@@ -9,7 +9,7 @@ images:
 version:
   scheme: semver
   sources:
-    - tag: '^(?P<v>\d+\.\d+)(?:-[a-z][a-z0-9.]*)*$'
+    - tag: '^(?P<v>\d+\.\d+)(?:-(?:alpine|bookworm|bullseye|trixie|noble|jammy|focal|oraclelinux|oracle|debian|slim|ubi|nanoserver|windowsservercore)[a-z0-9.]*)*$'
 advisories:
   coverage: limited
   cpe:

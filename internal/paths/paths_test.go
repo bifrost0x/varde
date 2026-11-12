@@ -467,3 +467,19 @@ func TestLibraryFlawNeedsASignOfExploitation(t *testing.T) {
 		})
 	}
 }
+
+// The server an image is built around is not a library: its flaw opens a
+// path by its vector, whatever its exploitation score.
+func TestServerPackageOfTheImageIsNotALibrary(t *testing.T) {
+	r := Analyze(Input{
+		Machines:    []Machine{{ID: "m", Name: "docker", HostIDs: []string{"h"}}},
+		Hosts:       map[string]Host{"h": {Known: true}},
+		HostMachine: map[string]string{"h": "m"},
+		Workloads:   []Workload{{ID: "c", HostID: "h", Name: "web", Container: true, Exposure: "lan"}},
+		Services:    []Service{{MachineID: "m", Entry: LAN, WorkloadID: "c", Port: 80, Proto: "tcp"}},
+		Findings:    []Finding{{ID: "srv", WorkloadID: "c", Affected: true, ImagePackage: "nginx", Name: "nginx", Vector: vecNet, CVSS: 7.5}},
+	})
+	if len(r.Paths) != 1 || r.Placements["srv"].Class != OnPathLAN || r.Paths[0].Steps[1].Indirect {
+		t.Fatalf("paths %+v, placement %+v", r.Paths, r.Placements["srv"])
+	}
+}

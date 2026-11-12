@@ -10,7 +10,7 @@ oci_source:
 version:
   scheme: semver
   sources:
-    - tag: '^v?(?P<v>\d+\.\d+\.\d+)(?:-[a-z][a-z0-9.]*)*$'
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)(?:-(?:alpine|bookworm|bullseye|trixie|noble|jammy|focal|oraclelinux|oracle|debian|slim|ubi|nanoserver|windowsservercore)[a-z0-9.]*)*$'
 advisories:
   coverage: full
   github_repos:

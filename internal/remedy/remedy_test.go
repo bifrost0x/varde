@@ -138,3 +138,28 @@ func TestSuggestHostileInput(t *testing.T) {
 		t.Error("reference outside the grammar")
 	}
 }
+
+// A reference with a digest never moves, whatever tag stands beside it:
+// pulling it again brings nothing new.
+func TestFloatingAndPinned(t *testing.T) {
+	const digest = "@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459"
+	for _, c := range []struct {
+		ref              string
+		floating, pinned bool
+	}{
+		{"nginx:latest", true, false},
+		{"nginx", true, false},
+		{"nginx:1.28.0", false, false},
+		{"nginx:latest" + digest, false, true},
+		{"nginx" + digest, false, true},
+		{"nginx:1.28.0" + digest, false, true},
+	} {
+		ct := &inventory.Container{ImageRef: c.ref}
+		if Floating(ct) != c.floating || Pinned(ct) != c.pinned {
+			t.Errorf("%s: floating=%v pinned=%v, want %v %v", c.ref, Floating(ct), Pinned(ct), c.floating, c.pinned)
+		}
+	}
+	if Floating(nil) || Pinned(nil) {
+		t.Error("nil container")
+	}
+}

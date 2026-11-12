@@ -56,12 +56,15 @@ type Status struct {
 	// Limited is set when the last run left work for later because a
 	// source limits requests.
 	Limited bool
+	// Failed is set when a source of the last run answered with an error:
+	// what it would have brought is missing until a run succeeds.
+	Failed bool
 }
 
 // CatchingUp reports that what is shown may still be incomplete: no run has
 // finished yet, one is under way or wanted, or the last one was cut short.
 func (s Status) CatchingUp() bool {
-	return s.Running || s.Wanted || s.Limited || s.Completed.IsZero()
+	return s.Running || s.Wanted || s.Limited || s.Failed || s.Completed.IsZero()
 }
 
 // Status returns the current state.
@@ -138,13 +141,13 @@ func (r *Refresher) RunOnce(ctx context.Context) {
 	r.state.mu.Lock()
 	r.state.st.Running, r.state.st.Wanted = true, false
 	r.state.mu.Unlock()
-	limited, complete := false, false
+	limited, failed, complete := false, false, false
 	defer func() {
 		r.state.mu.Lock()
 		r.state.st.Running = false
 		if complete {
-			r.state.st.Limited = limited
-			if !limited {
+			r.state.st.Limited, r.state.st.Failed = limited, failed
+			if !limited && !failed {
 				r.state.st.Completed = time.Now()
 			}
 		}
@@ -173,6 +176,7 @@ func (r *Refresher) RunOnce(ctx context.Context) {
 			limited = true
 			r.Log.Warn("advisory source rate limited; continuing after reset", append(attrs, "err", err)...)
 		case err != nil:
+			failed = true
 			r.Log.Error("advisory source failed", append(attrs, "err", err)...)
 		default:
 			r.Log.Info("advisory source refreshed", attrs...)

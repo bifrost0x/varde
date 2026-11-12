@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/paths"
+	"github.com/bifrost0x/varde/internal/registry"
 	"github.com/bifrost0x/varde/internal/remedy"
 	"github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
@@ -528,16 +530,17 @@ type imageFinding struct {
 	Ref string
 	// App and AppVersion name what runs in the container, when recognised.
 	App, AppVersion string
-	// Floating is set when the container runs a moving tag.
-	Floating bool
-	Compose  *remedy.Compose
+	// Floating is set when the container runs a moving tag, Pinned when
+	// it is created from a digest and so never changes by a pull.
+	Floating, Pinned bool
+	Compose          *remedy.Compose
 }
 
 func (a *app) imageFinding(ctx context.Context, m match.Finding, wl inventory.Workload) *imageFinding {
 	if !m.Image || wl.Container == nil {
 		return nil
 	}
-	v := &imageFinding{Ref: wl.Container.ImageRef, Floating: remedy.Floating(wl.Container), Compose: remedy.ComposeOf(wl.Container)}
+	v := &imageFinding{Ref: wl.Container.ImageRef, Floating: remedy.Floating(wl.Container), Pinned: remedy.Pinned(wl.Container), Compose: remedy.ComposeOf(wl.Container)}
 	if ids, err := a.d.Store.Identifications(ctx); err == nil {
 		if id, ok := ids[wl.ID]; ok && id.AppID != "" {
 			v.App, v.AppVersion = a.appName(id.AppID), id.Version
@@ -735,13 +738,17 @@ func (a *app) coverageData(s *snapshot) coverageView {
 		c.Unidentified = append(c.Unidentified, ug)
 	}
 	registry := a.d.Settings.Get().RegistryTags
-	asked, _ := a.d.Store.RepositoryTags(context.Background())
+	asked, _ := a.d.Store.ImageTags(context.Background())
 	for _, g := range c.Summary.VersionUnknown {
 		vg := a.toGap(g)
 		if remedy.Floating(g.Workload.Container) {
-			// A moving tag: the registry tells which version it points to.
-			_, done := asked[vg.Repository]
-			vg.RegistryOff, vg.Pending = !registry, registry && !done
+			// A moving tag: the registry tells which version the running
+			// image is. The answer is kept per image digest; a container
+			// whose digest is unknown cannot be asked about at all.
+			digest := registrydigest(g.Workload.Container, vg.Repository)
+			_, done := asked[vg.Repository+"@"+digest]
+			vg.RegistryOff = !registry && digest != ""
+			vg.Pending = registry && digest != "" && !done
 		}
 		c.VersionUnknown = append(c.VersionUnknown, vg)
 	}
@@ -777,6 +784,16 @@ func (a *app) coverageData(s *snapshot) coverageView {
 		}
 	}
 	return c
+}
+
+// registrydigest is the registry digest of the image a container runs, for
+// the given repository; empty when the runtime did not report one (an image
+// built locally, for example).
+func registrydigest(c *inventory.Container, repository string) string {
+	if c == nil {
+		return ""
+	}
+	return registry.RepoDigest(c, repository)
 }
 
 // suggestURL opens a prefilled catalog issue. Only the image repository is
@@ -816,6 +833,12 @@ type appSources struct {
 	Asked []string
 	// NoSource is set when nothing is asked about the app at all.
 	NoSource bool
+	// Off names the sources the catalog gives for the app that are
+	// switched off; Active is set when at least one source is asked. An
+	// app with sources but none active is not checked, whatever the
+	// count says.
+	Off    []string
+	Active bool
 }
 
 // sourceNames are the stored source names in words.
@@ -830,6 +853,7 @@ func (a *app) appSources(ctx context.Context) ([]appSources, int, int, error) {
 	if err != nil {
 		return nil, 0, 0, err
 	}
+	eff, mode := a.d.Settings.Get(), a.mode()
 	total, apps := 0, 0
 	for id, by := range counts {
 		if _, system := distro.SystemName(id); system {
@@ -862,15 +886,30 @@ func (a *app) appSources(ctx context.Context) ([]appSources, int, int, error) {
 			row.From = append(row.From, name)
 		}
 		sort.Strings(row.From)
+		// A full feed carries what the optional sources would bring; in
+		// direct and package mode osv.dev and the NVD are asked only when
+		// switched on.
+		full := mode != "direct" && mode != "package"
 		for _, repo := range app.Advisories.GitHubRepos {
 			row.Asked = append(row.Asked, "advisories of github.com/"+repo)
+			row.Active = row.Active || !row.NoSource
 		}
 		for _, p := range app.Advisories.OSVPackages {
-			row.Asked = append(row.Asked, "osv.dev package "+p.Name)
+			if full || eff.DirectOSV {
+				row.Asked, row.Active = append(row.Asked, "osv.dev package "+p.Name), true
+			} else {
+				row.Asked, row.Off = append(row.Asked, "osv.dev package "+p.Name+" (switched off)"), append(row.Off, "osv.dev")
+			}
 		}
 		for _, c := range app.Advisories.CPE {
-			row.Asked = append(row.Asked, "NVD product "+strings.TrimPrefix(c, "cpe:2.3:a:"))
+			name := "NVD product " + strings.TrimPrefix(c, "cpe:2.3:a:")
+			if full || eff.DirectNVD {
+				row.Asked, row.Active = append(row.Asked, name), true
+			} else {
+				row.Asked, row.Off = append(row.Asked, name+" (switched off)"), append(row.Off, "the NVD")
+			}
 		}
+		row.Off = slices.Compact(row.Off)
 		out = append(out, row)
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })

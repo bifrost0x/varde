@@ -9,8 +9,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
+	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/coverage"
 	"github.com/bifrost0x/varde/internal/discovery"
 	"github.com/bifrost0x/varde/internal/identify"
@@ -413,8 +415,8 @@ func TestSetupReminderCompactAndHideable(t *testing.T) {
 // While advisory data is still being fetched, every page says that what it
 // shows is not yet everything.
 func TestCatchingUpNotice(t *testing.T) {
-	busy, limited := true, false
-	h := newHarness(t, func(d *Deps) { d.CatchingUp = func() (bool, bool) { return busy, limited } })
+	busy, limited, failed := true, false, false
+	h := newHarness(t, func(d *Deps) { d.CatchingUp = func() (bool, bool, bool) { return busy, limited, failed } })
 	h.signIn(t)
 	for _, path := range []string{"/", "/findings", "/systems/gaps"} {
 		if _, body := h.do(t, "GET", path, nil, nil); !strings.Contains(body, "Findings and versions keep arriving") || !strings.Contains(body, "goes away by itself") {
@@ -425,7 +427,11 @@ func TestCatchingUpNotice(t *testing.T) {
 	if _, body := h.do(t, "GET", "/", nil, nil); !strings.Contains(body, "limits how many requests") {
 		t.Error("a rate limit is not named")
 	}
-	busy, limited = false, false
+	limited, failed = false, true
+	if _, body := h.do(t, "GET", "/", nil, nil); !strings.Contains(body, "answered with an error") || strings.Contains(body, "goes away by itself") {
+		t.Error("a failed source is not named, or the notice promises to go away")
+	}
+	busy, failed = false, false
 	if _, body := h.do(t, "GET", "/", nil, nil); strings.Contains(body, "keep arriving") {
 		t.Error("the notice stays after the data is complete")
 	}
@@ -451,5 +457,47 @@ func TestAdvisoryDataPerApp(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("advisory data page lacks %q", want)
 		}
+	}
+}
+
+// An app whose only source is switched off is not "compared, none
+// published": the page says that it is not checked and which switch does it.
+func TestAdvisoryDataNamesSwitchedOffSources(t *testing.T) {
+	cat, err := catalog.Load(fstest.MapFS{"pg.yaml": {Data: []byte(`id: postgresql
+name: PostgreSQL
+homepage: https://www.postgresql.org
+images: [{match: library/postgres}]
+version: {scheme: semver}
+advisories: {coverage: limited, cpe: ["cpe:2.3:a:postgresql:postgresql"]}
+maintainers_of_entry: [bifrost0x]
+verified: 2026-11-12
+`)}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var set *settings.Service
+	h := newHarness(t, func(d *Deps) { d.Catalog = catalog.NewLive(cat); set = d.Settings })
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "db", Container: &inventory.Container{ImageRef: "postgres:16.4"}},
+	}, now)
+	wid := inventory.WorkloadID("local", inventory.KindContainer, "c1")
+	if err := h.store.ReplaceIdentifications(ctx, []identify.Result{{WorkloadID: wid, AppID: "postgresql", Confidence: identify.Exact, Version: "16.4"}}, now); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/settings/sources", nil, nil)
+	body = html.UnescapeString(body)
+	if !strings.Contains(body, "not checked") || !strings.Contains(body, "the NVD, which is switched off") || strings.Contains(body, "none published") {
+		t.Errorf("an app whose only source is off is shown as compared:\n%s", body)
+	}
+	if err := set.Update(ctx, map[string]string{settings.KeyDirectNVD: "true"}, "admin", now); err != nil {
+		t.Fatal(err)
+	}
+	_, body = h.do(t, "GET", "/settings/sources", nil, nil)
+	body = html.UnescapeString(body)
+	if !strings.Contains(body, "none published") || strings.Contains(body, "switched off") {
+		t.Errorf("with the NVD on the app counts as compared:\n%s", body)
 	}
 }

@@ -53,8 +53,9 @@ type Deps struct {
 	LastScan func() time.Time
 	// CatchingUp reports that advisory data is still being fetched: no run
 	// through the sources has finished yet, or one is under way. limited
-	// is set when a source put requests off for later. Nil when unknown.
-	CatchingUp func() (catchingUp, limited bool)
+	// is set when a source put requests off for later, failed when one
+	// answered with an error. Nil when unknown.
+	CatchingUp func() (catchingUp, limited, failed bool)
 	// LocalDocker is set when the local Docker collector runs.
 	LocalDocker bool
 	// Mode is the advisory mode (direct, feed or hybrid); empty means direct.
@@ -321,7 +322,9 @@ func (a *app) page(w http.ResponseWriter, r *http.Request, cur *auth.Current, st
 	if a.d.CatchingUp != nil {
 		// What the pages show is not final while the sources are still
 		// being read: say so, or early results look like all there is.
-		if busy, limited := a.d.CatchingUp(); limited {
+		if busy, limited, failed := a.d.CatchingUp(); failed {
+			v.Banners = append(v.Banners, Banner{"warn", "alert", "An advisory source answered with an error, so what it would have brought is missing: what is shown is not everything. Advisory data under Settings names the source; Varde asks it again at the next refresh."})
+		} else if limited {
 			v.Banners = append(v.Banners, Banner{"info", "refresh", "Varde is still fetching advisory data: a source limits how many requests it accepts per hour, so the rest follows by itself over the next hours. Findings and versions keep arriving until then; what is shown is not yet everything."})
 		} else if busy {
 			v.Banners = append(v.Banners, Banner{"info", "refresh", "Varde is fetching advisory data for what it found. Findings and versions keep arriving until the first round through every source is done; what is shown is not yet everything. This notice goes away by itself."})

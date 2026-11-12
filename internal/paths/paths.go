@@ -336,6 +336,10 @@ func (a *analysis) exploits(svc Service) []exploit {
 			switch {
 			case f.ImagePackage == "":
 				add(f, false, "")
+			case ServerPackage(f.ImagePackage):
+				// The image's own server (nginx in an nginx image): a flaw
+				// in the service, reported through its package.
+				add(f, false, ", the server in the image")
 			case NetworkPackage(f.ImagePackage):
 				// A library of the image the app may use to talk to the
 				// network: weaker evidence than a flaw in the app.

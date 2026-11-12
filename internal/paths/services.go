@@ -156,6 +156,22 @@ func ServicePort(port uint16) bool { _, ok := servicesByPort[port]; return ok }
 // service even when Varde cannot see which.
 func NetworkPackage(src string) bool { return networkSet[src] }
 
+// ServerPackage reports whether a source package is a server that answers
+// on a port (nginx, samba, openssh), as opposed to a library a service
+// links. A flaw in it is a flaw in a service, not in something the service
+// may or may not use.
+func ServerPackage(src string) bool { return serverSet[src] }
+
+var serverSet = func() map[string]bool {
+	m := map[string]bool{}
+	for _, pkgs := range servicesByPort {
+		for _, p := range pkgs {
+			m[p] = true
+		}
+	}
+	return m
+}()
+
 var networkSet = func() map[string]bool {
 	m := map[string]bool{}
 	for _, pkgs := range servicesByPort {

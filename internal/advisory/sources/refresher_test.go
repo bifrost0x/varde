@@ -4,6 +4,7 @@ package sources
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -41,9 +42,15 @@ func TestRefresherStatus(t *testing.T) {
 	if st := r.Status(); !st.CatchingUp() || !st.Limited || st.Wanted || st.Running || !st.Completed.IsZero() {
 		t.Fatalf("after a run a source cut short: %+v", st)
 	}
+	// A source that fails brought nothing: the data is not complete.
+	src.err = errors.New("upstream answered 500")
+	r.RunOnce(t.Context())
+	if st := r.Status(); !st.CatchingUp() || !st.Failed || st.Limited || !st.Completed.IsZero() {
+		t.Fatalf("after a run with a failed source: %+v", st)
+	}
 	src.err = nil
 	r.RunOnce(t.Context())
-	if st := r.Status(); st.CatchingUp() || st.Limited || st.Completed.IsZero() {
+	if st := r.Status(); st.CatchingUp() || st.Limited || st.Failed || st.Completed.IsZero() {
 		t.Fatalf("after a full run: %+v", st)
 	}
 	// New apps make the data incomplete again until the next run.

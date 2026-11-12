@@ -69,6 +69,13 @@ func TestSeedIdentification(t *testing.T) {
 		{"memcached:1.6.31-alpine", "memcached", "1.6.31", nil},
 		{"mpepping/cyberchef:v10.19.4", "cyberchef", "10.19.4", nil},
 		{"mpepping/cyberchef:latest", "cyberchef", "", nil},
+		// A pre-release is not the release: its suffix is no image variant,
+		// so the tag is not taken for the stable version.
+		{"mongo:8.0.0-rc1", "mongodb", "", nil},
+		{"redis:8.0-m03-alpine", "redis", "", nil},
+		{"postgres:17.0-beta1", "postgresql", "", nil},
+		{"redis:7.4.1-alpine3.20", "redis", "7.4.1", nil},
+		{"mysql:8.4.3-oracle", "mysql", "8.4.3", nil},
 	}
 	for _, c := range cases {
 		w := inventory.Workload{Kind: inventory.KindContainer, Name: c.app, Container: &inventory.Container{ImageRef: c.image, ImageLabels: c.labels}}
