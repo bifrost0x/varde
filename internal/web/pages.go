@@ -212,6 +212,8 @@ type overviewData struct {
 	Notices []store.Notice
 	// Mode is where advisories come from: direct, feed or hybrid.
 	Mode string
+	// Updates are the things to do, the numbers the overview leads with.
+	Updates updateCounts
 	// Steps are the next setup steps, ranked by what they unlock.
 	Steps []step
 	// Guide leads through getting started; it carries the notification
@@ -304,7 +306,9 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	if len(d.Urgent) > 5 {
 		d.Urgent = d.Urgent[:5]
 	}
-	for _, g := range a.todoGroups(s, open) {
+	todo := a.todoGroups(s, open)
+	d.Updates = countUpdates(todo)
+	for _, g := range todo {
 		if g.NewPriority != "P1" && g.NewPriority != "P2" {
 			continue
 		}

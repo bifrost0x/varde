@@ -4,6 +4,8 @@ package web
 
 import (
 	"context"
+	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -348,7 +350,7 @@ func TestPagesRenderForSignedInUser(t *testing.T) {
 	_, _ = h.store.SyncFindings(ctx, []store.FindingInput{{WorkloadID: wid, AppID: "immich", AdvisoryID: "GHSA-test", MatchState: "affected", FixedIn: "1.121.0", Detail: map[string]any{"summary": "<b>x</b>"}}}, now)
 	_ = h.store.SetAssessments(ctx, []store.Assessment{{ID: store.FindingID(wid, "GHSA-test"), Priority: "P1", Exposure: "public"}})
 	_, body = h.do(t, "GET", "/", nil, nil)
-	if !strings.Contains(body, "1 urgent update to do") || !strings.Contains(body, "1 new urgent finding on 1 container or system") || !strings.Contains(body, `class="todo todo--p1"`) || !strings.Contains(body, "hero--alert") || strings.Contains(body, "<b>x</b>") {
+	if !strings.Contains(body, "1 urgent update to do") || !strings.Contains(body, "On 1 container or system") || !strings.Contains(body, `class="todo todo--p1"`) || !strings.Contains(body, "hero--alert") || strings.Contains(body, "<b>x</b>") {
 		t.Error("P1 state not rendered or upstream text not escaped")
 	}
 	resp, body := h.do(t, "GET", "/findings/"+store.FindingID(wid, "GHSA-test"), nil, nil)
@@ -701,5 +703,51 @@ func TestHTTPSOnlyCookiesOverHTTPExplained(t *testing.T) {
 	_, body = h.do(t, "POST", "/setup", form, map[string]string{"Origin": "http://evil.example"})
 	if strings.Contains(body, "VARDE_BEHIND_TLS_PROXY") || !strings.Contains(body, "Request blocked") {
 		t.Errorf("cross-site answer: %s", body)
+	}
+}
+
+// The overview counts updates, not findings: one container with many
+// flawed packages is one thing to do.
+func TestOverviewCountsUpdates(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "a", Name: "immich", Container: &inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.120.0"}},
+		{Kind: inventory.KindContainer, RuntimeID: "b", Name: "other", Container: &inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.120.0"}},
+	}, now)
+	wa, wb := inventory.WorkloadID("local", inventory.KindContainer, "a"), inventory.WorkloadID("local", inventory.KindContainer, "b")
+	var in []store.FindingInput
+	var as []store.Assessment
+	for i := range 30 {
+		id := fmt.Sprintf("GHSA-%02d", i)
+		in = append(in, store.FindingInput{WorkloadID: wa, AppID: "immich", AdvisoryID: id, MatchState: "affected", FixedIn: "1.121.0"})
+		as = append(as, store.Assessment{ID: store.FindingID(wa, id), Priority: "P2", Exposure: "lan"})
+	}
+	in = append(in, store.FindingInput{WorkloadID: wb, AppID: "immich", AdvisoryID: "GHSA-nofix", MatchState: "affected"})
+	as = append(as, store.Assessment{ID: store.FindingID(wb, "GHSA-nofix"), Priority: "P3", Exposure: "lan"})
+	if _, err := h.store.SyncFindings(ctx, in, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.SetAssessments(ctx, as); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/", nil, nil)
+	body = html.UnescapeString(body)
+	_, stats, ok := strings.Cut(body, `class="stats"`)
+	if ok {
+		stats, _, ok = strings.Cut(stats, "</div>")
+	}
+	if !ok {
+		t.Fatal("overview has no tiles")
+	}
+	if !strings.Contains(stats, `P2</span> updates</span><span class="stat__value">1<`) || !strings.Contains(stats, `P3</span> updates</span><span class="stat__value">1<`) {
+		t.Errorf("tiles do not count updates:\n%s", stats)
+	}
+	for _, want := range []string{"2 updates to do, none urgent", "1 update has no fixed version published yet", "The 31 findings behind them"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("overview lacks %q", want)
+		}
 	}
 }

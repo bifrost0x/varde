@@ -103,7 +103,8 @@ func TestRendering(t *testing.T) {
 	golden(t, "immediate_single.txt", m.Title+"\n\n"+m.Body)
 
 	two := Immediate([]Item{item("1", policy.P1), item("2", policy.P1)})
-	if two.Title != "[varde] P1: 2 urgent findings" {
+	// Both are findings of one container: one update to install.
+	if two.Title != "[varde] P1: 1 urgent update (2 findings)" {
 		t.Errorf("multi title %q", two.Title)
 	}
 
@@ -609,5 +610,20 @@ func TestAttackPathLine(t *testing.T) {
 	d, ok := Digest(KindDigestWeekly, []Item{it}, nil, nil, nil)
 	if !ok || !strings.Contains(d.Body, "Attack path: opens an attack path from the internet") {
 		t.Fatalf("digest:\n%s", d.Body)
+	}
+}
+
+// An update is a container or the system packages of a host. Packages of
+// images belong to their container, not to the host's package update.
+func TestUpdatesCountContainersAndHosts(t *testing.T) {
+	items := []Item{
+		{WorkloadName: "a", HostName: "h", AppID: "os:Alpine:v3.24/zlib", Image: true},
+		{WorkloadName: "a", HostName: "h", AppID: "immich"},
+		{WorkloadName: "b", HostName: "h", AppID: "os:Alpine:v3.24/zlib", Image: true},
+		{WorkloadName: "openssl", HostName: "h", AppID: "os:Debian:13/openssl"},
+		{WorkloadName: "glibc", HostName: "h", AppID: "os:Debian:13/glibc"},
+	}
+	if n := updates(items); n != 3 {
+		t.Errorf("updates = %d, want 3 (container a, container b, the host's packages)", n)
 	}
 }

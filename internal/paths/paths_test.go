@@ -483,3 +483,23 @@ func TestServerPackageOfTheImageIsNotALibrary(t *testing.T) {
 		t.Fatalf("paths %+v, placement %+v", r.Paths, r.Placements["srv"])
 	}
 }
+
+// A known exploited flaw is never background noise: Varde cannot see every
+// way in. Only physical access keeps it there.
+func TestKnownExploitedIsNeverNoise(t *testing.T) {
+	in := func(vector string) Input {
+		return Input{
+			Machines:    []Machine{{ID: "m", Name: "m", HostIDs: []string{"h"}}},
+			Hosts:       map[string]Host{"h": {Known: true}},
+			HostMachine: map[string]string{"h": "m"},
+			Workloads:   []Workload{{ID: "c", HostID: "h", Name: "db", Container: true, Exposure: "internal"}},
+			Findings:    []Finding{{ID: "f", WorkloadID: "c", Vector: vector, CVSS: 9.8, KEV: true, Affected: true}},
+		}
+	}
+	if pl := Analyze(in(vecNet)).Placements["f"]; pl.Class != Unclear || !strings.Contains(pl.Reason, "known exploited") || !strings.Contains(pl.Reason, "publishes no port") {
+		t.Errorf("network flaw: %+v", pl)
+	}
+	if pl := Analyze(in("CVSS:3.1/AV:P/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")).Placements["f"]; pl.Class != Noise {
+		t.Errorf("physical access: %+v", pl)
+	}
+}

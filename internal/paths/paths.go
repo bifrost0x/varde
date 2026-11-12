@@ -727,8 +727,19 @@ func (a *analysis) result() Result {
 	return r
 }
 
-// place says how a finding relates to the paths, with the reason.
+// place says how a finding relates to the paths, with the reason. A known
+// exploited flaw is never background noise, unless it needs physical access:
+// what Varde does not see (firewalls, port forwards, services it cannot tie
+// to a package) makes "no way in" a guess.
 func (a *analysis) place(f Finding) Placement {
+	pl := a.placement(f)
+	if pl.Class == Noise && f.KEV && vectorOf(f.Vector) != "P" {
+		return Placement{Class: Unclear, Reason: "known exploited; Varde sees no way in (" + pl.Reason + "), but cannot see firewalls, port forwards or every service"}
+	}
+	return pl
+}
+
+func (a *analysis) placement(f Finding) Placement {
 	if used := a.used[f.ID]; len(used) > 0 {
 		best := Amplifier
 		var ids []string

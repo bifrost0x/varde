@@ -95,7 +95,7 @@ func Immediate(items []Item) Message {
 		it := items[0]
 		title = fmt.Sprintf("%s P1 %s: %s", prefix, it.AppName, headline(it))
 	} else {
-		title = fmt.Sprintf("%s P1: %d urgent findings", prefix, len(items))
+		title = fmt.Sprintf("%s P1: %s", prefix, updatesAndFindings(items, "urgent update"))
 	}
 	var b strings.Builder
 	for i, it := range items {
@@ -121,7 +121,7 @@ func Digest(kind string, items, attention []Item, notices []Notice, resolved []I
 	if kind == KindDigestWeekly {
 		period = "Weekly"
 	}
-	title := fmt.Sprintf("%s %s digest: %s", prefix, period, plural(len(items), "finding"))
+	title := fmt.Sprintf("%s %s digest: %s", prefix, period, updatesAndFindings(items, "update"))
 	if len(attention) > 0 {
 		title += fmt.Sprintf(", %d need attention", len(attention))
 	}
@@ -323,6 +323,33 @@ func groupItems(items []Item) [][]Item {
 		out[i] = append(out[i], it)
 	}
 	return out
+}
+
+// updates counts the things to do behind items: one container or app on a
+// machine, or the system packages of a machine. It is how many updates the
+// reader has to install, not how many advisories there are.
+func updates(items []Item) int {
+	seen := map[string]bool{}
+	for _, it := range items {
+		key := it.WorkloadName + "\x00" + it.HostName
+		if strings.HasPrefix(it.AppID, "os:") && !it.Image {
+			// A host's own packages: one package update for all of them.
+			// A package of a container's image belongs to that container.
+			key = "os\x00" + it.HostName
+		}
+		seen[key] = true
+	}
+	return len(seen)
+}
+
+// updatesAndFindings says "3 updates (41 findings)", or only the updates
+// when each fixes one finding.
+func updatesAndFindings(items []Item, noun string) string {
+	n := updates(items)
+	if n == len(items) {
+		return plural(n, noun)
+	}
+	return plural(n, noun) + " (" + plural(len(items), "finding") + ")"
 }
 
 // groupShown is how many advisories a group names before "and N more".

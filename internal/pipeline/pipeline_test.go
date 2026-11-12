@@ -105,10 +105,9 @@ func TestRunStoresIdentifications(t *testing.T) {
 		!strings.Contains(string(affected.Detail), `"kev":true`) || !strings.Contains(string(affected.Detail), `"cvss":9.1`) {
 		t.Fatalf("affected finding: %+v %s", affected, affected.Detail)
 	}
-	// KEV-listed, but no published port and no route: background noise,
-	// kept at P2 because it is known to be exploited (ADR 0034).
-	// Known exploited: its place never lowers it (ADR 0034).
-	if affected.Priority != "P1" || affected.Exposure != "internal" || affected.PathClass != "noise" || !strings.HasPrefix(affected.PriorityReason, "known exploited") {
+	// KEV-listed, but no published port and no route: not noise, since
+	// Varde cannot see every way in; its place never lowers it (ADR 0034).
+	if affected.Priority != "P1" || affected.Exposure != "internal" || affected.PathClass != "unclear" || !strings.HasPrefix(affected.PriorityReason, "known exploited") {
 		t.Fatalf("assessment: %+v", affected)
 	}
 	cands, err := p.Candidates(ctx)

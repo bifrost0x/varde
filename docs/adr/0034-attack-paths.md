@@ -89,3 +89,12 @@ not use the flawed part.
 Paths carry what they end on (subject, where, what the attacker gains); the page names them by
 it and puts paths with one way in and one fix on one card. For a flaw in an image package the
 cut says to update the image, since the fixed version is the package's and not the app's.
+
+## Amendment (2026-11-12): priority follows the path, and known exploited is never noise
+A known exploited flaw (CISA KEV) is placed as unclear, never as noise, unless it needs physical
+access: what Varde does not see (firewalls, port forwards, services it cannot tie to a package)
+makes "no way in" a guess. It keeps its priority. A flaw in a package of a container's image that
+is neither in KEV nor likely to be exploited (EPSS below 0.10) and that no path uses is P3, except
+on a container reachable from the internet. The overview and the digests count the updates these
+findings call for, one per container or system, not the findings.
+

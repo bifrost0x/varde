@@ -111,11 +111,17 @@ func TestPathPriority(t *testing.T) {
 		{policy.P3, paths.OnPathLAN, match.Finding{CVSS: 5}, policy.P2},
 		{policy.P1, paths.OnPathLAN, match.Finding{KEV: true}, policy.P1},
 		{policy.P2, paths.Noise, match.Finding{CVSS: 9.8}, policy.P3},
-		{policy.P1, paths.Noise, match.Finding{KEV: true}, policy.P1},
+		// Known exploited stays in the noise only for physical access.
+		{policy.P1, paths.Noise, match.Finding{KEV: true}, policy.P2},
 		{policy.P2, paths.Unclear, match.Finding{CVSS: 8}, policy.P2},
+		// A package of the image, nothing says it is exploited, no path:
+		// the next regular update, unless the container is public.
+		{policy.P2, paths.Unclear, match.Finding{CVSS: 8, Image: true}, policy.P3},
+		{policy.P2, paths.Unclear, match.Finding{CVSS: 8, Image: true, EPSS: 0.2}, policy.P2},
+		{policy.P1, paths.Unclear, match.Finding{CVSS: 9, Image: true, KEV: true}, policy.P1},
 		{policy.None, paths.OnPathInternet, match.Finding{CVSS: 9}, policy.None},
 	} {
-		if got, _ := pathPriority(c.prio, "r", paths.Placement{Class: c.class, Reason: "x"}, c.m); got != c.want {
+		if got, _ := pathPriority(c.prio, "r", paths.Placement{Class: c.class, Reason: "x"}, c.m, inventory.ExposureLAN); got != c.want {
 			t.Errorf("%s %s: got %s, want %s", c.prio, c.class, got, c.want)
 		}
 	}
@@ -176,5 +182,20 @@ func TestContainerExposuresSharedNetwork(t *testing.T) {
 		proxyRole(&inventory.Container{ImageRef: "cloudflare/cloudflared:2024.10.0"}) != "tunnel" ||
 		proxyRole(&inventory.Container{ImageRef: "postgres:16"}) != "" {
 		t.Fatal("proxy roles")
+	}
+}
+
+func TestPathPriorityKeepsPublicImagePackages(t *testing.T) {
+	// The exposure decides, not the wording of the policy's reason: a P2
+	// "high severity" on a public container stays P2.
+	for _, c := range []struct {
+		prio   policy.Priority
+		reason string
+		cvss   float64
+	}{{policy.P1, "critical severity and publicly exposed", 9.8}, {policy.P2, "high severity", 8.0}} {
+		m := match.Finding{CVSS: c.cvss, Image: true}
+		if got, _ := pathPriority(c.prio, c.reason, paths.Placement{Class: paths.Unclear, Reason: "x"}, m, inventory.ExposurePublic); got != c.prio {
+			t.Errorf("public container, %s: got %s, want %s", c.reason, got, c.prio)
+		}
 	}
 }

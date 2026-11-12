@@ -417,7 +417,7 @@ func escapeOf(c *inventory.Container) string {
 // paths: on a path from the internet it is urgent, an amplifier or a path
 // from the LAN at least P2, background noise at most P3 (P2 when known to
 // be exploited). Unclear findings keep the matrix's priority.
-func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m match.Finding) (policy.Priority, string) {
+func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m match.Finding, exposure inventory.Exposure) (policy.Priority, string) {
 	if prio == policy.None {
 		return prio, reason
 	}
@@ -432,18 +432,28 @@ func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m mat
 	case paths.Amplifier:
 		return maxPrio(prio, policy.P2), "turns a foothold on an attack path into root"
 	case paths.Noise:
-		switch {
-		case m.KEV && strings.Contains(pl.Reason, "physical access"):
+		if m.KEV {
+			// Only physical access keeps a known exploited flaw in the
+			// noise (paths.place); it is still worth the daily digest.
 			return policy.P2, "known exploited, but " + pl.Reason
-		case m.KEV:
-			// Known exploited: Varde's view of reachability is not good
-			// enough to silence it, only to say why it looks unreachable.
-			return prio, reason + "; " + pl.Reason
 		}
 		return policy.P3, "background noise: " + pl.Reason
+	case paths.Unclear:
+		// A package inside an image that nothing says is exploited and
+		// no known path uses: nearly every image has such flaws, and each
+		// one in the daily digest would bury what matters. It is fixed
+		// with the image's next regular update. On a container reachable
+		// from the internet the priority stays as the policy set it.
+		if m.Image && !m.KEV && m.EPSS < libraryEPSS && prio.Rank() > policy.P3.Rank() && exposure != inventory.ExposurePublic {
+			return policy.P3, "a package inside the image; nothing says it is exploited, and no known attack path uses it"
+		}
 	}
 	return prio, reason
 }
+
+// libraryEPSS is the probability of exploitation from which a library flaw
+// counts as being used (internal/paths uses the same threshold).
+const libraryEPSS = 0.10
 
 func maxPrio(a, b policy.Priority) policy.Priority {
 	if b.Rank() > a.Rank() {

@@ -8,15 +8,15 @@
   <img class="hero__mark" src="/static/brand/mark.svg" alt="">
   <div>
     <h1 class="hero__title" id="status-title">{{plural $d.UrgentTodo "urgent update"}} to do</h1>
-    <p class="hero__text">{{plural $d.Findings.New.P1 "new urgent finding"}} on {{$d.UrgentTodo}} {{if eq $d.UrgentTodo 1}}container or system{{else}}containers or systems{{end}}. Each card below names the one update that fixes them; install it and Varde closes them at the next report.</p>
+    <p class="hero__text">On {{$d.UrgentTodo}} {{if eq $d.UrgentTodo 1}}container or system{{else}}containers or systems{{end}}. Each card below names the one update that fixes {{if eq $d.UrgentTodo 1}}it{{else}}them{{end}}; install it and Varde closes its findings at the next report.</p>
   </div>
 </section>
 {{else if $d.NotUrgent}}
 <section class="hero hero--clear" aria-labelledby="status-title">
   <img class="hero__mark" src="/static/brand/mark-unlit.svg" alt="">
   <div>
-    <h1 class="hero__title" id="status-title">{{plural $d.NotUrgent "new finding"}}, none urgent</h1>
-    <p class="hero__text">{{if $d.Findings.New.P2}}P2 findings go into the daily digest{{if $d.Findings.New.P3}}, P3 into the weekly one{{end}}{{else}}P3 findings go into the weekly digest{{end}}. Each one names the update that fixes it.</p>
+    <h1 class="hero__title" id="status-title">{{plural (add $d.Updates.P2 $d.Updates.P3) "update"}} to do, none urgent</h1>
+    <p class="hero__text">{{if $d.Updates.P2}}Serious ones go into the daily digest{{if $d.Updates.P3}}, the rest into the weekly one{{end}}{{else}}They go into the weekly digest{{end}}. Each card names the one update that fixes a container or system.</p>
   </div>
 </section>
 {{else}}
@@ -40,11 +40,12 @@
 {{end}}
 
 {{if not $d.Empty}}<div class="stats">
-  <a class="stat {{if $d.Findings.New.P1}}stat--p1{{end}}" href="/findings?priority=P1&amp;state=open"><span class="stat__label">{{template "prio" "P1"}} new</span><span class="stat__value">{{$d.Findings.New.P1}}</span><span class="stat__sub">reachable or exploited: notified at once</span></a>
-  <a class="stat" href="/findings?priority=P2&amp;state=open"><span class="stat__label">{{template "prio" "P2"}} new</span><span class="stat__value">{{$d.Findings.New.P2}}</span><span class="stat__sub">serious: in the daily digest</span></a>
-  <a class="stat" href="/findings?priority=P3&amp;state=open"><span class="stat__label">{{template "prio" "P3"}} new</span><span class="stat__value">{{$d.Findings.New.P3}}</span><span class="stat__sub">fix with the next regular update: weekly digest</span></a>
-  <a class="stat" href="/findings?match=unverified&amp;state=open"><span class="stat__label">{{template "prio" ""}}</span><span class="stat__value">{{$d.Findings.New.Unverified}}</span><span class="stat__sub">Varde could not confirm the version</span></a>
+  <a class="stat {{if $d.Updates.P1}}stat--p1{{end}}" href="/findings?priority=P1&amp;state=open"><span class="stat__label">{{template "prio" "P1"}} updates</span><span class="stat__value">{{$d.Updates.P1}}</span><span class="stat__sub">reachable or exploited: do these now</span></a>
+  <a class="stat" href="/findings?priority=P2&amp;state=open"><span class="stat__label">{{template "prio" "P2"}} updates</span><span class="stat__value">{{$d.Updates.P2}}</span><span class="stat__sub">serious: in the daily digest</span></a>
+  <a class="stat" href="/findings?priority=P3&amp;state=open"><span class="stat__label">{{template "prio" "P3"}} updates</span><span class="stat__value">{{$d.Updates.P3}}</span><span class="stat__sub">with the next regular update: weekly digest</span></a>
+  <a class="stat" href="/findings?match=unverified&amp;state=open"><span class="stat__label">{{template "prio" ""}}</span><span class="stat__value">{{$d.Updates.Unconfirmed}}</span><span class="stat__sub">{{if eq $d.Updates.Unconfirmed 1}}container or system{{else}}containers or systems{{end}} with findings Varde cannot confirm</span></a>
 </div>
+<p class="small muted">One update is one container or system to bring up to date; it fixes all of its findings at once.{{if $d.Updates.NoFix}} {{plural $d.Updates.NoFix "update"}} {{if eq $d.Updates.NoFix 1}}has{{else}}have{{end}} no fixed version published yet.{{end}} The {{$d.Updates.Findings}} findings behind them are under <a href="/findings">Findings</a>.</p>
 {{if $d.Acknowledged}}<p class="small muted"><a href="/findings?state=acknowledged">{{plural $d.Acknowledged "acknowledged or snoozed finding"}}</a> not counted above.</p>{{end}}{{end}}
 
 {{if or (not $d.Empty) $d.Guide.Started}}{{template "setup" .}}{{end}}
