@@ -28,7 +28,7 @@ on:
     branches: [main]
     paths:
       - "catalog/**"
-      - "internal/applists/**"
+      - "index/**"
   workflow_dispatch:
     inputs:
       force:
