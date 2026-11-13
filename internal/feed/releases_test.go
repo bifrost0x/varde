@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -229,26 +230,146 @@ func TestBadReleasesRefusesUpdate(t *testing.T) {
 	}
 }
 
-// The line format is frozen once shipped: this pins its exact encoding.
+// The line format is frozen once shipped: this pins its exact encoding,
+// as installations keep it per app image, and the blob's records.
 func TestReleaseLineGolden(t *testing.T) {
 	l := testRelease("immich", "arm64")
 	l.Platform.Variant = "v8"
 	l.Partial = true
+	head := `"app_id":"immich","image":"ghcr.io/immich-app/immich-server","tag":"v1.120.0","version":"1.120.0",` +
+		`"index_digest":"sha256:` + strings.Repeat("a", 64) + `","platform":{"os":"linux","architecture":"arm64","variant":"v8"},` +
+		`"manifest_digest":"sha256:` + strings.Repeat("b", 64) + `","read":"2026-11-12T03:00:00Z","distro":"debian-12",` +
+		`"os_name":"Debian GNU/Linux 12 (bookworm)","partial":true,"packages":`
+	pkgs := `[{"manager":"dpkg","name":"openssl","version":"3.0.15-1~deb12u1","distro":"debian-12","source":"openssl"}]`
+	line, err := json.Marshal(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "{" + head + pkgs + "}"; string(line) != want {
+		t.Fatalf("line encoding changed:\n got %s\nwant %s", line, want)
+	}
 	got, err := marshalReleases([]ReleaseLine{l})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"app_id":"immich","image":"ghcr.io/immich-app/immich-server","tag":"v1.120.0","version":"1.120.0",` +
-		`"index_digest":"sha256:` + strings.Repeat("a", 64) + `","platform":{"os":"linux","architecture":"arm64","variant":"v8"},` +
-		`"manifest_digest":"sha256:` + strings.Repeat("b", 64) + `","read":"2026-11-12T03:00:00Z","distro":"debian-12",` +
-		`"os_name":"Debian GNU/Linux 12 (bookworm)","partial":true,"packages":[{"manager":"dpkg","name":"openssl",` +
-		`"version":"3.0.15-1~deb12u1","distro":"debian-12","source":"openssl"}]}` + "\n"
+	sum := sha256.Sum256([]byte(pkgs))
+	id := "sha256:" + hex.EncodeToString(sum[:])
+	want := `{"list":{"id":"` + id + `","packages":` + pkgs + "}}\n" + `{"release":{` + head + `"` + id + `"}}` + "\n"
 	if string(got) != want {
-		t.Fatalf("encoding changed:\n got %s\nwant %s", got, want)
+		t.Fatalf("blob encoding changed:\n got %s\nwant %s", got, want)
 	}
 	p := registry.Platform{OS: "linux", Arch: "arm64", Variant: "v8"}
 	if PlatformOf(p).Registry() != p {
 		t.Fatal("platform conversion loses a field")
+	}
+}
+
+// Identical package lists are written once and shared by the lines that
+// name them; the lines read back whole.
+func TestReleasesDeduplicated(t *testing.T) {
+	a, b := testRelease("immich", "amd64"), testRelease("immich", "arm64")
+	c := testRelease("authelia", "amd64")
+	c.Packages = append(c.Packages, inventory.Package{Manager: "dpkg", Name: "zlib", Version: "1:1.2.13.dfsg-1", Distro: "debian-12", Source: "zlib"})
+	data, err := marshalReleases([]ReleaseLine{a, b, c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := bytes.Count(data, []byte(`{"list":`)); n != 2 {
+		t.Fatalf("%d package lists for 2 distinct ones:\n%s", n, data)
+	}
+	if n := bytes.Count(data, []byte(`"name":"openssl"`)); n != 2 {
+		t.Fatalf("openssl written %d times, want once per distinct list", n)
+	}
+	lines, err := parseReleases(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 3 || !reflect.DeepEqual(lines[1].Packages, a.Packages) || !reflect.DeepEqual(lines[0].Packages, c.Packages) {
+		t.Fatalf("lines read back: %+v", lines)
+	}
+	// An empty list is a list too.
+	empty := testRelease("empty", "amd64")
+	empty.Packages = nil
+	data, err = marshalReleases([]ReleaseLine{empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines, err := parseReleases(data); err != nil || len(lines) != 1 || lines[0].Packages == nil || len(lines[0].Packages) != 0 {
+		t.Fatalf("empty list: %+v, %v", lines, err)
+	}
+}
+
+// A blob whose releases do not add up to their lists is refused whole.
+func TestReleasesBadRecordsRefused(t *testing.T) {
+	one, err := marshalReleases([]ReleaseLine{testRelease("immich", "amd64")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, release, _ := bytes.Cut(one, []byte("\n"))
+	for name, tc := range map[string]struct {
+		data []byte
+		want string
+	}{
+		"release before its list": {append(append(append([]byte{}, release...), '\n'), list...), "not listed before"},
+		"list twice":              {append(append(append([]byte{}, list...), '\n'), one...), "listed twice"},
+		"both kinds":              {[]byte(`{"list":{"id":"sha256:` + strings.Repeat("c", 64) + `","packages":[]},"release":{}}`), "neither"},
+		"neither kind":            {[]byte(`{}`), "neither"},
+		"bad list id":             {[]byte(`{"list":{"id":"x","packages":[]}}`), "invalid list id"},
+		"line without its list":   {[]byte(`{"app_id":"immich"}`), "line 1"},
+	} {
+		if _, err := parseReleases(tc.data); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want %q", name, err, tc.want)
+		}
+	}
+}
+
+// The lines that fit a budget are those of the images first in the order
+// given, each image whole; a shared list counts once.
+func TestFitReleases(t *testing.T) {
+	img := func(app, image string) []ReleaseLine {
+		a, b := testRelease(app, "amd64"), testRelease(app, "arm64")
+		a.Image, b.Image = image, image
+		return []ReleaseLine{a, b}
+	}
+	var lines []ReleaseLine
+	lines = append(lines, img("first", "docker.io/x/first")...)
+	lines = append(lines, img("second", "docker.io/x/second")...)
+	lines = append(lines, img("third", "docker.io/x/third")...)
+	all, full, err := FitReleases(lines, 1<<30)
+	if err != nil || len(all) != 6 {
+		t.Fatalf("all: %d lines, %v", len(all), err)
+	}
+	blob, err := marshalReleases(lines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full != int64(len(blob)) {
+		t.Fatalf("size %d, blob %d", full, len(blob))
+	}
+	two, size, err := FitReleases(lines, full-1)
+	if err != nil || len(two) != 4 || two[3].AppID != "second" || size >= full {
+		t.Fatalf("budget short of the last image: %d lines, size %d, %v", len(two), size, err)
+	}
+	// An image that does not fit stops the images after it.
+	big := img("big", "docker.io/x/big")
+	for i := range big {
+		big[i].Packages = append(big[i].Packages, inventory.Package{Manager: "dpkg", Name: "pad", Version: strings.Repeat("1", 100)})
+	}
+	order := append(append(append([]ReleaseLine{}, img("first", "docker.io/x/first")...), big...), img("third", "docker.io/x/third")...)
+	first := order[:2]
+	// Room for the third image (whose list is the first's) but not for
+	// the big one before it.
+	_, withThird, _ := FitReleases(append(append([]ReleaseLine{}, first...), order[4:]...), 1<<30)
+	_, withBig, _ := FitReleases(order[:4], 1<<30)
+	if withThird >= withBig {
+		t.Fatalf("the third image (%d) is not smaller than the big one (%d)", withThird, withBig)
+	}
+	got, _, err := FitReleases(order, withThird)
+	if err != nil || len(got) != 2 || got[0].AppID != "first" {
+		t.Fatalf("after an image that does not fit: %+v, %v", got, err)
+	}
+	if none, size, err := FitReleases(lines, 10); err != nil || len(none) != 0 || size != 0 {
+		t.Fatalf("tiny budget: %d lines, size %d, %v", len(none), size, err)
 	}
 }
 
@@ -263,7 +384,8 @@ func TestReleasesDuplicateRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := parseReleases(append(one, one...)); err == nil || !strings.Contains(err.Error(), "line 2") {
+	_, release, _ := bytes.Cut(one, []byte("\n"))
+	if _, err := parseReleases(append(one, release...)); err == nil || !strings.Contains(err.Error(), "line 3") || !strings.Contains(err.Error(), "twice") {
 		t.Fatalf("reader: err = %v", err)
 	}
 	// Another platform of the same image is a line of its own.
@@ -377,5 +499,40 @@ func TestClientStoresReleases(t *testing.T) {
 	}
 	if _, ok := f.client.Catalog.Current().App("immich"); !ok || f.feedAdvisories() != 1 {
 		t.Fatal("catalog or advisories lost with the release store")
+	}
+}
+
+// The room for release lines is the budget, or what the other blobs leave
+// of the unpacked limit; lines fitted into it always make a snapshot the
+// readers take.
+func TestReleasesRoom(t *testing.T) {
+	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	key, err := NewKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Snapshot{Sequence: 1, CreatedAt: now, ExpiresAt: now.Add(time.Hour), MaxUnpacked: 4 << 10,
+		Catalog: []catalog.Entry{{Name: "immich.yaml", Data: immichEntry}}}
+	if room, err := s.ReleasesRoom(1 << 10); err != nil || room != 1<<10 {
+		t.Fatalf("room under the budget = %d, %v", room, err)
+	}
+	room, err := s.ReleasesRoom(0)
+	if err != nil || room <= 0 || room >= 4<<10 {
+		t.Fatalf("room under the limit = %d, %v", room, err)
+	}
+	var lines []ReleaseLine
+	for _, app := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		lines = append(lines, testRelease(app, "amd64"), testRelease(app, "arm64"))
+	}
+	if _, err := WriteSnapshot(t.TempDir(), Snapshot{Sequence: 1, CreatedAt: now, ExpiresAt: now.Add(time.Hour), MaxUnpacked: s.MaxUnpacked,
+		Catalog: s.Catalog, Releases: lines}, key); err == nil {
+		t.Fatal("all lines fit: the test needs more")
+	}
+	s.Releases, _, err = FitReleases(lines, room)
+	if err != nil || len(s.Releases) == 0 || len(s.Releases) == len(lines) {
+		t.Fatalf("fitted %d of %d lines, %v", len(s.Releases), len(lines), err)
+	}
+	if _, err := WriteSnapshot(t.TempDir(), s, key); err != nil {
+		t.Fatalf("fitted lines: %v", err)
 	}
 }
