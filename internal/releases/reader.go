@@ -32,6 +32,7 @@ import (
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/inventory/docker"
 	"github.com/bifrost0x/varde/internal/registry"
+	"github.com/bifrost0x/varde/internal/store"
 )
 
 // DefaultMaxManifests and DefaultMaxBytes are the budgets of one run when
@@ -85,6 +86,8 @@ type Store interface {
 	PutReleaseRead(ctx context.Context, appID, image, platform, tag, indexDigest string, line []byte, readAt time.Time) error
 	ReleaseReadLimits(ctx context.Context, appID, image, platform string) (string, error)
 	SetReleaseReadLimits(ctx context.Context, appID, image, platform, limits string) error
+	ReleaseReadLayers(ctx context.Context, appID, image, platform string) (string, error)
+	SetReleaseReadLayers(ctx context.Context, appID, image, platform, layers string) error
 }
 
 // Reader reads release package lists. MaxManifests and MaxBytes bound the
@@ -99,7 +102,12 @@ type Reader struct {
 	// Limits bound each squashed view; imagelayers.DefaultLimits when
 	// zero.
 	Limits imagelayers.Limits
-	Log    *slog.Logger
+	// MaxShipBytes is the size of the releases blob the lines read are
+	// for (feed.DefaultReleasesBudget when zero): once the lines of the
+	// images read so far fill it, no image starts, since what a later
+	// image adds would not ship.
+	MaxShipBytes int64
+	Log          *slog.Logger
 	// Deadline, when set, ends the run's registry work: no image starts
 	// after it, as when a budget is spent. It keeps the data build inside
 	// its time limit; the images left are read by a later build. An image
@@ -146,8 +154,9 @@ type Stats struct {
 	// spent; BudgetSpent says one was.
 	NotStarted  int
 	BudgetSpent bool
-	// DeadlinePassed says the Deadline stopped the run.
-	DeadlinePassed bool
+	// DeadlinePassed says the Deadline stopped the run; ShipFull says the
+	// lines of the images before filled MaxShipBytes.
+	DeadlinePassed, ShipFull bool
 	// TooLarge counts images whose layers alone exceed MaxBytes; they
 	// are skipped and the run goes on.
 	TooLarge int
@@ -171,38 +180,50 @@ type job struct {
 // Run reads the newest release of each image of the catalog's apps, in
 // the order of order (app IDs by priority; reviewed apps go before
 // generated ones whatever order says, and apps order leaves out follow by
-// ID), and returns the lines to ship. A budget spent or the Deadline stops
-// new reads; what was read by then ships, and so does every earlier line of
-// an app image that is still in the catalog, with its read time. A registry failure
-// costs the image; only a store failure or the end of ctx ends the run.
+// ID), and returns the lines to ship, in that order. A budget spent, the
+// Deadline, or lines that fill MaxShipBytes stop new reads; what was read
+// by then ships, and so does every earlier line of an app image that is
+// still in the catalog, with its read time. A registry failure costs the
+// image; only a store failure or the end of ctx ends the run.
 func (r *Reader) Run(ctx context.Context, cat *catalog.Catalog, order []string) ([]feed.ReleaseLine, Stats, error) {
 	var st Stats
 	start := r.Registry.Budget()
 	jobs := r.jobs(cat, order)
 	st.Images = len(jobs)
 	cur := map[job]readID{}
-	for i, j := range jobs {
+	ship := r.MaxShipBytes
+	if ship <= 0 {
+		ship = feed.DefaultReleasesBudget
+	}
+	var size feed.ReleaseSizer
+	var out []feed.ReleaseLine
+	for _, j := range jobs {
 		if err := ctx.Err(); err != nil {
 			return nil, st, err
 		}
 		if !r.Deadline.IsZero() && !r.Now().Before(r.Deadline) {
 			st.DeadlinePassed = true
 		}
-		if st.BudgetSpent || st.DeadlinePassed {
-			st.NotStarted += len(jobs) - i
-			break
+		st.ShipFull = st.ShipFull || size.Size >= ship
+		if !st.BudgetSpent && !st.DeadlinePassed && !st.ShipFull {
+			if err := r.read(ctx, j, start, &st, cur); err != nil {
+				return nil, st, err
+			}
+		} else {
+			st.NotStarted++
 		}
-		if err := r.read(ctx, j, start, &st, cur); err != nil {
+		lines, err := r.jobLines(ctx, j, cur, &st)
+		if err != nil {
 			return nil, st, err
 		}
+		if _, err := size.Add(lines); err != nil {
+			return nil, st, err
+		}
+		out = append(out, lines...)
 	}
 	used := r.usage(start)
 	st.Manifests, st.Bytes = used.ManifestRequests, used.Bytes
-	lines, err := r.shipped(ctx, jobs, cur, &st)
-	if err != nil {
-		return nil, st, err
-	}
-	return lines, st, nil
+	return out, st, nil
 }
 
 // Priority orders app IDs for Run: reviewed apps by ID, then generated
@@ -315,8 +336,8 @@ func (r *Reader) log() *slog.Logger {
 
 // stored is the stored release read of one platform.
 type stored struct {
-	platform, tag, digest, limits string
-	line                          feed.ReleaseLine
+	platform, tag, digest, limits, layers string
+	line                                  feed.ReleaseLine
 }
 
 // readID names one read of a release: its tag and the digest it named.
@@ -427,6 +448,20 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 	}
 	now := r.Now().UTC()
 	lines := make([]feed.ReleaseLine, 0, len(reads))
+	// The layer reads each platform's read used: its config and its layer
+	// records. The builder keeps only layer reads a stored read names.
+	used := make(map[string]string, len(reads))
+	for _, pr := range reads {
+		keys, err := imagelayers.LayerKeys(pr.m.Layers, r.Limits)
+		if err != nil {
+			return failed("release read: layers refused", err)
+		}
+		b, err := json.Marshal(append([]string{pr.m.ConfigDigest}, keys...))
+		if err != nil {
+			return err
+		}
+		used[pr.m.Digest] = string(b)
+	}
 	for _, pr := range reads {
 		l, err := r.readPlatform(ctx, rctx, j, pr)
 		if err != nil {
@@ -470,6 +505,9 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 		if err := r.SetReleaseReadLimits(ctx, j.app.ID, j.image, key, limits); err != nil {
 			return err
 		}
+		if err := r.SetReleaseReadLayers(ctx, j.app.ID, j.image, key, used[l.ManifestDigest]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -497,6 +535,9 @@ func (r *Reader) stored(ctx context.Context, j job) ([]stored, error) {
 			s.digest = ""
 		}
 		if s.limits, err = r.ReleaseReadLimits(ctx, j.app.ID, j.image, s.platform); err != nil {
+			return nil, err
+		}
+		if s.layers, err = r.ReleaseReadLayers(ctx, j.app.ID, j.image, s.platform); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -562,6 +603,9 @@ func (r *Reader) confirm(ctx context.Context, j job, prev []stored, tag, digest 
 			return err
 		}
 		if err := r.SetReleaseReadLimits(ctx, j.app.ID, j.image, s.platform, s.limits); err != nil {
+			return err
+		}
+		if err := r.SetReleaseReadLayers(ctx, j.app.ID, j.image, s.platform, s.layers); err != nil {
 			return err
 		}
 	}
@@ -726,40 +770,43 @@ func (r *Reader) readPlatform(ctx, rctx context.Context, j job, pr platformRead)
 	}, nil
 }
 
-// shipped returns the stored lines of every job's latest read (the read
-// of this run where there was one), valid ones only.
-func (r *Reader) shipped(ctx context.Context, jobs []job, cur map[job]readID, st *Stats) ([]feed.ReleaseLine, error) {
-	now := r.Now()
-	var out []feed.ReleaseLine
-	for _, j := range jobs {
-		prev, err := r.stored(ctx, j)
-		if err != nil {
-			return nil, err
-		}
-		for _, s := range prev {
-			if s.digest == "" {
-				// A stored line that does not decode.
-				st.Invalid++
-			}
-		}
-		id, known := cur[j]
-		for _, s := range latest(prev, id, known) {
-			if err := s.line.Validate(); err != nil || s.line.AppID != j.app.ID || s.line.Image != j.image {
-				st.Invalid++
-				r.log().Warn("release read: stored line left out", "app", j.app.ID, "image", j.image, "platform", s.platform, "err", err)
-				continue
-			}
-			st.Lines++
-			if s.line.Partial {
-				st.Partial++
-			}
-			if now.Sub(s.line.Read) > StaleAfter {
-				st.Stale++
-			}
-			out = append(out, s.line)
+// jobLines returns the stored lines of a job's latest read (the read of
+// this run where there was one), valid ones only.
+func (r *Reader) jobLines(ctx context.Context, j job, cur map[job]readID, st *Stats) ([]feed.ReleaseLine, error) {
+	prev, err := r.stored(ctx, j)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range prev {
+		if s.digest == "" {
+			// A stored line that does not decode.
+			st.Invalid++
 		}
 	}
+	id, known := cur[j]
+	var out []feed.ReleaseLine
+	for _, s := range latest(prev, id, known) {
+		if err := s.line.Validate(); err != nil || s.line.AppID != j.app.ID || s.line.Image != j.image {
+			st.Invalid++
+			r.log().Warn("release read: stored line left out", "app", j.app.ID, "image", j.image, "platform", s.platform, "err", err)
+			continue
+		}
+		st.Lines++
+		if s.line.Partial {
+			st.Partial++
+		}
+		if r.Now().Sub(s.line.Read) > StaleAfter {
+			st.Stale++
+		}
+		out = append(out, s.line)
+	}
 	return out, nil
+}
+
+// StoreKey names the stored release read a shipped line came from: the
+// store keeps one read per app, image and requested platform.
+func StoreKey(l feed.ReleaseLine) store.ReleaseReadKey {
+	return store.ReleaseReadKey{AppID: l.AppID, Image: l.Image, Platform: platformKey(requested(l.Platform.Registry()))}
 }
 
 // layerCache keeps layer records in the store's layer reads, as gzip

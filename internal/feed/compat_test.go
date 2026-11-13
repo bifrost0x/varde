@@ -171,7 +171,7 @@ func TestOldReaderSkipsNewBlobs(t *testing.T) {
 	if n := f.feedAdvisories(); n != 1 {
 		t.Fatalf("old reader: advisories = %d, want 1", n)
 	}
-	if f.storedReleases("immich") != nil {
+	if f.storedReleases() != nil {
 		t.Fatal("old reader read the releases blob")
 	}
 }

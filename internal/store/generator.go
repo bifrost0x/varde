@@ -128,12 +128,12 @@ func (s *Store) ReleaseRead(ctx context.Context, appID, image, platform string) 
 }
 
 // PutReleaseRead stores a release read, replacing the earlier one of the
-// same app, image and platform. The limits of the earlier read are
-// cleared (SetReleaseReadLimits).
+// same app, image and platform. The limits and layers of the earlier read
+// are cleared (SetReleaseReadLimits, SetReleaseReadLayers).
 func (s *Store) PutReleaseRead(ctx context.Context, appID, image, platform, tag, indexDigest string, line []byte, readAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO release_reads (app_id, image, platform, tag, index_digest, line, read_at) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (app_id, image, platform) DO UPDATE SET tag = excluded.tag, index_digest = excluded.index_digest,
-		line = excluded.line, read_at = excluded.read_at, limits = ''`,
+		line = excluded.line, read_at = excluded.read_at, limits = '', layers = ''`,
 		appID, image, platform, tag, indexDigest, line, millis(readAt))
 	if err != nil {
 		return fmt.Errorf("put release read: %w", err)
@@ -163,6 +163,134 @@ func (s *Store) SetReleaseReadLimits(ctx context.Context, appID, image, platform
 		limits, appID, image, platform)
 	if err != nil {
 		return fmt.Errorf("set release read limits: %w", err)
+	}
+	return nil
+}
+
+// ReleaseReadLayers returns the layer_reads keys a release read used, as
+// SetReleaseReadLayers stored them; empty when unknown or when there is no
+// such read.
+func (s *Store) ReleaseReadLayers(ctx context.Context, appID, image, platform string) (string, error) {
+	var layers string
+	err := s.db.QueryRowContext(ctx, `SELECT layers FROM release_reads WHERE app_id = ? AND image = ? AND platform = ?`,
+		appID, image, platform).Scan(&layers)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("query release read layers: %w", err)
+	}
+	return layers, nil
+}
+
+// SetReleaseReadLayers records the layer_reads keys a stored release read
+// used, a JSON array of strings (PruneBuilderReads keeps those).
+func (s *Store) SetReleaseReadLayers(ctx context.Context, appID, image, platform, layers string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE release_reads SET layers = ? WHERE app_id = ? AND image = ? AND platform = ?`,
+		layers, appID, image, platform)
+	if err != nil {
+		return fmt.Errorf("set release read layers: %w", err)
+	}
+	return nil
+}
+
+// ReleaseReadKey names one release read.
+type ReleaseReadKey struct{ AppID, Image, Platform string }
+
+// PruneStats says what PruneBuilderReads removed and what is left.
+type PruneStats struct {
+	// Reads and Layers are the release reads and the layer reads removed.
+	Reads, Layers int
+	// LayerBytes is the size of the layer reads left.
+	LayerBytes int64
+}
+
+// PruneBuilderReads keeps the release reads of keep and drops the others
+// (a platform a release dropped, an app that left the catalog, a line
+// that no longer ships), then the layer reads no kept release read names
+// (SetReleaseReadLayers), then, oldest first, layer reads beyond
+// maxLayerBytes. The builder's store is published after every build;
+// without this it would grow with every release and layer ever read. The
+// freed pages are given back (VACUUM), as the file is what is published.
+func (s *Store) PruneBuilderReads(ctx context.Context, keep []ReleaseReadKey, maxLayerBytes int64) (PruneStats, error) {
+	var st PruneStats
+	keys := make([]string, len(keep))
+	for i, k := range keep {
+		keys[i] = k.AppID + "\x00" + k.Image + "\x00" + k.Platform
+	}
+	arg, err := json.Marshal(keys)
+	if err != nil {
+		return st, fmt.Errorf("encode release reads: %w", err)
+	}
+	err = s.inTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM release_reads
+			WHERE app_id || char(0) || image || char(0) || platform NOT IN (SELECT value FROM json_each(?))`, string(arg))
+		if err != nil {
+			return fmt.Errorf("prune release reads: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		st.Reads = int(n)
+		res, err = tx.ExecContext(ctx, `DELETE FROM layer_reads WHERE digest NOT IN (
+			SELECT j.value FROM release_reads AS r, json_each(CASE WHEN json_valid(r.layers) THEN r.layers ELSE '[]' END) AS j)`)
+		if err != nil {
+			return fmt.Errorf("prune layer reads: %w", err)
+		}
+		n, _ = res.RowsAffected()
+		st.Layers = int(n)
+		rows, err := tx.QueryContext(ctx, `SELECT digest, length(files) FROM layer_reads ORDER BY read_at DESC, digest`)
+		if err != nil {
+			return fmt.Errorf("query layer reads: %w", err)
+		}
+		var over []string
+		for rows.Next() {
+			var d string
+			var size int64
+			if err := rows.Scan(&d, &size); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("scan layer read: %w", err)
+			}
+			if st.LayerBytes+size > maxLayerBytes {
+				over = append(over, d)
+				continue
+			}
+			st.LayerBytes += size
+		}
+		if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+			return fmt.Errorf("query layer reads: %w", err)
+		}
+		for _, d := range over {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM layer_reads WHERE digest = ?`, d); err != nil {
+				return fmt.Errorf("prune layer read: %w", err)
+			}
+		}
+		st.Layers += len(over)
+		return nil
+	})
+	if err != nil {
+		return st, err
+	}
+	return st, s.Vacuum(ctx)
+}
+
+// DropLayerReads removes every layer read and gives the pages back: the
+// next build reads the layers it needs again.
+func (s *Store) DropLayerReads(ctx context.Context) (int, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM layer_reads`)
+	if err != nil {
+		return 0, fmt.Errorf("drop layer reads: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), s.Vacuum(ctx)
+}
+
+// Vacuum rebuilds the database file without free pages, and folds the
+// write-ahead log into it.
+func (s *Store) Vacuum(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `VACUUM`); err != nil {
+		return fmt.Errorf("vacuum: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		return fmt.Errorf("checkpoint: %w", err)
 	}
 	return nil
 }

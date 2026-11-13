@@ -843,3 +843,74 @@ func TestTricklingBlobCut(t *testing.T) {
 		})
 	}
 }
+
+// Once the lines of the images read fill the blob the run reads for, no
+// image starts: what a later image adds would not ship.
+func TestShipBudgetStopsNewReads(t *testing.T) {
+	f := newRegistry(t)
+	f.push(t, "org/a", "1.0.0", false, debian("amd64", "", "a=1"), debian("arm64", "", "a=1"))
+	f.push(t, "org/b", "1.0.0", false, debian("amd64", "", "b=1"))
+	cat := newCatalog(t, []catalog.Entry{reviewedEntry("a", regHost+"/org/a"), reviewedEntry("b", regHost+"/org/b")}, nil)
+	r, _ := newReader(t, f)
+	r.MaxShipBytes = 1
+	lines, st := run(t, r, cat, "a", "b")
+	if reqs := f.take(); count(reqs, "/org/b/") != 0 {
+		t.Fatalf("b read although a's lines fill the blob: %v", reqs)
+	}
+	if !st.ShipFull || st.Read != 1 || st.NotStarted != 1 || len(lines) != 2 || lines[0].AppID != "a" {
+		t.Fatalf("stats %+v lines %+v", st, lines)
+	}
+}
+
+// A read names the layer reads it used, an unchanged run keeps them, and
+// pruning to the shipped reads keeps them while it drops the rest: a new
+// release on the same base still reads only its own layers.
+func TestReadsNameTheirLayers(t *testing.T) {
+	f := newRegistry(t)
+	withTop := func(pkgs string) platform {
+		p := debian("amd64", "", "bash=5.2")
+		p.layers = append(p.layers, []file{{"usr/share/doc/top", pkgs}})
+		return p
+	}
+	f.push(t, "org/app", "1.0.0", true, withTop("one"))
+	f.push(t, "org/gone", "1.0.0", true, debian("amd64", "", "x=1"))
+	r, s := newReader(t, f)
+	ctx := t.Context()
+	run(t, r, newCatalog(t, []catalog.Entry{reviewedEntry("app", regHost+"/org/app"), reviewedEntry("gone", regHost+"/org/gone")}, nil))
+	cat := newCatalog(t, []catalog.Entry{reviewedEntry("app", regHost+"/org/app")}, nil)
+	r.Now = func() time.Time { return now0.Add(time.Hour) }
+	lines, st := run(t, r, cat)
+	if st.Unchanged != 1 || len(lines) != 1 {
+		t.Fatalf("stats %+v", st)
+	}
+	var used []string
+	layers, err := s.ReleaseReadLayers(ctx, "app", regHost+"/org/app", "linux/amd64")
+	if err != nil || json.Unmarshal([]byte(layers), &used) != nil || len(used) != 4 {
+		t.Fatalf("layers of the read after an unchanged run: %q, %v", layers, err)
+	}
+	keep := []store.ReleaseReadKey{StoreKey(lines[0])}
+	pst, err := s.PruneBuilderReads(ctx, keep, 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// gone's read and the record of its own top layer; its config and
+	// base layer are app's too.
+	if pst.Reads != 1 || pst.Layers != 1 {
+		t.Fatalf("prune %+v", pst)
+	}
+	for _, k := range used {
+		if _, _, ok, err := s.LayerRead(ctx, k); !ok || err != nil {
+			t.Fatalf("layer read %s of a kept read dropped (%v)", k, err)
+		}
+	}
+	f.push(t, "org/app", "1.1.0", true, withTop("two"))
+	f.take()
+	if _, st := run(t, r, cat); st.Read != 1 {
+		t.Fatalf("stats %+v", st)
+	}
+	// The new config and the new top layer; the two base layers come from
+	// their records.
+	if n := count(f.take(), "/blobs/"); n != 2 {
+		t.Fatalf("%d blob requests after pruning, want 2", n)
+	}
+}

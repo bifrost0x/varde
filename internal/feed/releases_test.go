@@ -36,11 +36,11 @@ func testRelease(appID string, arch string) ReleaseLine {
 		Packages: []inventory.Package{{Manager: "dpkg", Name: "openssl", Version: "3.0.15-1~deb12u1", Distro: "debian-12", Source: "openssl"}}}
 }
 
-// storedReleases returns the release lines the store keeps for an app's
-// test image, where the pages read them.
-func (f *fixture) storedReleases(appID string) []ReleaseLine {
+// storedReleases returns the release lines the store keeps for the test
+// image of immich, where the pages read them.
+func (f *fixture) storedReleases() []ReleaseLine {
 	f.t.Helper()
-	rows, err := f.st.ReleasePackagesFor(context.Background(), appID, "ghcr.io/immich-app/immich-server")
+	rows, err := f.st.ReleasePackagesFor(context.Background(), "immich", "ghcr.io/immich-app/immich-server")
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestGeneratedAndReleasesLoad(t *testing.T) {
 	if a, ok := cat.ByImage("ghcr.io/immich-app/immich-server"); !ok || a.ID != "immich" || a.Origin != catalog.OriginFeed {
 		t.Fatalf("reviewed image = %+v", a)
 	}
-	rel := f.storedReleases("immich")
+	rel := f.storedReleases()
 	if len(rel) != 2 || rel[0].Platform.Arch != "amd64" || len(rel[0].Packages) != 1 {
 		t.Fatalf("releases = %+v", rel)
 	}
@@ -172,14 +172,14 @@ func TestGeneratedAndReleasesLoad(t *testing.T) {
 	if err := again.LoadActive(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := again.Catalog.Current().App("gh-a-b"); !ok || len(f.storedReleases("immich")) != 2 {
+	if _, ok := again.Catalog.Current().App("gh-a-b"); !ok || len(f.storedReleases()) != 2 {
 		t.Fatal("generated entries or releases not loaded with the installed package")
 	}
 	base, _ := catalog.Build(nil, catalog.OriginBuiltin, nil)
 	if err := f.client.Deactivate(context.Background(), base); err != nil {
 		t.Fatal(err)
 	}
-	if f.storedReleases("immich") != nil {
+	if f.storedReleases() != nil {
 		t.Fatal("releases survive leaving the package")
 	}
 	// A package without the blobs drops what the last one carried.
@@ -187,7 +187,7 @@ func TestGeneratedAndReleasesLoad(t *testing.T) {
 	if _, err := f.update(); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := f.client.Catalog.Current().App("gh-a-b"); ok || f.storedReleases("immich") != nil {
+	if _, ok := f.client.Catalog.Current().App("gh-a-b"); ok || f.storedReleases() != nil {
 		t.Fatal("generated entries or releases of the previous package kept")
 	}
 }
@@ -225,7 +225,7 @@ func TestBadReleasesRefusesUpdate(t *testing.T) {
 	if _, err := f.update(); err == nil || !strings.Contains(err.Error(), "releases line 1") {
 		t.Fatalf("err = %v, want the bad line refused", err)
 	}
-	if rel := f.storedReleases("immich"); len(rel) != 1 {
+	if rel := f.storedReleases(); len(rel) != 1 {
 		t.Fatalf("releases = %d, want the previous 1", len(rel))
 	}
 }

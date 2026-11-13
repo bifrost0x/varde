@@ -35,6 +35,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/ed25519"
 	"crypto/x509"
@@ -81,6 +82,11 @@ type config struct {
 	generate, releases         bool
 	generateFor, releasesUntil time.Duration
 	maxManifests               int
+	// storeLimit, releasesBudget and layerCache override the size bounds
+	// of the published store, the releases blob and the layer reads kept
+	// (defaultStoreLimit, feed.DefaultReleasesBudget,
+	// defaultLayerCache); tests set them.
+	storeLimit, releasesBudget, layerCache int64
 	// http, now, table, sources and readReleases are replaced in tests.
 	http    *httpx.Client
 	now     func() time.Time
@@ -111,6 +117,14 @@ const (
 	// size and each image by time and the -releases-until deadline
 	// (releases.Reader).
 	registryTimeout = 10 * time.Minute
+	// defaultStoreLimit bounds the store as it is published, compressed
+	// (builder.db.gz): GitHub refuses a file over 100 MiB on a branch.
+	// Over it the builder drops its layer reads, and refuses to publish
+	// a store still over it.
+	defaultStoreLimit = 80 << 20
+	// defaultLayerCache bounds the layer reads kept after a build; the
+	// oldest beyond it go first.
+	defaultLayerCache = 40 << 20
 )
 
 func main() {
@@ -311,7 +325,8 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		read := c.readReleases
 		if read == nil {
 			r := &releases.Reader{Store: st, Registry: reg, Now: c.now, MaxManifests: c.manifests(env),
-				Deadline: now.Add(orDefault(c.releasesUntil, defaultReleasesUntil)), Log: logger}
+				MaxShipBytes: orDefault64(c.releasesBudget, feed.DefaultReleasesBudget),
+				Deadline:     now.Add(orDefault(c.releasesUntil, defaultReleasesUntil)), Log: logger}
 			read = r.Run
 		}
 		if lines, relStats, err = read(ctx, layered, releases.Priority(layered, appWeights(candidates))); err != nil {
@@ -336,7 +351,32 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if err != nil {
 		return err
 	}
-	snap.Generated, snap.Releases = generated, lines
+	snap.Generated = generated
+	var (
+		fitted int
+		pruned store.PruneStats
+	)
+	if c.releases {
+		// The lines come in priority order: those that do not fit the
+		// room the other blobs leave go, the lowest first, and the store
+		// keeps only the reads that ship and the layer reads they use.
+		room, err := snap.ReleasesRoom(c.releasesBudget)
+		if err != nil {
+			return err
+		}
+		kept, _, err := feed.FitReleases(lines, room)
+		if err != nil {
+			return err
+		}
+		fitted, snap.Releases = len(lines)-len(kept), kept
+		keys := make([]store.ReleaseReadKey, len(kept))
+		for i, l := range kept {
+			keys[i] = releases.StoreKey(l)
+		}
+		if pruned, err = st.PruneBuilderReads(ctx, keys, orDefault64(c.layerCache, defaultLayerCache)); err != nil {
+			return err
+		}
+	}
 	counts := pkgbuild.CountsOf(snap, table.Len())
 	if err := pkgbuild.Guard(stats, previous, havePrevious, counts, c.force); err != nil {
 		return err
@@ -365,7 +405,8 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if err != nil {
 		return err
 	}
-	if counts.ReleasesBytes, err = blobSize(manifest, "releases"); err != nil {
+	var releasesUnpacked int64
+	if counts.ReleasesBytes, releasesUnpacked, err = blobSize(manifest, "releases"); err != nil {
 		return err
 	}
 	if err := pkgbuild.GuardReleases(counts.ReleasesBytes); err != nil {
@@ -383,6 +424,10 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	// The store is signed as it lies on disk, so after it is closed.
 	closed = true
 	if err := st.Close(); err != nil {
+		return err
+	}
+	storeSize, droppedLayers, err := fitStore(ctx, c.db, orDefault64(c.storeLimit, defaultStoreLimit), logger)
+	if err != nil {
 		return err
 	}
 	if err := pkgbuild.Seal(c.db, pkgbuild.PurposeStore, key); err != nil {
@@ -430,11 +475,19 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		}
 	}
 	if c.releases {
-		if _, err := fmt.Fprintf(out, "releases: %d lines, %d bytes (%d images: %d read, %d unchanged, %d failed, %d not started, %d too large; %d partial, %d stale); %d manifest requests\n",
-			relStats.Lines, counts.ReleasesBytes, relStats.Images, relStats.Read, relStats.Unchanged, relStats.Failed, relStats.NotStarted,
-			relStats.TooLarge, relStats.Partial, relStats.Stale, relStats.Manifests); err != nil {
+		if _, err := fmt.Fprintf(out, "releases: %d lines, %d bytes compressed, %d unpacked (%d images: %d read, %d unchanged, %d failed, %d not started, %d too large; %d partial, %d stale; %d lines over the size budget); %d manifest requests\n",
+			counts.Releases, counts.ReleasesBytes, releasesUnpacked, relStats.Images, relStats.Read, relStats.Unchanged, relStats.Failed, relStats.NotStarted,
+			relStats.TooLarge, relStats.Partial, relStats.Stale, fitted, relStats.Manifests); err != nil {
 			return err
 		}
+	}
+	note := ""
+	if droppedLayers > 0 {
+		note = fmt.Sprintf("; %d layer reads dropped to stay under %d bytes", droppedLayers, orDefault64(c.storeLimit, defaultStoreLimit))
+	}
+	if _, err := fmt.Fprintf(out, "store: builder.db.gz %d bytes; pruned %d release reads and %d layer reads, %d bytes of layer reads kept%s\n",
+		storeSize, pruned.Reads, pruned.Layers, pruned.LayerBytes, note); err != nil {
+		return err
 	}
 	// What is published for a failing repository is as old as its last
 	// successful read: say so where the maintainer looks.
@@ -449,7 +502,7 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		}
 	}
 	days := int(root.Expires.Sub(now).Hours() / 24)
-	note := ""
+	note = ""
 	if days < rootWarnDays {
 		note = " - ROTATE THE ROOT NOW: after that day no installation updates any more (docs/data-package.md)"
 	}
@@ -665,19 +718,87 @@ func appWeights(candidates []store.Candidate) map[string]int64 {
 	return w
 }
 
-// blobSize is the compressed size of the named blob of a manifest; 0 when
-// the package has none.
-func blobSize(manifest []byte, name string) (int64, error) {
+// blobSize is the compressed and the unpacked size of the named blob of a
+// manifest; 0 when the package has none.
+func blobSize(manifest []byte, name string) (size, unpacked int64, err error) {
 	var m feed.Manifest
 	if err := json.Unmarshal(manifest, &m); err != nil {
-		return 0, fmt.Errorf("written manifest: %w", err)
+		return 0, 0, fmt.Errorf("written manifest: %w", err)
 	}
 	for _, b := range m.Blobs {
 		if b.Name == name {
-			return b.Size, nil
+			return b.Size, b.UncompressedSize, nil
 		}
 	}
-	return 0, nil
+	return 0, 0, nil
+}
+
+// fitStore measures the closed store as the workflow publishes it
+// (gzip -9) and returns that size. Over limit it drops the layer reads,
+// which the next build reads again, and measures once more; a store still
+// over limit is refused, so no build publishes a file GitHub would refuse.
+func fitStore(ctx context.Context, path string, limit int64, logger *slog.Logger) (size int64, dropped int, err error) {
+	if size, err = gzipSize(path); err != nil {
+		return 0, 0, err
+	}
+	if size <= limit {
+		return size, 0, nil
+	}
+	logger.Warn("the builder's store is too large to publish; dropping its layer reads", "bytes", size, "limit", limit)
+	st, err := store.Open(ctx, path)
+	if err != nil {
+		return 0, 0, err
+	}
+	dropped, err = st.DropLayerReads(ctx)
+	if err = errors.Join(err, st.Close()); err != nil {
+		return 0, 0, err
+	}
+	if size, err = gzipSize(path); err != nil {
+		return 0, 0, err
+	}
+	if size > limit {
+		return size, dropped, fmt.Errorf("the builder's store is %d bytes compressed without its layer reads, over the limit of %d: "+
+			"GitHub refuses files over 100 MiB on the branch data; find what grew (docs/data-package.md)", size, limit)
+	}
+	return size, dropped, nil
+}
+
+// gzipSize is the size of the file compressed as scripts/publish-data.sh
+// compresses it.
+func gzipSize(path string) (int64, error) {
+	f, err := os.Open(path) //nolint:gosec // the builder's own store
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = f.Close() }()
+	var n countWriter
+	zw, err := gzip.NewWriterLevel(&n, gzip.BestCompression)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := io.Copy(zw, f); err != nil {
+		return 0, err
+	}
+	if err := zw.Close(); err != nil {
+		return 0, err
+	}
+	return int64(n), nil
+}
+
+// countWriter counts what is written to it.
+type countWriter int64
+
+func (c *countWriter) Write(p []byte) (int, error) {
+	*c += countWriter(len(p))
+	return len(p), nil
+}
+
+// orDefault64 is n, or def when n is not positive.
+func orDefault64(n, def int64) int64 {
+	if n > 0 {
+		return n
+	}
+	return def
 }
 
 // orDefault is d, or def when d is not positive: a zero bound would stop

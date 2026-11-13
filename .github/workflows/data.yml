@@ -138,7 +138,10 @@ jobs:
             if [[ "$(stat -c %s work/catalog/generated.md)" -le "${cap}" ]]; then
               cat work/catalog/generated.md >> "$GITHUB_STEP_SUMMARY"
             elif [[ "${cap}" -gt 0 ]]; then
-              head -c "${cap}" work/catalog/generated.md >> "$GITHUB_STEP_SUMMARY"
+              # Whole lines only: a cut inside a line could split a
+              # character of more than one byte.
+              LC_ALL=C awk -v cap="${cap}" '{ n += length($0) + 1; if (n > cap) exit; print }' \
+                work/catalog/generated.md >> "$GITHUB_STEP_SUMMARY"
               printf '\n\n(Cut here. The whole list is catalog/generated.md on the branch data and in the artifact generated-catalog.)\n' >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
@@ -147,6 +150,10 @@ jobs:
         run: |
           set -euo pipefail
           scripts/publish-data.sh work
+          # The store grows with the builder's reads; GitHub refuses a file
+          # over 100 MiB. The builder keeps it under 80 MiB (and the script
+          # refuses one over 95 MiB): its size is in the summary every day.
+          echo "builder.db.gz as published: $(stat -c %s work/cache/builder.db.gz) bytes" | tee -a "$GITHUB_STEP_SUMMARY"
       # After the publish, so a failing upload never holds a package back;
       # also when the publish failed, as long as the build succeeded.
       - name: Keep the list of generated entries

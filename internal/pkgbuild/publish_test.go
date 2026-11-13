@@ -124,6 +124,18 @@ func TestPublishScript(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A store too large for GitHub is not published.
+	before := git(t, remote, "rev-parse", "data")
+	cmd = exec.Command("bash", script, work)
+	cmd.Dir = clone
+	cmd.Env = append(os.Environ(), "PUBLISH_MAX_STORE=10")
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "too close to GitHub's limit") {
+		t.Fatalf("large store: %v\n%s", err, out)
+	}
+	if after := git(t, remote, "rev-parse", "data"); after != before {
+		t.Fatal("a store too large was published")
+	}
+
 	// An incomplete build is not published, and neither is anything over main.
 	if err := os.Remove(filepath.Join(work, "feed", "v1", "manifest.json.sig")); err != nil {
 		t.Fatal(err)

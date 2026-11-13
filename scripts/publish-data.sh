@@ -19,7 +19,8 @@
 # raise a secret-scanning alert with every build. The signature stays the
 # one over the uncompressed store.
 # PUBLISH_REMOTE (default origin) and PUBLISH_BRANCH (default data) name
-# the destination.
+# the destination. A compressed store over 95 MiB is refused: GitHub
+# refuses files over 100 MiB.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -65,6 +66,14 @@ export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-${GIT_AUTHOR_EMAIL}}"
 
 # -n: no name and no timestamp, the same store gives the same file.
 gzip -9 -n -c "${work}/cache/builder.db" > "${work}/cache/builder.db.gz"
+# GitHub refuses a file over 100 MiB. The builder keeps the store under
+# 80 MiB compressed; this is the last stop before a push that would fail.
+# PUBLISH_MAX_STORE (bytes, default 95 MiB) is for tests.
+store_size="$(wc -c < "${work}/cache/builder.db.gz")"
+if [[ "${store_size}" -gt "${PUBLISH_MAX_STORE:-$((95 * 1024 * 1024))}" ]]; then
+  echo "cache/builder.db.gz is ${store_size} bytes, too close to GitHub's limit of 100 MiB: nothing published" >&2
+  exit 1
+fi
 
 # -f: the repository's .gitignore is about the source tree, not about this.
 git --work-tree="${work}" add -f -- feed cache/builder.db.gz cache/builder.db.sig ${generated[@]+"${generated[@]}"}

@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -663,5 +664,120 @@ func TestBuildWritesGeneratedFiles(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(work, "catalog", f)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left from an earlier build: %v", f, err)
 		}
+	}
+}
+
+// The release lines that do not fit the budget go, the lowest priority
+// first, and the store keeps only the reads that ship; the summary gives
+// the sizes of the releases blob and of the store.
+func TestReleasesFitTheBudget(t *testing.T) {
+	h := newHarness(t)
+	h.cfg.releases = true
+	line := func(app string) feed.ReleaseLine {
+		return feed.ReleaseLine{AppID: app, Image: "ghcr.io/acme/" + app, Tag: "v2.0.0", Version: "2.0.0",
+			Platform: feed.ReleasePlatform{OS: "linux", Arch: "amd64"}, ManifestDigest: "sha256:" + strings.Repeat("b", 64), Read: h.now,
+			Packages: []inventory.Package{{Manager: "dpkg", Name: app, Version: "3.0.15-1", Distro: "debian-12", Source: app}}}
+	}
+	lines := []feed.ReleaseLine{line("widget"), line("second"), line("third")}
+	one, size, err := feed.FitReleases(lines[:1], 1<<30)
+	if err != nil || len(one) != 1 {
+		t.Fatal(err)
+	}
+	h.cfg.releasesBudget = size + 10
+	h.cfg.readReleases = func(context.Context, *catalog.Catalog, []string) ([]feed.ReleaseLine, releases.Stats, error) {
+		return lines, releases.Stats{Lines: 3}, nil
+	}
+	ctx := context.Background()
+	if err := os.MkdirAll(filepath.Dir(h.cfg.db), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(ctx, h.cfg.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range lines {
+		if err := st.PutReleaseRead(ctx, l.AppID, l.Image, "linux/amd64", l.Tag, "sha256:i", []byte(`{}`), h.now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// A store the feed key did not sign is dropped: sign this one.
+	if err := pkgbuild.Seal(h.cfg.db, pkgbuild.PurposeStore, h.feedKey); err != nil {
+		t.Fatal(err)
+	}
+	out, err := h.run(h.keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "releases: 1 lines, ") || !strings.Contains(out, "2 lines over the size budget") || !strings.Contains(out, "store: builder.db.gz ") ||
+		!strings.Contains(out, "pruned 2 release reads") {
+		t.Fatalf("summary: %s", out)
+	}
+	counts, _, err := pkgbuild.ReadCounts(h.cfg.out)
+	if err != nil || counts.Releases != 1 {
+		t.Fatalf("counts %+v, %v", counts, err)
+	}
+	st, err = store.Open(ctx, h.cfg.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	for _, l := range lines {
+		_, _, _, ok, err := st.ReleaseRead(ctx, l.AppID, l.Image, "linux/amd64")
+		if err != nil || ok != (l.AppID == "widget") {
+			t.Errorf("release read of %s kept %v (%v)", l.AppID, ok, err)
+		}
+	}
+}
+
+// A store over the limit drops its layer reads; one still over the limit
+// is refused and nothing is published.
+func TestStoreSizeGuard(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "builder.db")
+	st, err := store.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noise := make([]byte, 1<<20)
+	for i := range noise {
+		noise[i] = byte(i*7919 + i/13)
+	}
+	for i := range 3 {
+		if err := st.PutLayerRead(ctx, fmt.Sprintf("layer-%d", i), noise, false, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	full, err := gzipSize(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.DiscardHandler)
+	if size, dropped, err := fitStore(ctx, path, full, logger); err != nil || size != full || dropped != 0 {
+		t.Fatalf("under the limit: %d, %d, %v", size, dropped, err)
+	}
+	size, dropped, err := fitStore(ctx, path, full-1, logger)
+	if err != nil || dropped != 3 || size >= full {
+		t.Fatalf("over the limit: %d of %d, %d dropped, %v", size, full, dropped, err)
+	}
+	if _, _, err := fitStore(ctx, path, 1, logger); err == nil || !strings.Contains(err.Error(), "over the limit") {
+		t.Fatalf("still over the limit: %v", err)
+	}
+
+	h := newHarness(t)
+	h.cfg.storeLimit = 1
+	if _, err := h.run(h.keyPEM); err == nil || !strings.Contains(err.Error(), "builder's store") {
+		t.Fatalf("store over the limit: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(h.cfg.out, "v1", "manifest.json")); err == nil {
+		t.Fatal("a refused build left a package behind")
+	}
+	if _, err := os.Stat(h.cfg.db + ".sig"); err == nil {
+		t.Fatal("a refused store was signed")
 	}
 }

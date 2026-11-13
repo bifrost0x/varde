@@ -4,6 +4,7 @@ package store
 
 import (
 	"bytes"
+	"os"
 	"testing"
 	"time"
 )
@@ -163,5 +164,75 @@ func TestClearFeedDropsReleasePackages(t *testing.T) {
 	}
 	if m, err := s.ReleasePackagesMarker(ctx); err != nil || m != "" {
 		t.Fatalf("marker after leaving the feed = %q, %v", m, err)
+	}
+}
+
+// Pruning keeps the release reads named and the layer reads they use;
+// what is left of the layer reads beyond the byte bound goes oldest first,
+// and the file shrinks with it.
+func TestPruneBuilderReads(t *testing.T) {
+	s, path := openTest(t)
+	ctx := t.Context()
+	at := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	put := func(app, plat, layers string) {
+		t.Helper()
+		if err := s.PutReleaseRead(ctx, app, "img", plat, "1", "sha256:i", []byte(`{}`), at); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetReleaseReadLayers(ctx, app, "img", plat, layers); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("a", "linux/amd64", `["cfg-a","l1","l2"]`)
+	put("a", "linux/arm64", `["cfg-a","l3"]`)
+	put("b", "linux/amd64", `["l1","l4"]`)
+	put("gone", "linux/amd64", `["l5"]`)
+	put("old", "linux/amd64", ``)
+	big := bytes.Repeat([]byte{1}, 1<<20)
+	for i, d := range []string{"cfg-a", "l1", "l2", "l3", "l4", "l5", "unnamed"} {
+		if err := s.PutLayerRead(ctx, d, big, false, at.Add(time.Duration(i)*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if l, err := s.ReleaseReadLayers(ctx, "a", "img", "linux/arm64"); err != nil || l != `["cfg-a","l3"]` {
+		t.Fatalf("layers = %q, %v", l, err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep := []ReleaseReadKey{{"a", "img", "linux/amd64"}, {"a", "img", "linux/arm64"}, {"b", "img", "linux/amd64"}, {"old", "img", "linux/amd64"}}
+	// Room for four of the five layer reads still named.
+	st, err := s.PruneBuilderReads(ctx, keep, 4<<20+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Reads != 1 || st.Layers != 3 || st.LayerBytes != 4<<20 {
+		t.Fatalf("stats %+v", st)
+	}
+	if _, _, _, ok, _ := s.ReleaseRead(ctx, "gone", "img", "linux/amd64"); ok {
+		t.Error("release read outside keep left")
+	}
+	for d, want := range map[string]bool{"cfg-a": false, "l1": true, "l2": true, "l3": true, "l4": true, "l5": false, "unnamed": false} {
+		if _, _, ok, err := s.LayerRead(ctx, d); err != nil || ok != want {
+			t.Errorf("layer read %s kept %v, want %v (%v)", d, ok, want, err)
+		}
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Size() >= before.Size()-2<<20 {
+		t.Errorf("file %d bytes after pruning, %d before", after.Size(), before.Size())
+	}
+	// A new read clears the layers of the read it replaces.
+	if err := s.PutReleaseRead(ctx, "a", "img", "linux/amd64", "2", "sha256:j", []byte(`{}`), at); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := s.ReleaseReadLayers(ctx, "a", "img", "linux/amd64"); l != "" {
+		t.Errorf("layers of a replaced read = %q", l)
+	}
+	if n, err := s.DropLayerReads(ctx); err != nil || n != 4 {
+		t.Fatalf("dropped %d, %v", n, err)
 	}
 }
