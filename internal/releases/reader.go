@@ -68,11 +68,10 @@ const (
 	maxLayerRecord = 2 * (256 << 20)
 )
 
-// Platforms are the platforms read of every release, keyed as the store
-// keys a release read. arm64 matches every variant.
+// Platforms are the platforms read of every release. arm64 matches every
+// variant; each image of the index is read and stored under the platform
+// of its line, variant included (feed.ReleasePlatform.Key).
 var Platforms = []registry.Platform{{OS: "linux", Arch: "amd64"}, {OS: "linux", Arch: "arm64"}}
-
-func platformKey(p registry.Platform) string { return p.OS + "/" + p.Arch }
 
 // versionRe is the bound feed.ReleaseLine.Validate puts on a version; a
 // tag whose version fails it is not read at all.
@@ -82,6 +81,7 @@ var versionRe = regexp.MustCompile(`^[A-Za-z0-9._+~:-]{1,128}$`)
 type Store interface {
 	LayerRead(ctx context.Context, digest string) (files []byte, partial, ok bool, err error)
 	PutLayerRead(ctx context.Context, digest string, files []byte, partial bool, readAt time.Time) error
+	ReleaseReadPlatforms(ctx context.Context, appID, image string) ([]string, error)
 	ReleaseRead(ctx context.Context, appID, image, platform string) (tag, indexDigest string, line []byte, ok bool, err error)
 	PutReleaseRead(ctx context.Context, appID, image, platform, tag, indexDigest string, line []byte, readAt time.Time) error
 	ReleaseReadLimits(ctx context.Context, appID, image, platform string) (string, error)
@@ -486,7 +486,7 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 	for _, l := range lines {
 		if err := l.Validate(); err != nil {
 			st.Invalid++
-			log.Warn("release read: line left out", "platform", platformKey(l.Platform.Registry()), "err", err)
+			log.Warn("release read: line left out", "platform", l.Platform.Key(), "err", err)
 			continue
 		}
 		b, err := json.Marshal(l)
@@ -495,10 +495,12 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 		}
 		if len(b) >= maxLineBytes {
 			st.Invalid++
-			log.Warn("release read: line left out", "platform", platformKey(l.Platform.Registry()), "err", "longer than an installation reads")
+			log.Warn("release read: line left out", "platform", l.Platform.Key(), "err", "longer than an installation reads")
 			continue
 		}
-		key := platformKey(requested(l.Platform.Registry()))
+		// Keyed with the variant, as installations keep the lines: two
+		// images of one architecture in different variants are two reads.
+		key := l.Platform.Key()
 		if err := r.PutReleaseRead(ctx, j.app.ID, j.image, key, tag, index, b, now); err != nil {
 			return err
 		}
@@ -512,26 +514,26 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 	return nil
 }
 
-// requested maps the platform of a manifest to the requested platform it
-// matched (arm64 of every variant is stored as linux/arm64).
-func requested(p registry.Platform) registry.Platform {
-	return registry.Platform{OS: p.OS, Arch: p.Arch}
-}
-
 // stored returns the stored reads of an image's platforms.
 func (r *Reader) stored(ctx context.Context, j job) ([]stored, error) {
+	platforms, err := r.ReleaseReadPlatforms(ctx, j.app.ID, j.image)
+	if err != nil {
+		return nil, err
+	}
 	var out []stored
-	for _, p := range Platforms {
-		tag, digest, b, ok, err := r.ReleaseRead(ctx, j.app.ID, j.image, platformKey(p))
+	for _, p := range platforms {
+		tag, digest, b, ok, err := r.ReleaseRead(ctx, j.app.ID, j.image, p)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
 			continue
 		}
-		s := stored{platform: platformKey(p), tag: tag, digest: digest}
-		if err := json.Unmarshal(b, &s.line); err != nil {
-			// Read again: the line is replaced.
+		s := stored{platform: p, tag: tag, digest: digest}
+		if err := json.Unmarshal(b, &s.line); err != nil || s.line.Platform.Key() != p {
+			// Read again: the line is replaced. A line stored under
+			// another platform than its own would ship next to the line
+			// of that platform.
 			s.digest = ""
 		}
 		if s.limits, err = r.ReleaseReadLimits(ctx, j.app.ID, j.image, s.platform); err != nil {
@@ -804,9 +806,9 @@ func (r *Reader) jobLines(ctx context.Context, j job, cur map[job]readID, st *St
 }
 
 // StoreKey names the stored release read a shipped line came from: the
-// store keeps one read per app, image and requested platform.
+// store keeps one read per app, image and platform with its variant.
 func StoreKey(l feed.ReleaseLine) store.ReleaseReadKey {
-	return store.ReleaseReadKey{AppID: l.AppID, Image: l.Image, Platform: platformKey(requested(l.Platform.Registry()))}
+	return store.ReleaseReadKey{AppID: l.AppID, Image: l.Image, Platform: l.Platform.Key()}
 }
 
 // layerCache keeps layer records in the store's layer reads, as gzip

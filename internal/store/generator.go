@@ -127,6 +127,28 @@ func (s *Store) ReleaseRead(ctx context.Context, appID, image, platform string) 
 	return tag, indexDigest, line, true, nil
 }
 
+// ReleaseReadPlatforms returns the platforms an app's image has release
+// reads under, in order.
+func (s *Store) ReleaseReadPlatforms(ctx context.Context, appID, image string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT platform FROM release_reads WHERE app_id = ? AND image = ? ORDER BY platform`, appID, image)
+	if err != nil {
+		return nil, fmt.Errorf("query release read platforms: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("scan release read platform: %w", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("query release read platforms: %w", err)
+	}
+	return out, nil
+}
+
 // PutReleaseRead stores a release read, replacing the earlier one of the
 // same app, image and platform. The limits and layers of the earlier read
 // are cleared (SetReleaseReadLimits, SetReleaseReadLayers).

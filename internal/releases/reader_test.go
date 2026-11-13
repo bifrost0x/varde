@@ -914,3 +914,58 @@ func TestReadsNameTheirLayers(t *testing.T) {
 		t.Fatalf("%d blob requests after pruning, want 2", n)
 	}
 }
+
+// Two arm64 images of one release, one naming variant v8 and one naming
+// none, are two lines: each is stored, shipped and kept under its own
+// platform, and neither replaces the other.
+func TestArmVariantsKeptApart(t *testing.T) {
+	f := newRegistry(t)
+	f.push(t, "org/app", "1.1.0", false, debian("amd64", "", "bash=5.2-amd"), debian("arm64", "v8", "bash=5.2-v8"), debian("arm64", "", "bash=5.2-plain"))
+	cat := newCatalog(t, []catalog.Entry{reviewedEntry("app", regHost+"/org/app")}, nil)
+	r, s := newReader(t, f)
+	check := func(name string, lines []feed.ReleaseLine) {
+		t.Helper()
+		got := map[string]string{}
+		for _, l := range lines {
+			got[l.Platform.Key()] = pkgList(l)
+		}
+		want := map[string]string{"linux/amd64": "dpkg:bash=5.2-amd", "linux/arm64/v8": "dpkg:bash=5.2-v8", "linux/arm64": "dpkg:bash=5.2-plain"}
+		if len(lines) != len(want) {
+			t.Fatalf("%s: %d lines: %v", name, len(lines), got)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("%s: %s packages %q, want %q", name, k, got[k], v)
+			}
+		}
+	}
+	first, st := run(t, r, cat)
+	if st.Read != 1 {
+		t.Fatalf("stats %+v", st)
+	}
+	check("read", first)
+	// Stored apart, the unchanged release ships all three again.
+	r.Now = func() time.Time { return now0.Add(24 * time.Hour) }
+	second, st := run(t, r, cat)
+	if st.Unchanged != 1 {
+		t.Fatalf("stats %+v", st)
+	}
+	check("unchanged", second)
+	// The store keys of the shipped lines keep every one of their reads.
+	keys := map[store.ReleaseReadKey]bool{}
+	var keep []store.ReleaseReadKey
+	for _, l := range second {
+		k := StoreKey(l)
+		keys[k] = true
+		keep = append(keep, k)
+	}
+	if len(keys) != 3 {
+		t.Fatalf("store keys %v", keys)
+	}
+	pruned, err := s.PruneBuilderReads(t.Context(), keep, 1<<30)
+	if err != nil || pruned.Reads != 0 {
+		t.Fatalf("pruned %+v, %v", pruned, err)
+	}
+	third, _ := run(t, r, cat)
+	check("after pruning", third)
+}
