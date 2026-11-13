@@ -149,13 +149,23 @@ func (s *Store) TouchFeedVerified(ctx context.Context, sequence int64, now time.
 	return nil
 }
 
-// ClearFeed removes the advisories that came from the feed, for leaving
-// feed mode. The feed state stays: its sequence keeps protecting against a
-// rollback when the feed is used again. KEV and EPSS stay too; the direct
-// sources replace them on their next run.
+// ClearFeed removes the advisories and the release package lists that came
+// from the feed, for leaving feed mode: no page may claim a release fix
+// from a package no longer in use, and a later return writes the lists
+// afresh (their marker goes with them). The feed state stays: its sequence
+// keeps protecting against a rollback when the feed is used again. KEV and
+// EPSS stay too; the direct sources replace them on their next run.
 func (s *Store) ClearFeed(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM advisories WHERE source = ?`, FeedSource); err != nil {
-		return fmt.Errorf("clear feed advisories: %w", err)
-	}
-	return nil
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM advisories WHERE source = ?`, FeedSource); err != nil {
+			return fmt.Errorf("clear feed advisories: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM release_packages`); err != nil {
+			return fmt.Errorf("clear release packages: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM release_packages_marker`); err != nil {
+			return fmt.Errorf("clear release packages marker: %w", err)
+		}
+		return nil
+	})
 }

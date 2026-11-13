@@ -274,15 +274,17 @@ type pkgCoverage struct {
 }
 
 // uncovered reports that the package holds no advisories for app. Covered
-// are the entries of the package's catalog, and derived apps whose
-// repositories are all in the package's index: the package stores the
-// advisories of an indexed repository under the derived ID. A local or
-// built-in entry for the same repository has another ID and gets none.
+// are the entries of the package's catalog, and derived and generated apps
+// whose repositories are all in the package's index: the package stores
+// the advisories of an indexed repository under the derived ID, which is
+// also the ID of a generated entry. A local or built-in entry for the same
+// repository has another ID and gets none.
 func (c *pkgCoverage) uncovered(app *catalog.App) bool {
 	if app.Origin == catalog.OriginFeed {
 		return false
 	}
-	if app.Origin != catalog.OriginDerived || len(app.Advisories.GitHubRepos) == 0 {
+	byIndex := app.Origin == catalog.OriginDerived || app.Origin == catalog.OriginGenerated
+	if !byIndex || len(app.Advisories.GitHubRepos) == 0 {
 		return true
 	}
 	repos := c.indexed()

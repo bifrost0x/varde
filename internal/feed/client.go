@@ -88,8 +88,6 @@ type Client struct {
 	etag map[string]string // per mirror
 	// index is the first-party index of the active package.
 	index atomic.Pointer[applists.Table]
-	// releases are the release package lists of the active package.
-	releases atomic.Pointer[[]ReleaseLine]
 }
 
 // Files inside Dir.
@@ -242,29 +240,15 @@ func (c *Client) ActiveChannel(ctx context.Context) string {
 // no package is active or it carries none. Safe for concurrent use.
 func (c *Client) Index() *applists.Table { return c.index.Load() }
 
-// Releases returns the release package lists of the active package, or
-// nil when no package is active or it carries none. The slice is shared:
-// callers must not change it. Safe for concurrent use.
-func (c *Client) Releases() []ReleaseLine {
-	if p := c.releases.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// setReleases activates the release package lists of a package and keeps
-// them in the store, where the pages read them per app image; a package
-// without them clears the table. Release lists only answer which release
+// setReleases keeps the release package lists of a package in the store,
+// where the pages read them per app image; a package without them clears
+// the table. They are not kept in memory: only the pages read them, a few
+// at a time. Release lists only answer which release
 // fixes a finding: failing to keep them is logged and leaves the catalog
 // and the advisories of the package applied. marker is the digest of the
 // releases blob (releasesMarker): when the store already holds that blob's
 // lists, as on most starts, they are not written again.
 func (c *Client) setReleases(ctx context.Context, lines []ReleaseLine, marker string) {
-	if lines == nil {
-		c.releases.Store(nil)
-	} else {
-		c.releases.Store(&lines)
-	}
 	if kept, err := c.Store.ReleasePackagesMarker(ctx); err != nil {
 		c.Log.Warn("release package lists: stored marker not readable; writing them again", "err", err)
 	} else if kept == marker {

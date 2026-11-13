@@ -144,3 +144,24 @@ func TestReplaceReleasePackagesIsAtomic(t *testing.T) {
 		t.Errorf("marker after emptying = %q, %v", m, err)
 	}
 }
+
+// Leaving the feed drops the release package lists it installed, with
+// their marker: a later return writes them afresh, and no page claims a
+// release fix from a package no longer in use.
+func TestClearFeedDropsReleasePackages(t *testing.T) {
+	s, _ := openTest(t)
+	ctx := t.Context()
+	row := ReleasePackageRow{AppID: "a", Image: "img", Platform: "linux/amd64", Tag: "1", Version: "1.0", Line: []byte("{}")}
+	if err := s.ReplaceReleasePackages(ctx, "m1", []ReleasePackageRow{row}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClearFeed(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.ReleasePackagesFor(ctx, "a", "img"); err != nil || len(got) != 0 {
+		t.Fatalf("release packages after leaving the feed: %q, %v", got, err)
+	}
+	if m, err := s.ReleasePackagesMarker(ctx); err != nil || m != "" {
+		t.Fatalf("marker after leaving the feed = %q, %v", m, err)
+	}
+}
