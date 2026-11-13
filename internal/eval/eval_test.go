@@ -5,6 +5,7 @@ package eval
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -206,5 +207,20 @@ func TestEveryCatalogAppHasACase(t *testing.T) {
 		case covered[app.ID] && withoutCase[app.ID]:
 			t.Errorf("catalog app %s has a case now; remove it from withoutCase", app.ID)
 		}
+	}
+}
+
+// The corpus built into the binary is the one in testdata.
+func TestContainerCasesBuiltIn(t *testing.T) {
+	c, err := Load("testdata/corpus")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ContainerCases()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || !reflect.DeepEqual(got, c.Containers) {
+		t.Fatalf("built-in cases (%d) differ from the corpus (%d)", len(got), len(c.Containers))
 	}
 }

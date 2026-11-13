@@ -175,7 +175,11 @@ func DeriveAppsWith(cat *catalog.Catalog, lookups Lookups, ws []inventory.Worklo
 		if err != nil {
 			continue
 		}
-		if a, ok := cat.ByImage(ref.Repository); ok && a.Origin != catalog.OriginDerived {
+		// An image a reviewed entry matches, or one the generator
+		// checked, is decided; the images a generated entry took over
+		// from its derived entry are derived again, as derived ones are.
+		if a, ok := cat.ByImage(ref.Repository); ok &&
+			(a.Origin.Reviewed() || (a.Origin == catalog.OriginGenerated && !identify.ReadsAsDerived(a, ref.Repository))) {
 			continue
 		}
 		label := strings.TrimSpace(c.ImageLabels[identify.LabelOCISource])
@@ -215,7 +219,9 @@ func DeriveAppsWith(cat *catalog.Catalog, lookups Lookups, ws []inventory.Worklo
 	for _, image := range images {
 		c := byImage[image]
 		if c.label != "" {
-			if a, ok := cat.ByOCISource(c.label); ok && a.Origin != catalog.OriginDerived {
+			// A generated entry stands in for the derived one: the entry
+			// derived here joins it (Catalog.WithDerived).
+			if a, ok := cat.ByOCISource(c.label); ok && a.Origin.Reviewed() {
 				continue
 			}
 			if app, ok := catalog.Derive(c.label, image); ok {
@@ -246,7 +252,7 @@ func DeriveAppsWith(cat *catalog.Catalog, lookups Lookups, ws []inventory.Worklo
 			if _, known := cat.ByGitHubRepo(strings.TrimPrefix(repo, "github.com/")); known {
 				continue
 			}
-			if a, known := cat.ByOCISource("https://" + repo); known && a.Origin != catalog.OriginDerived {
+			if a, known := cat.ByOCISource("https://" + repo); known && a.Origin.Reviewed() {
 				continue
 			}
 			if app, ok := catalog.DeriveFor(repo, image, d); ok {
@@ -262,7 +268,7 @@ func DeriveAppsWith(cat *catalog.Catalog, lookups Lookups, ws []inventory.Worklo
 		if _, known := cat.ByGitHubRepo(strings.TrimPrefix(guess, "github.com/")); known {
 			continue
 		}
-		if a, known := cat.ByOCISource("https://" + guess); known && a.Origin != catalog.OriginDerived {
+		if a, known := cat.ByOCISource("https://" + guess); known && a.Origin.Reviewed() {
 			continue
 		}
 		if app, ok := catalog.DeriveFor(guess, image, catalog.Derivation{Basis: catalog.BasisGHCR}); ok {

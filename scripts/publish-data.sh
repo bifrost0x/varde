@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Publishes a built data package: one commit that holds exactly feed/,
-# the builder's store and its signature, pushed over the branch "data". The
+# the builder's store and its signature, and the list of generated catalog
+# entries (catalog/generated.json and generated.md, when the build wrote
+# them), pushed over the branch "data". The
 # branch never grows: every build replaces it. Run from inside a checkout of
 # the repository.
 #
 #   scripts/publish-data.sh <work-dir>
 #
-# <work-dir> holds feed/ (written by cmd/packagebuilder) and
+# <work-dir> holds feed/ and catalog/ (written by cmd/packagebuilder) and
 # cache/builder.db (the builder's store, kept for the next build).
 #
 # The store is published compressed, as cache/builder.db.gz. It holds the
@@ -17,7 +19,8 @@
 # raise a secret-scanning alert with every build. The signature stays the
 # one over the uncompressed store.
 # PUBLISH_REMOTE (default origin) and PUBLISH_BRANCH (default data) name
-# the destination.
+# the destination. A compressed store over 95 MiB is refused: GitHub
+# refuses files over 100 MiB.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -39,6 +42,19 @@ for needed in feed/v1/manifest.json feed/v1/manifest.json.sig feed/v1/root.json 
   fi
 done
 
+# The list of generated entries is optional (a build without the
+# generator has none); what is there must be plain files.
+generated=()
+for f in catalog/generated.json catalog/generated.md; do
+  if [[ -L "${work}/${f}" || ( -e "${work}/${f}" && ! -f "${work}/${f}" ) ]]; then
+    echo "${f} in ${work} is not a plain file: nothing published" >&2
+    exit 1
+  fi
+  if [[ -f "${work}/${f}" ]]; then
+    generated+=("${f}")
+  fi
+done
+
 index_file="$(mktemp)"
 trap 'rm -f "${index_file}"' EXIT
 rm -f "${index_file}" # git wants to create it itself
@@ -50,9 +66,17 @@ export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-${GIT_AUTHOR_EMAIL}}"
 
 # -n: no name and no timestamp, the same store gives the same file.
 gzip -9 -n -c "${work}/cache/builder.db" > "${work}/cache/builder.db.gz"
+# GitHub refuses a file over 100 MiB. The builder keeps the store under
+# 80 MiB compressed; this is the last stop before a push that would fail.
+# PUBLISH_MAX_STORE (bytes, default 95 MiB) is for tests.
+store_size="$(wc -c < "${work}/cache/builder.db.gz")"
+if [[ "${store_size}" -gt "${PUBLISH_MAX_STORE:-$((95 * 1024 * 1024))}" ]]; then
+  echo "cache/builder.db.gz is ${store_size} bytes, too close to GitHub's limit of 100 MiB: nothing published" >&2
+  exit 1
+fi
 
 # -f: the repository's .gitignore is about the source tree, not about this.
-git --work-tree="${work}" add -f -- feed cache/builder.db.gz cache/builder.db.sig
+git --work-tree="${work}" add -f -- feed cache/builder.db.gz cache/builder.db.sig ${generated[@]+"${generated[@]}"}
 tree="$(git write-tree)"
 sequence="$(sed -n 's/^ *"sequence": *\([0-9][0-9]*\).*/\1/p' "${work}/feed/stats.json" | head -n 1)"
 commit="$(git commit-tree "${tree}" -m "data: package ${sequence:-unknown}")"

@@ -144,6 +144,7 @@
   <p class="todo__action"><strong>{{.Action}}</strong></p>
   {{if .Note}}<p class="small">{{.Note}}</p>{{end}}
   {{if .Command}}<p class="small muted">For example <code>{{.Command}}</code></p>{{end}}
+  {{with .Release}}<p class="small">{{if .Fixes}}{{if .Fixed}}<strong>Release <span class="mono">{{.Tag}}</span> fixes {{len .Fixed}} of {{.Total}}</strong> flaws in the image's packages.{{else if .Open}}<strong>Release <span class="mono">{{.Tag}}</span> does not fix these yet:</strong> none of the {{.Total}} flaws in the image's packages.{{else}}Varde cannot tell which of the {{.Total}} flaws in the image's packages release <span class="mono">{{.Tag}}</span> fixes.{{end}}{{if .OpenShown}} Not fixed in any release yet: {{range $i, $id := .OpenShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .OpenMore}} and {{.OpenMore}} more{{end}}.{{end}}{{if .UnknownShown}} Varde cannot tell for: {{range $i, $id := .UnknownShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .UnknownMore}} and {{.UnknownMore}} more{{end}}.{{end}}{{else if .Newest}}Already runs the newest release (<span class="mono">{{.Tag}}</span>).{{else}}Newest release: <span class="mono">{{.Tag}}</span>.{{end}} <span class="muted">Read {{date .Read}}.</span></p>{{end}}
   <details class="todo__details">
     <summary class="small">What is affected ({{len .Groups}} {{if eq (len .Groups) 1}}package or app{{else}}packages and apps{{end}})</summary>
     {{template "findinggroups" .Groups}}

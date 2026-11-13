@@ -110,6 +110,10 @@ func WriteRoot(dir string, version int64, data []byte) error {
 	return fsutil.WriteFileAtomic(filepath.Join(dir, "v1", "root.json"), data, 0o644)
 }
 
+// maxCatalogBlobEntries is the limit every installation, also one released
+// before the generated blob, puts on the catalog blob (catalog.Build).
+const maxCatalogBlobEntries = 2000
+
 // Snapshot is the content of one manifest to publish.
 type Snapshot struct {
 	// Channel is the channel the snapshot is published on
@@ -119,34 +123,62 @@ type Snapshot struct {
 	CreatedAt      time.Time
 	ExpiresAt      time.Time
 	CatalogVersion string
-	Catalog        []catalog.Entry
-	Advisories     []AdvisoryLine
-	KEV            []KEVLine
-	EPSS           []EPSSLine
+	// Catalog are the reviewed entries; at most 2000, the limit of the
+	// installations released before the generated blob.
+	Catalog []catalog.Entry
+	// Generated are the generated entries, written to a blob of their own;
+	// nil leaves the blob out.
+	Generated  []catalog.Entry
+	Advisories []AdvisoryLine
+	KEV        []KEVLine
+	EPSS       []EPSSLine
+	// Releases are the package lists of the newest releases; nil leaves
+	// the blob out.
+	Releases []ReleaseLine
 	// Index is the first-party index table (applists.Table.Marshal);
 	// empty leaves the blob out.
 	Index []byte
+	// MaxUnpacked caps the total uncompressed size of the blobs (default
+	// DefaultMaxUnpacked, the limit of the readers).
+	MaxUnpacked int64
 	// Shards splits advisories by app ID (default 64).
 	Shards int
 }
 
-// WriteSnapshot writes the blobs, the manifest and its signature file.
-func WriteSnapshot(dir string, s Snapshot, signers ...ed25519.PrivateKey) ([]byte, error) {
+// blobData is one blob before it is compressed.
+type blobData struct {
+	media string
+	data  []byte
+}
+
+// blobs encodes the blobs of s by name.
+func (s Snapshot) blobs() (map[string]blobData, error) {
 	if s.Shards <= 0 {
 		s.Shards = 64
 	}
-	blobs := map[string]struct {
-		media string
-		data  []byte
-	}{}
+	blobs := map[string]blobData{}
+	if len(s.Catalog) > maxCatalogBlobEntries {
+		return nil, fmt.Errorf("catalog blob: %d entries, installations read at most %d", len(s.Catalog), maxCatalogBlobEntries)
+	}
 	cat, err := json.Marshal(catalogDoc{SchemaVersion: SpecVersion, Entries: s.Catalog})
 	if err != nil {
 		return nil, err
 	}
-	blobs["catalog"] = struct {
-		media string
-		data  []byte
-	}{MediaCatalog, cat}
+	blobs["catalog"] = blobData{MediaCatalog, cat}
+	if s.Generated != nil {
+		data, err := json.Marshal(catalogDoc{SchemaVersion: SpecVersion, Entries: s.Generated})
+		if err != nil {
+			return nil, err
+		}
+		blobs["generated"] = blobData{MediaGenerated, data}
+	}
+	if s.Releases != nil {
+		data, err := marshalReleases(s.Releases)
+		if err != nil {
+			return nil, err
+		}
+		blobs["releases"] = blobData{MediaReleases, data}
+	}
 	shards := map[int][]AdvisoryLine{}
 	for _, a := range s.Advisories {
 		h := fnv.New32a()
@@ -159,38 +191,70 @@ func WriteSnapshot(dir string, s Snapshot, signers ...ed25519.PrivateKey) ([]byt
 		if err != nil {
 			return nil, err
 		}
-		blobs[fmt.Sprintf("advisories/shard-%02d", n)] = struct {
-			media string
-			data  []byte
-		}{MediaAdvisories, data}
+		blobs[fmt.Sprintf("advisories/shard-%02d", n)] = blobData{MediaAdvisories, data}
 	}
 	if len(s.Index) > 0 {
-		blobs["index"] = struct {
-			media string
-			data  []byte
-		}{MediaIndex, s.Index}
+		blobs["index"] = blobData{MediaIndex, s.Index}
 	}
 	if s.KEV != nil {
 		data, err := json.Marshal(s.KEV)
 		if err != nil {
 			return nil, err
 		}
-		blobs["enrichment/kev"] = struct {
-			media string
-			data  []byte
-		}{MediaKEV, data}
+		blobs["enrichment/kev"] = blobData{MediaKEV, data}
 	}
 	if s.EPSS != nil {
 		data, err := json.Marshal(s.EPSS)
 		if err != nil {
 			return nil, err
 		}
-		blobs["enrichment/epss"] = struct {
-			media string
-			data  []byte
-		}{MediaEPSS, data}
+		blobs["enrichment/epss"] = blobData{MediaEPSS, data}
 	}
+	return blobs, nil
+}
 
+func (s Snapshot) maxUnpacked() int64 {
+	if s.MaxUnpacked > 0 {
+		return s.MaxUnpacked
+	}
+	return DefaultMaxUnpacked
+}
+
+// ReleasesRoom is the room for the releases blob, unpacked: budget
+// (DefaultReleasesBudget when not positive), or less when the other blobs
+// leave less of the unpacked limit. The builder fits the release lines
+// into it (FitReleases), so the limit is never reached through them.
+func (s Snapshot) ReleasesRoom(budget int64) (int64, error) {
+	if budget <= 0 {
+		budget = DefaultReleasesBudget
+	}
+	s.Releases = nil
+	blobs, err := s.blobs()
+	if err != nil {
+		return 0, err
+	}
+	left := s.maxUnpacked()
+	for _, b := range blobs {
+		left -= int64(len(b.data))
+	}
+	return max(0, min(budget, left)), nil
+}
+
+// WriteSnapshot writes the blobs, the manifest and its signature file.
+func WriteSnapshot(dir string, s Snapshot, signers ...ed25519.PrivateKey) ([]byte, error) {
+	blobs, err := s.blobs()
+	if err != nil {
+		return nil, err
+	}
+	// Readers refuse a manifest whose blobs unpack to more than their
+	// limit (DefaultMaxUnpacked); the builder refuses to write one.
+	var total int64
+	for _, b := range blobs {
+		total += int64(len(b.data))
+	}
+	if limit := s.maxUnpacked(); total > limit {
+		return nil, fmt.Errorf("snapshot: %d bytes unpacked exceed the limit of %d", total, limit)
+	}
 	enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
 	if err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/pem"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -173,6 +174,11 @@ func TestUncovered(t *testing.T) {
 		{"derived, in the index", app(catalog.OriginDerived, "acme/widget"), false},
 		{"derived, in the index, other case", app(catalog.OriginDerived, "ACME/Widget"), false},
 		{"derived, not in the index", app(catalog.OriginDerived, "acme/other"), true},
+		// The package stores a generated app's advisories under its ID,
+		// the derived ID of its indexed repository.
+		{"generated, in the index", app(catalog.OriginGenerated, "acme/widget"), false},
+		{"generated, not in the index", app(catalog.OriginGenerated, "acme/other"), true},
+		{"generated without a repository", app(catalog.OriginGenerated), true},
 		{"local entry", app(catalog.OriginLocal, "me/mine"), true},
 		// The package's advisories for that repository are stored under
 		// the derived ID, not under the ID of a local or built-in entry.
@@ -355,6 +361,7 @@ func TestSuperseded(t *testing.T) {
 	feedApp := &catalog.App{Origin: catalog.OriginFeed, Advisories: catalog.Advisories{GitHubRepos: []string{"immich-app/immich"}}}
 	derived := &catalog.App{Origin: catalog.OriginDerived, Advisories: catalog.Advisories{GitHubRepos: []string{"acme/widget"}}}
 	local := &catalog.App{Origin: catalog.OriginLocal, Advisories: catalog.Advisories{GitHubRepos: []string{"acme/widget"}}}
+	generated := &catalog.App{Origin: catalog.OriginGenerated, Advisories: catalog.Advisories{GitHubRepos: []string{"acme/widget"}}}
 	for _, tc := range []struct {
 		name   string
 		app    *catalog.App
@@ -368,6 +375,8 @@ func TestSuperseded(t *testing.T) {
 		{"covered derived app, old GitHub record", derived, "github:acme/widget", true},
 		{"covered derived app, feed record", derived, store.FeedSource, false},
 		{"local entry, GitHub record", local, "github:acme/widget", false},
+		{"covered generated app, old GitHub record", generated, "github:acme/widget", true},
+		{"covered generated app, feed record", generated, store.FeedSource, false},
 		{"unknown app", nil, "github:x/y", false},
 	} {
 		if got := ch.superseded(tc.app, tc.source); got != tc.want {
@@ -404,6 +413,29 @@ func TestPackageOffClearsItsData(t *testing.T) {
 	in.refresher.RunOnce(ctx)
 	if in.feedAdvisories(t) != 2 {
 		t.Fatalf("package on again: advisories = %d", in.feedAdvisories(t))
+	}
+}
+
+// Direct mode forgets the release package lists of the package with its
+// advisories: no page may claim a release fix from data nobody refreshes.
+func TestForgetFeedClearsReleasePackages(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(dir, "varde.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	row := store.ReleasePackageRow{AppID: "immich", Image: "ghcr.io/immich-app/immich-server", Platform: "linux/amd64", Tag: "v1", Version: "1", Line: []byte("{}")}
+	if err := st.ReplaceReleasePackages(ctx, "sha256:m", []store.ReleasePackageRow{row}); err != nil {
+		t.Fatal(err)
+	}
+	forgetFeed(ctx, config.Config{Mode: "direct", DataDir: dir}, st, slog.New(slog.DiscardHandler))
+	if got, err := st.ReleasePackagesFor(ctx, row.AppID, row.Image); err != nil || len(got) != 0 {
+		t.Fatalf("release packages after forgetting the feed: %q, %v", got, err)
+	}
+	if m, err := st.ReleasePackagesMarker(ctx); err != nil || m != "" {
+		t.Fatalf("marker after forgetting the feed = %q, %v", m, err)
 	}
 }
 

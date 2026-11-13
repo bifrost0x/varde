@@ -59,10 +59,20 @@ func (c *Client) ReadLanguagePackages(ctx context.Context, id, workDir string) (
 	}
 	ctx, cancel := context.WithTimeout(ctx, languageTimeout)
 	defer cancel()
-	roots := append([]string(nil), LanguageRoots...)
-	if wd := path.Clean(workDir); workDir != "" && path.IsAbs(wd) && wd != "/" && !under(wd, roots) {
-		roots = append(roots, wd)
-	}
+	return WalkLanguageRoots(ctx, workDir, func(root string, budget int64, read func(*tar.Reader) error) error {
+		return c.archiveTar(ctx, id, root, budget, read)
+	})
+}
+
+// WalkLanguageRoots reads the language packages of an image through walk,
+// which streams the archive of one root directory (names relative to the
+// root's parent, the root itself first, at most budget bytes) to read and
+// returns ErrNoFile for a root that does not exist. It holds what every
+// source shares: the roots (LanguageRoots plus a working directory outside
+// them), the byte and file bounds across all roots, and when a result is
+// Partial. The caller sets any timeout on ctx.
+func WalkLanguageRoots(ctx context.Context, workDir string, walk func(root string, budget int64, read func(*tar.Reader) error) error) (LanguageRead, error) {
+	roots := languageRoots(workDir)
 	var out LanguageRead
 	budget := int64(languageBytes)
 	files := 0
@@ -72,7 +82,7 @@ func (c *Client) ReadLanguagePackages(ctx context.Context, id, workDir string) (
 			break
 		}
 		counter := &countingLimit{left: budget}
-		err := c.archiveTar(ctx, id, root, budget, func(tr *tar.Reader) error {
+		err := walk(root, budget, func(tr *tar.Reader) error {
 			return readLanguageTree(tr, path.Dir(root), counter, &files, &out.Packages)
 		})
 		budget -= counter.used
@@ -93,6 +103,16 @@ func (c *Client) ReadLanguagePackages(ctx context.Context, id, workDir string) (
 		}
 	}
 	return out, nil
+}
+
+// languageRoots are LanguageRoots plus the working directory when it lies
+// outside them.
+func languageRoots(workDir string) []string {
+	roots := append([]string(nil), LanguageRoots...)
+	if wd := path.Clean(workDir); workDir != "" && path.IsAbs(wd) && wd != "/" && !under(wd, roots) {
+		roots = append(roots, wd)
+	}
+	return roots
 }
 
 // under reports whether dir lies inside one of roots.

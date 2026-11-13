@@ -103,6 +103,39 @@ func (s *Store) Advisories(ctx context.Context, appID string) ([]AdvisoryRecord,
 	if err != nil {
 		return nil, fmt.Errorf("query advisories: %w", err)
 	}
+	return scanAdvisories(rows)
+}
+
+// AdvisoriesFor returns the advisories of several apps in one read, by app
+// ID: a page that compares many packages of one container reads them
+// together instead of once per package.
+func (s *Store) AdvisoriesFor(ctx context.Context, appIDs []string) (map[string][]AdvisoryRecord, error) {
+	out := map[string][]AdvisoryRecord{}
+	if len(appIDs) == 0 {
+		return out, nil
+	}
+	ids, err := json.Marshal(appIDs)
+	if err != nil {
+		return nil, fmt.Errorf("encode app IDs: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT app_id, source, osv_json, severity_cvss, severity_label, fetched_at FROM advisories
+		WHERE app_id IN (SELECT value FROM json_each(?)) ORDER BY app_id, source, id`, string(ids))
+	if err != nil {
+		return nil, fmt.Errorf("query advisories: %w", err)
+	}
+	recs, err := scanAdvisories(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range recs {
+		out[r.AppID] = append(out[r.AppID], r)
+	}
+	return out, nil
+}
+
+// scanAdvisories reads the rows of an advisories query and closes them.
+func scanAdvisories(rows *sql.Rows) ([]AdvisoryRecord, error) {
 	defer func() { _ = rows.Close() }()
 	var out []AdvisoryRecord
 	for rows.Next() {

@@ -8,6 +8,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -213,6 +215,31 @@ type ImagePackages struct {
 	// Partial marks a read that stopped at a size or time bound: what it
 	// found is checked, but it is not the image's complete package list.
 	Partial bool `json:"partial,omitempty"`
+}
+
+// MaxImagePackages bounds the packages of one image's package list that
+// comes from outside Varde (an agent, the data package).
+const MaxImagePackages = 20000
+
+var distroPattern = regexp.MustCompile(`^[a-z0-9._-]{0,64}$`)
+
+// CheckImagePackages checks the release fields and the packages of an
+// image's package list that comes from outside Varde's trust zone (an
+// agent's report, the data package): bounded lengths, a distribution in
+// the form "debian-12", and no package that claims to be the system's.
+func CheckImagePackages(distro, os string, pkgs []Package) error {
+	if !distroPattern.MatchString(distro) || len(os) > 128 {
+		return errors.New("invalid release fields")
+	}
+	if len(pkgs) > MaxImagePackages {
+		return errors.New("too many packages")
+	}
+	for _, pkg := range pkgs {
+		if len(pkg.Name) > 256 || len(pkg.Version) > 128 || len(pkg.SourceVersion) > 128 || len(pkg.Manager) > 16 || len(pkg.Source) > 256 || len(pkg.Distro) > 64 || len(pkg.Path) > 512 || pkg.System {
+			return errors.New("an invalid package")
+		}
+	}
+	return nil
 }
 
 // Port is a container port, optionally published on the host.

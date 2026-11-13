@@ -120,3 +120,103 @@ func TestDerivedAppNeedsConfirmation(t *testing.T) {
 		t.Errorf("source label: %+v doubt %q", r, r.Doubt())
 	}
 }
+
+// A generated entry carries its project's source label. The generator
+// checked its tag rule on the entry's own images only, so an image that
+// the entry knows only through that label is identified as the derived
+// entry would identify it: with the derived version chain, and confirmed
+// only when its derivation (the publisher's label naming the project)
+// confirms it. An image that may have inherited the label from its base
+// image stays a report, as with the derived entry, and never alerts.
+func TestGeneratedSourceLabelActsAsDerived(t *testing.T) {
+	gen := `id: gh-acme-widget
+name: widget
+homepage: https://github.com/acme/widget
+images:
+  - match: ghcr.io/acme/widget
+oci_source:
+  - https://github.com/acme/widget
+version:
+  scheme: semver
+  sources:
+    - label: org.opencontainers.image.version
+    - tag: ^v?(?P<v>\d+\.\d+\.\d+)(?:-(?:alpine|bookworm)[a-z0-9.]*)*$
+advisories:
+  coverage: partial
+  github_repos: [acme/widget]
+maintainers_of_entry: [generator]
+verified: "2026-11-12"
+`
+	genCat, err := catalog.BuildLayered(nil, catalog.OriginBuiltin, []catalog.Entry{{Name: "gh-acme-widget.yaml", Data: gen}}, nil)
+	if err != nil || len(genCat.DroppedGenerated()) != 0 {
+		t.Fatalf("generated catalog: %v %v", err, genCat.DroppedGenerated())
+	}
+	empty, err := catalog.Build(nil, catalog.OriginBuiltin, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// derivedWorld is the catalog an installation has without the
+	// generated entry: the entry it derives from the index, and, for an
+	// image named like the project, that image tied by its label
+	// (coverage.DeriveAppsWith).
+	derivedWorld := func(labelImage string) *catalog.Catalog {
+		d, ok := catalog.DeriveFor("github.com/acme/widget", "ghcr.io/acme/widget", catalog.Derivation{Basis: catalog.BasisIndex, Evidence: []string{"ghcr", "readme"}, Confirmed: true})
+		if !ok {
+			t.Fatal("not derived")
+		}
+		if labelImage != "" {
+			d.AddDerivedImage(labelImage, catalog.Derivation{Basis: catalog.BasisLabel, Confirmed: true})
+		}
+		c, err := empty.WithDerived([]*catalog.App{d})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	src := map[string]string{LabelOCISource: "https://github.com/acme/widget"}
+
+	// The entry's own image: its checked rule reads the variant tag.
+	r := Identify(genCat, container("ghcr.io/acme/widget:v1.2.0-alpine", nil, nil))
+	if r.AppID != "gh-acme-widget" || r.Derived || r.Version != "1.2.0" || r.Doubt() != "" {
+		t.Fatalf("own image: %+v doubt %q", r, r.Doubt())
+	}
+
+	for _, c := range []struct {
+		name       string
+		ref        string
+		labelImage string
+		derived    bool
+		version    string
+	}{
+		// Named like the project: the publisher's label confirms it, as
+		// catalog.Derive does; the derived chain reads the tag, also a
+		// variant the generated rule would read differently.
+		{"named alike", "docker.io/acme/widget-worker:1.4.0-ls3", "docker.io/acme/widget-worker", false, "1.4.0-ls3"},
+		// An unrelated image whose base image carries the label.
+		{"inherited", "docker.io/someone/addon:2.0.0", "", true, "2.0.0"},
+	} {
+		w := container(c.ref, src, nil)
+		// With the generated entry, the installation derives the label
+		// image as before (coverage.DeriveAppsWith) and the derived entry
+		// joins the generated one.
+		genWorld := genCat
+		if c.labelImage != "" {
+			d, ok := catalog.Derive(src[LabelOCISource], c.labelImage)
+			if !ok {
+				t.Fatal("not derived")
+			}
+			d.AddDerivedImage(c.labelImage, *d.Derivation)
+			if genWorld, err = genCat.WithDerived([]*catalog.App{d}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, want := Identify(genWorld, w), Identify(derivedWorld(c.labelImage), w)
+		if got.AppID != "gh-acme-widget" || got.Derived != c.derived || got.Version != c.version {
+			t.Errorf("%s: %+v", c.name, got)
+		}
+		if got.AppID != want.AppID || got.Derived != want.Derived || got.Version != want.Version || got.Trust != want.Trust ||
+			got.Confidence.Notifiable() != want.Confidence.Notifiable() || (got.Doubt() == "") != (want.Doubt() == "") {
+			t.Errorf("%s: generated %+v, derived %+v", c.name, got, want)
+		}
+	}
+}

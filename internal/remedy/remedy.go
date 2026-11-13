@@ -65,6 +65,9 @@ func Suggest(app *catalog.App, c *inventory.Container, target string, tags []str
 	if err != nil || ref.Digest != "" && ref.Tag == "" {
 		return Suggestion{}, false
 	}
+	// The app as identify read this image (a generated entry's tag rule
+	// only for the images the generator checked).
+	app = identify.AppForImage(app, ref.Repository)
 	s := Suggestion{Compose: compose(c.Labels)}
 	if ref.Tag == "" || version.IsFloating(ref.Tag) {
 		s.Floating = true

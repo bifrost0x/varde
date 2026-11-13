@@ -6,7 +6,10 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"testing"
@@ -127,5 +130,81 @@ func TestReadLanguageTreeSkipsLarge(t *testing.T) {
 	}
 	if !limit.skipped || len(got) != 0 {
 		t.Errorf("skipped %v, packages %v", limit.skipped, got)
+	}
+}
+
+// WalkLanguageRoots runs the roots with one shared budget and file bound:
+// a missing root is skipped, a walk that runs out of bytes or ends early
+// marks the result partial, and so does the file bound.
+func TestWalkLanguageRoots(t *testing.T) {
+	meta := []byte("Metadata-Version: 2.1\nName: requests\nVersion: 2.31.0\n\nbody")
+	one := map[string][]byte{"python3.12/site-packages/requests-2.31.0.dist-info/METADATA": meta}
+	ctx := context.Background()
+	var roots []string
+	got, err := WalkLanguageRoots(ctx, "/data/app", func(root string, _ int64, read func(*tar.Reader) error) error {
+		roots = append(roots, root)
+		if root != "/usr/local/lib" {
+			return ErrNoFile
+		}
+		return read(tarOf(t, one))
+	})
+	if err != nil || got.Partial || len(got.Packages) != 1 || got.Packages[0].Name != "requests" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	if want := "/usr/local/python3.12/site-packages/requests-2.31.0.dist-info/METADATA"; got.Packages[0].Path != want {
+		t.Errorf("path = %q, want %q", got.Packages[0].Path, want)
+	}
+	if last := roots[len(roots)-1]; last != "/data/app" || len(roots) != len(LanguageRoots)+1 {
+		t.Errorf("roots = %v", roots)
+	}
+
+	// A tar that ends early: what was read counts, the result is partial.
+	got, err = WalkLanguageRoots(ctx, "", func(root string, _ int64, read func(*tar.Reader) error) error {
+		if root != "/usr/local/lib" {
+			return ErrNoFile
+		}
+		if err := read(tarOf(t, one)); err != nil {
+			return err
+		}
+		return io.ErrUnexpectedEOF
+	})
+	if err != nil || !got.Partial || len(got.Packages) != 1 {
+		t.Fatalf("early end: got %+v, %v", got, err)
+	}
+
+	// The byte budget is handed on reduced by what earlier roots used.
+	var budgets []int64
+	got, err = WalkLanguageRoots(ctx, "", func(_ string, budget int64, read func(*tar.Reader) error) error {
+		budgets = append(budgets, budget)
+		if len(budgets) == 1 {
+			return read(tarOf(t, one))
+		}
+		return ErrNoFile
+	})
+	if err != nil || got.Partial || len(budgets) < 2 || budgets[1] >= budgets[0] {
+		t.Fatalf("budgets %v: got %+v, %v", budgets, got, err)
+	}
+
+	// A walk that exceeds its budget stops at the bound.
+	small := &countingLimit{left: 100}
+	var pk []inventory.Package
+	files := 0
+	if err := readLanguageTree(tarOf(t, one), "/usr/local/lib", small, &files, &pk); !errors.Is(err, errLanguageBound) {
+		t.Errorf("over budget: err = %v", err)
+	}
+
+	// More metadata files than the reader keeps: partial, bounded.
+	many := map[string][]byte{}
+	for i := 0; i <= languageFiles; i++ {
+		many[fmt.Sprintf("python3.12/site-packages/p%d-1.0.dist-info/METADATA", i)] = []byte("Name: p\nVersion: 1.0\n\n")
+	}
+	got, err = WalkLanguageRoots(ctx, "", func(root string, _ int64, read func(*tar.Reader) error) error {
+		if root != "/usr/local/lib" {
+			return ErrNoFile
+		}
+		return read(tarOf(t, many))
+	})
+	if err != nil || !got.Partial || len(got.Packages) != languageFiles {
+		t.Fatalf("file bound: partial=%v packages=%d, %v", got.Partial, len(got.Packages), err)
 	}
 }

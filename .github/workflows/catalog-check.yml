@@ -1,0 +1,212 @@
+name: catalog-check
+
+# Runs the generator's checks C1, C3, C4 and C5 (ADR 0040) on the reviewed
+# catalog entries in catalog/apps once a week. Corrections the checks prove
+# go into one pull request, "catalog: weekly check", on the branch
+# catalog/weekly-check, reset from main and updated in place; it is never
+# merged automatically. Problems without a correction (and entries the
+# check cannot confirm on its own) go to the run's summary and artifact
+# only, not into a pull request.
+#
+# Two jobs. "check" holds no secret: it runs cmd/catalogcheck against the
+# registries, GitHub (with the read-only workflow token) and NVD, and
+# uploads the corrected entries and report.md as an artifact. "pr" runs no
+# code of the repository or of that artifact: it copies the corrected files
+# over existing catalog/apps/*.yaml files and uses report.md as the pull
+# request's text.
+#
+# A run in which a source did not answer is incomplete: a correction may
+# be missing from it, so it leaves an open pull request and its branch as
+# they are. Only a complete run without corrections closes one.
+#
+# "pr" pushes and opens the pull request with a fine-grained token of the
+# maintainer (contents and pull requests: write on this repository only),
+# so that CI runs on the pull request: the secret CATALOG_CHECK_TOKEN in the
+# environment "catalog-check". Limiting that environment to the branch main
+# is a repository setting this file cannot make. Until the secret exists
+# the job does nothing.
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: catalog-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      corrected: ${{ steps.check.outputs.corrected }}
+      complete: ${{ steps.check.outputs.complete }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Check the reviewed entries
+        id: check
+        env:
+          # Raises GitHub's rate limit for the release lists; read only.
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Appends corrected=true|false and complete=true|false to the
+          # step's outputs.
+          go run ./cmd/catalogcheck -catalog catalog/apps -out work/check -status "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ -f work/check/report.md ]]; then
+            { echo; cat work/check/report.md; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Keep the corrections and the report
+        if: hashFiles('work/check/report.md') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: catalog-check
+          path: work/check/
+          if-no-files-found: error
+          retention-days: 30
+
+  pr:
+    needs: check
+    # The token's environment is limited to main; a run started on another
+    # branch has nothing to propose there.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: catalog-check
+    # Everything that writes uses CATALOG_CHECK_TOKEN; the workflow token
+    # gets no permission.
+    permissions: {}
+    env:
+      BRANCH: catalog/weekly-check
+      TITLE: "catalog: weekly check"
+      GH_REPO: ${{ github.repository }}
+      # Only pull requests of this repository's branch opened by the token's
+      # owner are this workflow's: a fork may use the same branch name.
+      MINE: '[.[] | select((.isCrossRepository | not) and .author.login == "bifrost0x")][0].number // empty'
+    steps:
+      - name: Decide what to do
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.CATALOG_CHECK_TOKEN }}
+          CORRECTED: ${{ needs.check.outputs.corrected }}
+          COMPLETE: ${{ needs.check.outputs.complete }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "::notice::The secret CATALOG_CHECK_TOKEN of the environment catalog-check is not set: no pull request."
+            echo "action=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          number="$(gh pr list --base main --head "${BRANCH}" --state open --json number,isCrossRepository,author --jq "${MINE}")"
+          action=none
+          if [[ "${COMPLETE}" == true && "${CORRECTED}" == true ]]; then
+            action=update
+          elif [[ "${COMPLETE}" == true && -n "${number}" ]]; then
+            action=close
+          elif [[ "${CORRECTED}" == true && -z "${number}" ]]; then
+            # Incomplete, but no pull request to keep: propose what was found.
+            action=update
+          elif [[ "${COMPLETE}" != true ]]; then
+            echo "::notice::A source did not answer for every entry; the pull request and its branch stay as they are."
+          fi
+          echo "action=${action}" >> "$GITHUB_OUTPUT"
+          echo "number=${number}" >> "$GITHUB_OUTPUT"
+      - name: Close the pull request of an earlier week
+        if: steps.decide.outputs.action == 'close'
+        env:
+          GH_TOKEN: ${{ secrets.CATALOG_CHECK_TOKEN }}
+          NUMBER: ${{ steps.decide.outputs.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr close "${NUMBER}" --comment "This week's check, with every source answering, found nothing to correct." --delete-branch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.decide.outputs.action == 'update'
+        with:
+          name: catalog-check
+          path: ${{ runner.temp }}/check
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.decide.outputs.action == 'update'
+        with:
+          token: ${{ secrets.CATALOG_CHECK_TOKEN }}
+      - name: Apply the corrections and open or update the pull request
+        if: steps.decide.outputs.action == 'update'
+        env:
+          GH_TOKEN: ${{ secrets.CATALOG_CHECK_TOKEN }}
+          CHECK: ${{ runner.temp }}/check
+          NUMBER: ${{ steps.decide.outputs.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The artifact is data: report.md and apps/<name>.yaml for entries
+          # that exist on main, plain files within the catalog's size limit.
+          # Anything else stops the job before a file is touched. Names from
+          # the artifact are printed without %, CR and LF, which would form
+          # workflow commands.
+          max=$((64 * 1024))
+          bad=0
+          while IFS= read -r -d '' p; do
+            rel="${p#"${CHECK}"/}"
+            shown="${rel//[$'%\r\n']/}"
+            if [[ -L "${p}" ]]; then
+              echo "::error::${shown} is a symlink"; bad=1
+            elif [[ "${rel}" == apps && -d "${p}" ]]; then
+              :
+            elif [[ "${rel}" == report.md && -f "${p}" ]]; then
+              [[ "$(stat -c %s "${p}")" -le "${max}" ]] || { echo "::error::report.md is too large"; bad=1; }
+            elif [[ "${rel}" =~ ^apps/[a-z0-9][a-z0-9-]*\.yaml$ && -f "${p}" ]]; then
+              target="catalog/${rel}"
+              if [[ -L "${target}" || ! -f "${target}" ]] || ! git ls-files --error-unmatch -- "${target}" >/dev/null 2>&1; then
+                echo "::error::${shown} is not an existing entry of catalog/apps"; bad=1
+              elif [[ "$(stat -c %s "${p}")" -gt "${max}" ]]; then
+                echo "::error::${shown} is too large"; bad=1
+              fi
+            else
+              echo "::error::unexpected entry in the artifact: ${shown}"; bad=1
+            fi
+          done < <(find "${CHECK}" -mindepth 1 -print0)
+          [[ -f "${CHECK}/report.md" && ! -L "${CHECK}/report.md" ]] || { echo "::error::the artifact has no report.md"; bad=1; }
+          if [[ "${bad}" -ne 0 ]]; then
+            exit 1
+          fi
+
+          git switch -C "${BRANCH}"
+          for src in "${CHECK}"/apps/*.yaml; do
+            [[ -e "${src}" ]] || continue
+            # Writes the content into the tracked file; mode and type stay.
+            cat -- "${src}" > "catalog/apps/$(basename -- "${src}")"
+          done
+          git add -- catalog/apps
+          if git diff --cached --quiet; then
+            echo "::error::the artifact holds no change to catalog/apps"
+            exit 1
+          fi
+          git -c user.name=bifrost0x -c user.email=dwight@scranton.de \
+            commit -q -m "${TITLE}" -m "Corrections of the weekly check of the reviewed entries."
+          # The branch belongs to this workflow and is reset every week; it
+          # is pushed only when its content changes.
+          if git fetch -q --depth 1 origin "refs/heads/${BRANCH}" 2>/dev/null \
+            && [[ "$(git rev-parse 'HEAD^{tree}')" == "$(git rev-parse 'FETCH_HEAD^{tree}')" ]]; then
+            echo "the branch ${BRANCH} already holds these corrections"
+          else
+            git push --force origin "HEAD:refs/heads/${BRANCH}"
+          fi
+
+          if [[ -n "${NUMBER}" ]]; then
+            gh pr edit "${NUMBER}" --title "${TITLE}" --body-file "${CHECK}/report.md"
+            echo "updated pull request #${NUMBER}"
+          else
+            gh pr create --base main --head "${BRANCH}" --title "${TITLE}" --body-file "${CHECK}/report.md"
+          fi

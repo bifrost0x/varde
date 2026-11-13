@@ -17,6 +17,7 @@ import (
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/fleet"
 	"github.com/bifrost0x/varde/internal/integrations"
+	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/settings"
 	"github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
@@ -65,6 +66,10 @@ type Deps struct {
 	Uplink Uplink
 	// Package is the data package; nil when the installation has none.
 	Package Package
+	// Advisories returns the stored advisories that count for an app in
+	// the analysis (pipeline.Pipeline.Advisories); nil counts them as the
+	// analysis does without a data package channel.
+	Advisories func(app *catalog.App, recs []store.AdvisoryRecord) []match.Advisory
 
 	AllowDirectSocket bool
 	CookieNever       bool

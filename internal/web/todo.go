@@ -3,11 +3,13 @@
 package web
 
 import (
+	"context"
 	"sort"
 	"strings"
 
 	"github.com/bifrost0x/varde/internal/distro"
 	"github.com/bifrost0x/varde/internal/identify"
+	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/store"
 )
@@ -36,6 +38,9 @@ type todoGroup struct {
 	Count       int
 	Urgent, New int
 	Groups      []findingGroup
+	// Release says which of a container's image findings the newest
+	// release of its app fixes; set on the findings page only.
+	Release *releaseView
 }
 
 // todoGroups groups findings by what fixes them on which system.
@@ -125,6 +130,34 @@ func (a *app) todoGroups(s *snapshot, fs []store.Finding) []todoGroup {
 		return a.Name < b.Name
 	})
 	return out
+}
+
+// withReleases sets the release of each container group. It counts all
+// active image findings of the container, as the finding page does, not
+// only those the page's filters show; the reads are shared by all groups.
+func (a *app) withReleases(ctx context.Context, s *snapshot, groups []todoGroup) {
+	hosts := map[string]*inventory.Host{}
+	for i := range s.hosts {
+		hosts[s.hosts[i].ID] = &s.hosts[i]
+	}
+	byWorkload := map[string][]store.Finding{}
+	for _, f := range s.findings {
+		byWorkload[f.WorkloadID] = append(byWorkload[f.WorkloadID], f)
+	}
+	var ins []releaseInput
+	var at []int
+	for i := range groups {
+		id, ok := strings.CutPrefix(groups[i].Key, "w:")
+		if groups[i].Kind != "image" || !ok {
+			continue
+		}
+		wl := s.byID[id]
+		ins = append(ins, releaseInput{wl: wl, id: s.ids[wl.ID], host: hosts[wl.HostID], findings: imageFindings(byWorkload[id])})
+		at = append(at, i)
+	}
+	for i, v := range a.containerReleases(ctx, ins) {
+		groups[at[i]].Release = v
+	}
 }
 
 // todoAction says what fixes a group's findings, what needs saying about

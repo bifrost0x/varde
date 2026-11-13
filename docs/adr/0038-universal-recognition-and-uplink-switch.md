@@ -81,3 +81,7 @@ was a subscription benefit; ADR 0037 is revised when the feed is built.
 - The free index is signed with a single CI key, weaker than the uplink's builders, and says so.
 - What came through no channel stays a coverage finding (ADR 0012).
 - Automatic license renewal and revocation arrive with the service.
+
+## Amendment (2026-11-12): entries for index images
+Index images without a reviewed entry get a generated one, built and checked in the daily data
+build and ranked below reviewed entries (ADR 0040).

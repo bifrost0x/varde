@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -240,7 +241,7 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 	for id, a := range systemApps {
 		all[id] = a
 	}
-	findings, unfixed, err := p.match(ctx, results, images, all)
+	findings, unfixed, err := p.match(ctx, matchInput{results: results, images: images, apps: all, repos: imageRepositories(ws)})
 	if err != nil {
 		return Summary{}, err
 	}
@@ -412,7 +413,32 @@ type imageTarget struct {
 	pkg        distro.Package
 }
 
-func (p *Pipeline) match(ctx context.Context, results []identify.Result, images []imageTarget, apps map[string]*catalog.App) ([]store.FindingInput, map[string]int, error) {
+// matchInput is what match compares: the identifications, the image
+// packages, the apps by ID and the image repository of each container
+// workload.
+type matchInput struct {
+	results []identify.Result
+	images  []imageTarget
+	apps    map[string]*catalog.App
+	repos   map[string]string
+}
+
+// imageRepositories maps each container workload to its image repository.
+func imageRepositories(ws []inventory.Workload) map[string]string {
+	out := map[string]string{}
+	for _, w := range ws {
+		if w.Container == nil {
+			continue
+		}
+		if ref, err := imageref.Parse(w.Container.ImageRef); err == nil {
+			out[w.ID] = ref.Repository
+		}
+	}
+	return out
+}
+
+func (p *Pipeline) match(ctx context.Context, in matchInput) ([]store.FindingInput, map[string]int, error) {
+	results, images, apps := in.results, in.images, in.apps
 	unfixed := map[string]int{}
 	if len(apps) == 0 {
 		return nil, unfixed, nil
@@ -432,7 +458,7 @@ func (p *Pipeline) match(ctx context.Context, results []identify.Result, images 
 		if err != nil {
 			return nil, nil, err
 		}
-		advisories[id] = advisoriesFor(apps[id], recs, p.Superseded)
+		advisories[id] = AdvisoriesFor(apps[id], recs, p.Superseded)
 	}
 
 	var out []store.FindingInput
@@ -445,7 +471,16 @@ func (p *Pipeline) match(ctx context.Context, results []identify.Result, images 
 			continue
 		}
 		system := strings.HasPrefix(app.ID, distro.SystemPrefix)
-		for _, f := range match.Match(match.Input{App: app, Version: r.Version, VersionSource: r.VersionSource, Doubt: r.Doubt(), Distro: r.DistroPackage}, advisories[app.ID], enr) {
+		// A container image a generated entry knows only as its derived
+		// entry would is compared under the derived entry's scheme, as it
+		// was identified, and with the derived entry's advisory sources
+		// (identify.AppForImage). Other workloads have no repository and
+		// keep the entry as it is.
+		stored := advisories[app.ID]
+		if view := identify.AppForImage(app, in.repos[r.WorkloadID]); view != app {
+			app, stored = view, withoutForeignCPEs(stored, view)
+		}
+		for _, f := range match.Match(match.Input{App: app, Version: r.Version, VersionSource: r.VersionSource, Doubt: r.Doubt(), Distro: r.DistroPackage}, stored, enr) {
 			// A system package is reported when an update fixes it: the
 			// distribution's unfixed and minor issues would bury the
 			// actionable ones (ADR 0032).
@@ -580,10 +615,34 @@ func feedAlone(app *catalog.App, source string) bool {
 	return app != nil && app.Origin == catalog.OriginFeed && source != store.FeedSource
 }
 
-// advisoriesFor are the stored advisories that count for app: all but
+// nvdSourcePrefix starts the source of advisories the NVD source stored
+// for one CPE of an app ("nvd:" + CPE, sources.NVD).
+const nvdSourcePrefix = "nvd:"
+
+// withoutForeignCPEs drops the advisories stored for a CPE that app does
+// not carry: those of a generated entry's CPE, for an image read as its
+// derived entry (identify.AppForImage). The other sources stay.
+func withoutForeignCPEs(stored []match.Advisory, app *catalog.App) []match.Advisory {
+	out := make([]match.Advisory, 0, len(stored))
+	for _, a := range stored {
+		if cpe, ok := strings.CutPrefix(a.Source, nvdSourcePrefix); ok && !slices.ContainsFunc(app.Advisories.CPE, func(c string) bool { return strings.EqualFold(c, cpe) }) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// Advisories are the stored advisories recs that count for app in the
+// analysis, so a page that matches again agrees with its findings.
+func (p *Pipeline) Advisories(app *catalog.App, recs []store.AdvisoryRecord) []match.Advisory {
+	return AdvisoriesFor(app, recs, p.Superseded)
+}
+
+// AdvisoriesFor are the stored advisories that count for app: all but
 // those of a source that superseded says is no longer refreshed for it.
 // The records stay stored and count again when that changes.
-func advisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded func(*catalog.App, string) bool) []match.Advisory {
+func AdvisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded func(*catalog.App, string) bool) []match.Advisory {
 	if superseded == nil {
 		superseded = feedAlone
 	}

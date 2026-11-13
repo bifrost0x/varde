@@ -67,6 +67,11 @@ func TestPublishScript(t *testing.T) {
 		writeFile(t, filepath.Join(work, "cache", "builder.db"), "db "+sequence)
 		writeFile(t, filepath.Join(work, "cache", "builder.db.sig"), "sig")
 		writeFile(t, filepath.Join(work, "cache", "scratch.tmp"), "not to be published")
+		// The list of generated entries is optional: the first build has none.
+		if sequence != "100" {
+			writeFile(t, filepath.Join(work, "catalog", "generated.json"), "{}\n")
+			writeFile(t, filepath.Join(work, "catalog", "generated.md"), "# Generated catalog entries\n")
+		}
 		cmd := exec.Command("bash", script, work)
 		cmd.Dir = clone
 		out, err := cmd.CombinedOutput()
@@ -84,7 +89,7 @@ func TestPublishScript(t *testing.T) {
 		}
 	}
 	files := git(t, remote, "ls-tree", "-r", "--name-only", "data")
-	want := "cache/builder.db.gz\ncache/builder.db.sig\nfeed/stats.json\nfeed/stats.json.sig\nfeed/v1/blobs/sha256/aaaa\nfeed/v1/blobs/sha256/bbbb\nfeed/v1/manifest.json\nfeed/v1/manifest.json.sig\nfeed/v1/root.json"
+	want := "cache/builder.db.gz\ncache/builder.db.sig\ncatalog/generated.json\ncatalog/generated.md\nfeed/stats.json\nfeed/stats.json.sig\nfeed/v1/blobs/sha256/aaaa\nfeed/v1/blobs/sha256/bbbb\nfeed/v1/manifest.json\nfeed/v1/manifest.json.sig\nfeed/v1/root.json"
 	if files != want {
 		t.Fatalf("published files:\n%s\nwant:\n%s", files, want)
 	}
@@ -102,11 +107,40 @@ func TestPublishScript(t *testing.T) {
 		t.Fatalf("the checkout's index was changed: %s", status)
 	}
 
+	// A list that is not a plain file is not published.
+	md := filepath.Join(work, "catalog", "generated.md")
+	if err := os.Remove(md); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/etc/passwd", md); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", script, work)
+	cmd.Dir = clone
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "not a plain file") {
+		t.Fatalf("symlinked list: %v\n%s", err, out)
+	}
+	if err := os.Remove(md); err != nil {
+		t.Fatal(err)
+	}
+
+	// A store too large for GitHub is not published.
+	before := git(t, remote, "rev-parse", "data")
+	cmd = exec.Command("bash", script, work)
+	cmd.Dir = clone
+	cmd.Env = append(os.Environ(), "PUBLISH_MAX_STORE=10")
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "too close to GitHub's limit") {
+		t.Fatalf("large store: %v\n%s", err, out)
+	}
+	if after := git(t, remote, "rev-parse", "data"); after != before {
+		t.Fatal("a store too large was published")
+	}
+
 	// An incomplete build is not published, and neither is anything over main.
 	if err := os.Remove(filepath.Join(work, "feed", "v1", "manifest.json.sig")); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("bash", script, work)
+	cmd = exec.Command("bash", script, work)
 	cmd.Dir = clone
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "nothing published") {
 		t.Fatalf("incomplete build: %v\n%s", err, out)
@@ -125,7 +159,8 @@ func TestPublishScript(t *testing.T) {
 
 // The daily workflow stays idle until the key ceremony, runs with write
 // access to the repository contents only, and uses no action beyond the
-// two pinned ones the index workflow already uses.
+// two pinned ones the index workflow already uses and the pinned upload of
+// the list of generated entries.
 func TestDataWorkflow(t *testing.T) {
 	read := func(name string) string {
 		data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", name))
@@ -173,7 +208,7 @@ func TestDataWorkflow(t *testing.T) {
 	if len(job.Permissions) != 1 || job.Permissions["contents"] != "write" {
 		t.Errorf("job permissions = %v, want contents: write only", job.Permissions)
 	}
-	pinned := map[string]bool{}
+	pinned := map[string]bool{"actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9": true}
 	for _, m := range regexp.MustCompile(`uses: (\S+@[0-9a-f]{40})`).FindAllStringSubmatch(read("index.yml"), -1) {
 		pinned[m[1]] = true
 	}
@@ -181,6 +216,11 @@ func TestDataWorkflow(t *testing.T) {
 	for _, s := range job.Steps {
 		if s.Uses != "" && !pinned[s.Uses] {
 			t.Errorf("action %q is not one of the pinned actions of index.yml", s.Uses)
+		}
+		for name := range s.Env {
+			if strings.HasPrefix(name, "VARDE_DOCKERHUB_") && !strings.Contains(s.Run, "cmd/packagebuilder") {
+				t.Errorf("the Docker Hub token is handed to something else than the builder: %q", s.Run)
+			}
 		}
 		if _, ok := s.Env["VARDE_FEED_KEY"]; ok {
 			secretSteps++
@@ -192,7 +232,19 @@ func TestDataWorkflow(t *testing.T) {
 	if secretSteps != 1 {
 		t.Errorf("%d steps receive the feed key, want 1", secretSteps)
 	}
-	if strings.Count(text, "secrets.") != 1 {
-		t.Errorf("the workflow names %d secrets, want only VARDE_FEED_KEY", strings.Count(text, "secrets."))
+	// The feed key and the optional read-only Docker Hub login, nothing else.
+	secrets := regexp.MustCompile(`secrets\.([A-Z_]+)`).FindAllStringSubmatch(text, -1)
+	if len(secrets) != 3 {
+		t.Errorf("the workflow names %d secrets, want 3", len(secrets))
+	}
+	for _, m := range secrets {
+		if m[1] != "VARDE_FEED_KEY" && m[1] != "VARDE_DOCKERHUB_USER" && m[1] != "VARDE_DOCKERHUB_TOKEN" {
+			t.Errorf("the workflow names the secret %s", m[1])
+		}
+	}
+	for _, want := range []string{"retention-days: 90", "work/catalog/generated.json", "work/catalog/generated.md"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the artifact step lacks %q", want)
+		}
 	}
 }

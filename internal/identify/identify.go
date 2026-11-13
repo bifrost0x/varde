@@ -187,17 +187,21 @@ func Identify(cat *catalog.Catalog, w inventory.Workload) Result {
 	}
 	r.WorkloadID = w.ID
 	r.PURL = componentPURL(w)
-	if app, ok := cat.App(r.AppID); ok && app.Origin == catalog.OriginDerived && !strings.HasPrefix(r.Rule, "label "+LabelApp) {
+	if app, ok := cat.App(r.AppID); ok && !strings.HasPrefix(r.Rule, "label "+LabelApp) && w.Container != nil {
 		// The publisher's own statement or two lists confirm a derived
 		// app; anything less is a report the user settles (ADR 0038).
 		// Confirmation is per image: this image may be one a single list
 		// reports, or one that only inherited the app's source label. A
 		// workload without an image (a manual entry) names the app itself.
-		if w.Container != nil {
-			var d *catalog.Derivation
-			if ref, err := imageref.Parse(w.Container.ImageRef); err == nil {
-				d = app.DerivationFor(ref.Repository)
-			}
+		// A generated entry is confirmed the same way for the images it
+		// stands in for its derived entry (ReadsAsDerived).
+		var repo string
+		var d *catalog.Derivation
+		if ref, err := imageref.Parse(w.Container.ImageRef); err == nil {
+			repo = ref.Repository
+			d = app.DerivationFor(repo)
+		}
+		if app.Origin == catalog.OriginDerived || ReadsAsDerived(app, repo) {
 			if d == nil || !d.Confirmed {
 				r.Derived = true
 				r.DerivedFrom = derivedFrom(d)
@@ -286,14 +290,14 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 			return Result{Confidence: None, Note: "label " + LabelApp + "=" + id + " does not name a catalog app"}
 		}
 		r := Result{AppID: app.ID, Confidence: Exact, Rule: "label " + LabelApp}
-		resolveContainerVersion(&r, app, labels, ref, refErr == nil, c)
+		resolveContainerVersion(&r, AppForImage(app, imageRepository(ref, refErr)), labels, ref, refErr == nil, c)
 		return r
 	}
 	// 2. Image repository.
 	if refErr == nil {
 		if app, ok := cat.ByImage(ref.Repository); ok {
 			r := Result{AppID: app.ID, Confidence: Exact, Rule: "image " + ref.Repository}
-			resolveContainerVersion(&r, app, labels, ref, true, c)
+			resolveContainerVersion(&r, AppForImage(app, ref.Repository), labels, ref, true, c)
 			return r
 		}
 	}
@@ -301,7 +305,7 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 	if src := strings.TrimSpace(c.ImageLabels[LabelOCISource]); src != "" {
 		if app, ok := cat.ByOCISource(src); ok {
 			r := Result{AppID: app.ID, Confidence: Strong, Rule: LabelOCISource + " " + src}
-			resolveContainerVersion(&r, app, labels, ref, refErr == nil, c)
+			resolveContainerVersion(&r, AppForImage(app, imageRepository(ref, refErr)), labels, ref, refErr == nil, c)
 			return r
 		}
 	}
@@ -328,6 +332,49 @@ func identifyContainer(cat *catalog.Catalog, w inventory.Workload) Result {
 		note = "unparsable image reference"
 	}
 	return Result{Confidence: None, Note: note}
+}
+
+// ReadsAsDerived reports a container image (repository) of a generated
+// entry that the generator did not check: one the entry knows through its
+// source label, one it took over from the entry derived for its project,
+// or one named by the user's varde.app label. The generated entry stands
+// in for the derived entry there, so such an image is read as the derived
+// entry would read it: its version chain and scheme and its advisory
+// sources (AppForImage), confirmed only as the derivation of the image
+// says (DerivationFor). Without a repository (a manual entry, a package,
+// an unparsable reference) the entry is read as it is.
+func ReadsAsDerived(app *catalog.App, repository string) bool {
+	if app == nil || app.Origin != catalog.OriginGenerated || repository == "" {
+		return false
+	}
+	return !app.HasImage(repository) || app.JoinedImage(repository)
+}
+
+// AppForImage returns app as Varde reads an image repository of it: for
+// an image the generator did not check (ReadsAsDerived), a generated
+// entry with the derived entry's version (semver, the default chain of
+// label and tag pattern) and without its CPE, which C5 checked for the
+// entry's own images only, so the image gets the derived entry's advisory
+// sources; app itself otherwise. Identification, the registry resolver,
+// matching and update suggestions use it, so they all read such an image
+// the same way.
+func AppForImage(app *catalog.App, repository string) *catalog.App {
+	if !ReadsAsDerived(app, repository) {
+		return app
+	}
+	derived := *app
+	derived.Version = catalog.VersionSpec{Scheme: version.SemVer}
+	derived.Advisories.CPE = nil
+	return &derived
+}
+
+// imageRepository is the repository of a parsed reference, empty when it
+// did not parse.
+func imageRepository(ref imageref.Ref, err error) string {
+	if err != nil {
+		return ""
+	}
+	return ref.Repository
 }
 
 // mergedLabels returns image labels overlaid with container labels. Docker
@@ -903,15 +950,8 @@ func ImageLanguagePackages(c *inventory.Container) []distro.Package {
 	seen := map[distro.Package]bool{}
 	var out []distro.Package
 	for _, p := range c.Packages {
-		var pkg distro.Package
-		switch {
-		case p.Manager == "go" && p.Path != "":
-			pkg = distro.Package{Ecosystem: "Go", Name: p.Name, Version: strings.TrimPrefix(p.Version, "v")}
-		case p.Manager == "npm" && path.Base(p.Path) == "package-lock.json":
-			pkg = distro.Package{Ecosystem: "npm", Name: p.Name, Version: p.Version}
-		case p.Path != "" && languageEcosystem[p.Manager] != "":
-			pkg = distro.Package{Ecosystem: languageEcosystem[p.Manager], Name: p.Name, Version: p.Version}
-		default:
+		pkg, ok := languagePackage(p)
+		if !ok {
 			continue
 		}
 		if _, ok := distro.Compare(pkg.Ecosystem, pkg.Version, pkg.Version); !ok || seen[pkg] || changedInside(c, p.Path) {
@@ -919,8 +959,50 @@ func ImageLanguagePackages(c *inventory.Container) []distro.Package {
 		}
 		seen[pkg] = true
 		out = append(out, pkg)
-		if len(out) == maxImageSystemPackages {
+		if len(out) == MaxImagePackages {
 			break
+		}
+	}
+	return out
+}
+
+// languagePackage is a package of an image read as the language package
+// it is; ok is false for system packages and metadata Varde does not check.
+func languagePackage(p inventory.Package) (distro.Package, bool) {
+	switch {
+	case p.Manager == "go" && p.Path != "":
+		return distro.Package{Ecosystem: "Go", Name: p.Name, Version: strings.TrimPrefix(p.Version, "v")}, true
+	case p.Manager == "npm" && path.Base(p.Path) == "package-lock.json":
+		return distro.Package{Ecosystem: "npm", Name: p.Name, Version: p.Version}, true
+	case p.Path != "" && languageEcosystem[p.Manager] != "":
+		return distro.Package{Ecosystem: languageEcosystem[p.Manager], Name: p.Name, Version: p.Version}, true
+	}
+	return distro.Package{}, false
+}
+
+// ImagePackageNames are the "Ecosystem/name" keys of every package an
+// image lists, before the checked lists drop builds from outside the
+// distribution, versions that do not compare and packages past a bound. A
+// system package counts under its own name and its source's. Only a
+// package missing here is missing from the image (remedy.ReleaseFixFor).
+func ImagePackageNames(c *inventory.Container) map[string]bool {
+	out := map[string]bool{}
+	if c == nil {
+		return out
+	}
+	eco, _, system := distro.Ecosystem(c.Distro)
+	for _, p := range c.Packages {
+		if p.Path == "" {
+			if system {
+				out[eco+"/"+p.Name] = true
+				if p.Source != "" {
+					out[eco+"/"+p.Source] = true
+				}
+			}
+			continue
+		}
+		if pkg, ok := languagePackage(p); ok {
+			out[pkg.Ecosystem+"/"+pkg.Name] = true
 		}
 	}
 	return out
@@ -932,8 +1014,10 @@ var languageEcosystem = map[string]string{
 	"pip": "PyPI", "composer": "Packagist", "gem": "RubyGems", "nuget": "NuGet", "maven": "Maven", "cargo": "crates.io",
 }
 
-// maxImageSystemPackages bounds the source packages checked per image.
-const maxImageSystemPackages = 5000
+// MaxImagePackages bounds the source packages checked per image, and
+// separately its language packages. A list cut at it may lack a package
+// the image has (remedy.ReleaseFixFor).
+const MaxImagePackages = 5000
 
 // ImageSystemPackages are the source packages of a container's image on a
 // release with distribution security data, at the highest version among
@@ -950,8 +1034,8 @@ func ImageSystemPackages(c *inventory.Container) []distro.Package {
 		}
 	}
 	out := distro.Checked(c.Distro, pkgs, distro.CheckOptions{Image: true})
-	if len(out) > maxImageSystemPackages {
-		out = out[:maxImageSystemPackages]
+	if len(out) > MaxImagePackages {
+		out = out[:MaxImagePackages]
 	}
 	return out
 }

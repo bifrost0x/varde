@@ -22,7 +22,10 @@ import (
 const (
 	maxEntryBytes = 64 << 10
 	maxEntries    = 2000
-	maxRegexLen   = 256
+	// maxGenerated bounds the generated entries, which come in a blob of
+	// their own beside the reviewed catalog.
+	maxGenerated = 20000
+	maxRegexLen  = 256
 )
 
 // Origin records where an entry came from.
@@ -34,6 +37,10 @@ const (
 	OriginLocal   Origin = "local"
 	// OriginFeed marks entries from the signed central feed.
 	OriginFeed Origin = "feed"
+	// OriginGenerated marks entries the package builder made and checked
+	// by machine, not reviewed by a person. They rank between the reviewed
+	// entries (feed, built-in, local) and the ones Varde derives itself.
+	OriginGenerated Origin = "generated"
 )
 
 // Coverage levels (ADR 0017).
@@ -72,6 +79,10 @@ type App struct {
 	// DerivedImages holds, per image repository, how that image was tied
 	// to the derived entry.
 	DerivedImages map[string]Derivation `yaml:"-" json:"derived_images,omitempty"`
+	// joined holds the images a generated entry took over from the entry
+	// derived for its project (Catalog.WithDerived); the generator did not
+	// check them.
+	joined map[string]bool
 }
 
 // Image matches an image repository.
@@ -245,6 +256,8 @@ type Catalog struct {
 	byPackage map[string]packageMatch
 	byUnit    map[string]*App
 	ids       []string
+	// dropped are the generated entries BuildLayered left out.
+	dropped []string
 }
 
 type packageMatch struct {
@@ -334,6 +347,16 @@ func ReadEntries(fsys fs.FS) ([]Entry, error) {
 // Build creates a catalog from base entries (built-in or from the feed) and
 // the optional local directory, whose entries take precedence.
 func Build(base []Entry, origin Origin, local fs.FS) (*Catalog, error) {
+	apps, err := reviewedApps(base, origin, local)
+	if err != nil {
+		return nil, err
+	}
+	return newCatalog(apps)
+}
+
+// reviewedApps parses base entries and the local directory, whose entries
+// replace base entries with the same ID.
+func reviewedApps(base []Entry, origin Origin, local fs.FS) (map[string]*App, error) {
 	if len(base) > maxEntries {
 		return nil, fmt.Errorf("%s catalog: more than %d entries", origin, maxEntries)
 	}
@@ -350,8 +373,137 @@ func Build(base []Entry, origin Origin, local fs.FS) (*Catalog, error) {
 			return nil, err
 		}
 	}
-	return newCatalog(apps)
+	return apps, nil
 }
+
+// BuildLayered is Build with generated entries beneath the reviewed ones.
+// A reviewed entry always wins: a generated entry whose ID, alias, image,
+// source, package or unit a reviewed entry (or an earlier generated one)
+// already claims is dropped, and so is one that does not parse, claims
+// full coverage or repeats a key of its own. Dropping one costs that app;
+// refusing the set would cost the installation the whole package.
+// DroppedGenerated lists the drops.
+func BuildLayered(reviewed []Entry, reviewedOrigin Origin, generated []Entry, local fs.FS) (*Catalog, error) {
+	if len(generated) > maxGenerated {
+		return nil, fmt.Errorf("%s catalog: more than %d entries", OriginGenerated, maxGenerated)
+	}
+	apps, err := reviewedApps(reviewed, reviewedOrigin, local)
+	if err != nil {
+		return nil, err
+	}
+	layered := make(map[string]*App, len(apps)+len(generated))
+	claimed := claims{}
+	for id, a := range apps {
+		layered[id] = a
+		claimed.add(a)
+	}
+	var dropped []string
+	added := 0
+	for _, e := range generated {
+		app, err := Parse(e.Name, []byte(e.Data))
+		switch {
+		case err != nil:
+			dropped = append(dropped, err.Error())
+			continue
+		case app.Advisories.Coverage == CoverageFull:
+			// A machine check cannot tell that every advisory of the
+			// app is covered.
+			dropped = append(dropped, e.Name+": generated entry claims full coverage")
+			continue
+		}
+		if what, repeated := ownRepeat(app); repeated {
+			// Validation lets a reviewed entry repeat some keys (and
+			// newCatalog refuses it then); a generated one must not
+			// fail the set that way.
+			dropped = append(dropped, fmt.Sprintf("%s: %s listed twice", e.Name, what))
+			continue
+		}
+		if what, taken := claimed.taken(app); taken {
+			dropped = append(dropped, fmt.Sprintf("%s: %s already claimed", e.Name, what))
+			continue
+		}
+		app.Origin = OriginGenerated
+		claimed.add(app)
+		layered[app.ID] = app
+		added++
+	}
+	c, err := newCatalog(layered)
+	if err != nil && added > 0 {
+		// The checks above should leave nothing for newCatalog to refuse.
+		// Should one slip through, the reviewed catalog still loads
+		// without any generated entry.
+		c, err = newCatalog(apps)
+		if err == nil {
+			dropped = append(dropped, fmt.Sprintf("all %d generated entries: the layered catalog was refused", added))
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	c.dropped = dropped
+	return c, nil
+}
+
+// ownRepeat names a key an entry lists twice itself; a variable so a test
+// can switch it off and reach the last guard of BuildLayered.
+var ownRepeat = func(a *App) (string, bool) {
+	seen := map[string]bool{}
+	for _, k := range (claims{}).keys(a) {
+		if seen[k] {
+			return claimKey(k), true
+		}
+		seen[k] = true
+	}
+	return "", false
+}
+
+// DroppedGenerated says which generated entries BuildLayered dropped and
+// why, for the log.
+func (c *Catalog) DroppedGenerated() []string { return c.dropped }
+
+// claims are the keys newCatalog requires to be unique across entries.
+type claims map[string]bool
+
+func (c claims) keys(a *App) []string {
+	keys := []string{"id\x00" + a.ID}
+	for _, al := range a.Aliases {
+		keys = append(keys, "id\x00"+al)
+	}
+	for _, img := range a.Images {
+		keys = append(keys, "image\x00"+img.repo)
+	}
+	for _, src := range a.OCISource {
+		keys = append(keys, "oci_source\x00"+normaliseSource(src))
+	}
+	for _, p := range a.Packages {
+		// The same key newCatalog's byPackage uses.
+		keys = append(keys, "package\x00"+p.Manager+"\x00"+p.Name)
+	}
+	for _, s := range a.Services {
+		keys = append(keys, "service\x00"+s.Unit)
+	}
+	return keys
+}
+
+func (c claims) add(a *App) {
+	for _, k := range c.keys(a) {
+		c[k] = true
+	}
+}
+
+// taken names the first key of a that another entry claims. IDs and
+// aliases share one namespace, as App resolves both.
+func (c claims) taken(a *App) (string, bool) {
+	for _, k := range c.keys(a) {
+		if c[k] {
+			return claimKey(k), true
+		}
+	}
+	return "", false
+}
+
+// claimKey makes a claim key readable for the log.
+func claimKey(k string) string { return strings.ReplaceAll(k, "\x00", " ") }
 
 func addEntries(apps map[string]*App, entries []Entry, origin Origin) error {
 	seen := map[string]string{}

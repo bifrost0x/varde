@@ -21,12 +21,19 @@ type Counts struct {
 	KEV        int   `json:"kev"`
 	EPSS       int   `json:"epss"`
 	Index      int   `json:"index"`
+	// Generated is the number of generated catalog entries, Releases the
+	// number of release package lines and ReleasesBytes the compressed
+	// size of their blob. A baseline from before the generator has none.
+	Generated     int   `json:"generated,omitempty"`
+	Releases      int   `json:"releases,omitempty"`
+	ReleasesBytes int64 `json:"releases_bytes,omitempty"`
 }
 
 // CountsOf returns the sizes of s; indexRows is the number of rows of its
-// index.
+// index. ReleasesBytes is known only once the package is written.
 func CountsOf(s feed.Snapshot, indexRows int) Counts {
-	return Counts{Sequence: s.Sequence, Advisories: len(s.Advisories), KEV: len(s.KEV), EPSS: len(s.EPSS), Index: indexRows}
+	return Counts{Sequence: s.Sequence, Advisories: len(s.Advisories), KEV: len(s.KEV), EPSS: len(s.EPSS), Index: indexRows,
+		Generated: len(s.Generated), Releases: len(s.Releases)}
 }
 
 // countsFile lies beside v1/ in the published directory. Nothing an
@@ -80,6 +87,13 @@ const (
 	// maxShrinkPercent is how much a count may fall against the last
 	// package.
 	maxShrinkPercent = 10
+	// maxLooseShrinkPercent is how much the generated entries and the
+	// release package lines may fall.
+	maxLooseShrinkPercent = 30
+	// MaxReleasesBytes caps the compressed releases blob. It keeps the
+	// package well inside the 128 MiB blob limit of installations as the
+	// number of apps grows.
+	MaxReleasesBytes = 32 << 20
 )
 
 // ErrRefused reports a build the builder does not sign.
@@ -111,6 +125,32 @@ func Guard(stats Stats, previous Counts, havePrevious bool, current Counts, forc
 		if c.now*100 < (100-maxShrinkPercent)*c.was {
 			return fmt.Errorf("%w: %s fell from %d to %d (more than %d %%); check the reason, then build with -force", ErrRefused, c.name, c.was, c.now, maxShrinkPercent)
 		}
+	}
+	// Generated entries and release lines come and go with their checks
+	// and reads, so their bound is wider. A larger fall more likely means
+	// a source that broke (a registry, GitHub) or a step left out; every
+	// installation would lose them with the package.
+	for _, c := range []struct {
+		name, hint string
+		was, now   int
+	}{
+		{"generated entries", "check catalog/generated.md", previous.Generated, current.Generated},
+		{"release package lines", "check the release reads in the build log", previous.Releases, current.Releases},
+	} {
+		if c.now*100 < (100-maxLooseShrinkPercent)*c.was {
+			return fmt.Errorf("%w: %s fell from %d to %d (more than %d %%); %s, then build with -force",
+				ErrRefused, c.name, c.was, c.now, maxLooseShrinkPercent, c.hint)
+		}
+	}
+	return nil
+}
+
+// GuardReleases refuses a releases blob of more than MaxReleasesBytes
+// compressed. force does not lift it: the reader's budgets bound what one
+// build adds, so a blob that size is a fault to fix in the builder.
+func GuardReleases(compressed int64) error {
+	if compressed > MaxReleasesBytes {
+		return fmt.Errorf("%w: the releases blob is %d bytes compressed, more than the cap of %d", ErrRefused, compressed, MaxReleasesBytes)
 	}
 	return nil
 }
