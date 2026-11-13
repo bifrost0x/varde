@@ -266,9 +266,12 @@ func TestPlatformChoice(t *testing.T) {
 	if got, ok := open(HostPlatform("armv7l"), lines); !ok || !slices.Equal(got, []string{"DEBIAN-CVE-2026-1", "DEBIAN-CVE-2026-2"}) {
 		t.Errorf("armv7 host: open = %v (%v)", got, ok)
 	}
-	// Unknown host platform: amd64.
-	if got, ok := open(HostPlatform(""), lines); !ok || len(got) != 0 {
-		t.Errorf("unknown host: open = %v (%v)", got, ok)
+	// Unknown host platform: no line stands in for it, amd64 included.
+	if fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), HostPlatform(""), findings, lines, advsOf); ok || fix.Tag != "" {
+		t.Errorf("unknown host: claimed %+v", fix)
+	}
+	if _, ok := open(HostPlatform(""), []feed.ReleaseLine{x86}); ok {
+		t.Error("unknown host compared with the amd64 image of a multi-platform release")
 	}
 	// An arm64 host with no arm64 image in the release: no other
 	// platform's list stands in for it.
@@ -280,6 +283,9 @@ func TestPlatformChoice(t *testing.T) {
 	single.IndexDigest = ""
 	if got, ok := open(HostPlatform("arm64"), []feed.ReleaseLine{single}); !ok || len(got) != 0 {
 		t.Errorf("single-platform image: open = %v (%v)", got, ok)
+	}
+	if got, ok := open(HostPlatform(""), []feed.ReleaseLine{single}); !ok || len(got) != 0 {
+		t.Errorf("single-platform image, unknown host: open = %v (%v)", got, ok)
 	}
 	// A 32-bit ARM host of unknown variant cannot choose between v6 and v7.
 	arm6 := arm7

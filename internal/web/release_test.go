@@ -139,4 +139,16 @@ func TestFindingPageShowsReleaseFix(t *testing.T) {
 	if !strings.Contains(body, `fixes 1 of 2`) || !strings.Contains(body, `Varde cannot tell for: <span class="mono">DEBIAN-CVE-2026-2</span>`) || strings.Contains(body, "Not fixed in any release yet") {
 		t.Errorf("partial read not told apart:\n%s", body)
 	}
+
+	// A release with neither fix: it fixes none of them, said as such.
+	arm.Partial, arm.Packages = false, []inventory.Package{deb("openssl", "3.0.11-1~deb12u2"), deb("zlib", "1:1.2.13.dfsg-1")}
+	keep(x86, arm)
+	_, body = h.do(t, "GET", "/findings", nil, nil)
+	if strings.Contains(body, "fixes 0 of") || !strings.Contains(body, `Release <span class="mono">v1.121.0</span> does not fix these yet:</strong> none of the 2 flaws`) {
+		t.Errorf("container group of a release that fixes nothing:\n%s", body)
+	}
+	_, body = h.do(t, "GET", "/findings/"+findingID["zlib"], nil, nil)
+	if strings.Contains(body, "fixes 0 of") || !strings.Contains(body, `does not fix these yet:</strong> none of the 2 flaws in the image's packages of immich_server; this one is not fixed in any release yet`) {
+		t.Errorf("finding of a release that fixes nothing:\n%s", body)
+	}
 }

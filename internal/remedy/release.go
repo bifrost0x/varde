@@ -55,7 +55,7 @@ type Running struct {
 // ReleaseFixFor compares a container's image findings with the newest
 // release of app (as identify.AppForImage reads the container's image),
 // read for the container's host platform (the zero Platform when unknown:
-// amd64). advs returns the advisories a package was matched against, so a
+// then only a single-platform image is compared). advs returns the advisories a package was matched against, so a
 // package of the release is judged by the same records.
 //
 // ok is set when the release is newer than the running one, of the same
@@ -224,10 +224,15 @@ func sameAdvisory(a, b match.Finding) bool {
 // releaseLine picks the line of the host's platform. A line of another
 // platform never stands in: amd64 and arm64 images of one release can
 // carry different packages. The exception is a single-platform image, which
-// is what the tag pulls on every host.
+// is what the tag pulls on every host, also on one whose platform is not
+// known; otherwise an unknown platform gets no line.
 func releaseLine(lines []feed.ReleaseLine, host registry.Platform) (feed.ReleaseLine, bool) {
+	single := len(lines) == 1 && lines[0].IndexDigest == ""
 	if host.Arch == "" {
-		host = registry.Platform{OS: "linux", Arch: "amd64"}
+		if single {
+			return lines[0], true
+		}
+		return feed.ReleaseLine{}, false
 	}
 	if host.OS == "" {
 		host.OS = "linux"
@@ -250,7 +255,7 @@ func releaseLine(lines []feed.ReleaseLine, host registry.Platform) (feed.Release
 		// One image of the architecture, and the host's or the line's
 		// variant is not known.
 		return same[0], true
-	case len(same) == 0 && len(lines) == 1 && lines[0].IndexDigest == "":
+	case len(same) == 0 && single:
 		return lines[0], true
 	}
 	return feed.ReleaseLine{}, false
