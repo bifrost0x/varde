@@ -110,8 +110,11 @@ type View struct {
 	hideBelow map[string]bool
 
 	// For layer records (cache.go): made is the file node the archive
-	// member being read put, replay the recorded member being replayed.
+	// member being read put, plain says that what the member did depends
+	// on its name and type alone (a directory, a file the reader does not
+	// read), replay is the recorded member being replayed.
 	made   *node
+	plain  bool
 	replay *RecordEntry
 }
 
@@ -263,12 +266,12 @@ func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, lef
 		if err != nil {
 			return fail(err)
 		}
-		v.made = nil
+		v.made, v.plain = nil, false
 		if err := v.add(hdr, tr); err != nil {
 			return fail(err)
 		}
 		if rec != nil {
-			rec.add(recordOf(hdr, v.made), recordMembersPerFile*v.lim.Files)
+			rec.add(hdr, v.made, v.plain, recordMembersPerFile*v.lim.Files)
 		}
 	}
 	// The rest of the layer (tar padding, the compressed stream's end) is
@@ -280,7 +283,7 @@ func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, lef
 		return fail(err)
 	}
 	if rec != nil {
-		rec.Used = br.used
+		rec.finish(br.used)
 	}
 	return br.used, nil
 }
@@ -379,6 +382,7 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 	if hdr.Typeflag == tar.TypeDir {
 		// A directory replaces a file or link of a lower layer.
 		v.remove(p)
+		v.plain = true
 		return nil
 	}
 	if v.below[p] > 0 {
@@ -410,7 +414,12 @@ func (v *View) add(hdr *tar.Header, r io.Reader) error {
 	case tar.TypeReg:
 		if use == docker.Unread {
 			v.remove(p)
+			v.plain = true
 			return nil
+		}
+		if v.replay != nil && v.replay.bare {
+			// Recorded by name for a config that does not read it.
+			return errNoContent
 		}
 		return v.addFile(p, hdr.Size, use, limit, r)
 	default:
@@ -448,7 +457,7 @@ func (v *View) addFile(p string, size int64, use docker.FileUse, limit int64, r 
 		v.remove(p)
 		v.partial.Store(true)
 		return nil
-	case v.replay != nil && (!v.replay.HasData || int64(len(v.replay.Data)) != size):
+	case v.replay != nil && (!v.replay.HasData || int64(len(v.replay.content())) != size):
 		// Kept for this configuration, not when the layer was read.
 		return errNoContent
 	default:

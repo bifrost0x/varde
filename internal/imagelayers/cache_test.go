@@ -3,6 +3,8 @@
 package imagelayers
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -102,6 +104,13 @@ func TestCacheReplaysLayers(t *testing.T) {
 		"names that are not UTF-8": {layers: [][]entry{
 			{file("var/lib/dpkg/status.d/\xff\xfe", statusFile), symlink("etc/os-release", "../usr/lib/os-\xffrelease"), file("usr/lib/os-\xffrelease", "ID=debian\n")},
 			{file("var/lib/dpkg/status.d/.wh.\xff\xfe", "")},
+		}},
+		// Under the config of the case nothing reads /app, so the file
+		// that replaces the directory is kept by name only; a config
+		// that reads /app must still see the directory go.
+		"file replaces a directory another config reads": {layers: [][]entry{
+			{dir("app/"), file("app/package.json", `{"name":"web","version":"1.2.3"}`), file("app/README", "x")},
+			{file("app", "now a file")},
 		}},
 		"files": {lim: Limits{Files: 2}, layers: [][]entry{
 			{file("var/lib/dpkg/status", statusFile), file("etc/os-release", "ID=debian\n"), file("lib/apk/db/installed", "P:musl\n")},
@@ -343,5 +352,75 @@ func TestRecordConfigsBounded(t *testing.T) {
 	rec.addConfig("7")
 	if len(rec.Configs) != maxRecordConfigs || rec.Configs[len(rec.Configs)-1] != "7" || rec.Configs[0] != "5" {
 		t.Fatalf("configs %v", rec.Configs)
+	}
+}
+
+// A record keeps the members no reader reads by name only, and the files
+// a reader reads with their content as text: a layer of thousands of
+// unread files records in a few bytes per file.
+func TestRecordIsSlim(t *testing.T) {
+	var members []entry
+	for i := range 3000 {
+		if i%10 == 0 {
+			members = append(members, dir(fmt.Sprintf("usr/share/doc/pkg%d/", i)))
+		}
+		members = append(members, file(fmt.Sprintf("usr/share/doc/pkg%d/copyright-%d", i/10, i), strings.Repeat("c", 200)))
+	}
+	members = append(members, file("var/lib/dpkg/status", strings.Repeat(statusFile, 200)))
+	img := newImage(t, gzipType, members)
+	cache := &memCache{recs: map[string][]byte{}}
+	if _, err := BuildCached(t.Context(), img.layers, img.open, docker.ImageConfig{}, Limits{}, cache); err != nil {
+		t.Fatal(err)
+	}
+	var rec *LayerRecord
+	for _, b := range cache.recs {
+		rec = &LayerRecord{}
+		if err := json.Unmarshal(b, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(rec.Entries) != 1 || rec.Entries[0].Path != "var/lib/dpkg/status" || rec.Entries[0].Text == "" || rec.Entries[0].Index != len(members)-1 {
+		t.Fatalf("entries: %+v", rec.Entries)
+	}
+	if n := strings.Count(rec.Bare, "\x00") + 1; n != len(members)-1 {
+		t.Fatalf("%d bare members, want %d", n, len(members)-1)
+	}
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_ = json.NewEncoder(zw).Encode(rec)
+	_ = zw.Close()
+	// About 40 bytes of names per member before compression.
+	if buf.Len() > 16<<10 {
+		t.Fatalf("record of %d members compresses to %d bytes", len(members), buf.Len())
+	}
+}
+
+// A record whose members do not add up is read again, not replayed.
+func TestBadRecordReadAgain(t *testing.T) {
+	img := newImage(t, gzipType, []entry{dir("etc/"), file("etc/os-release", "ID=debian\n"), file("usr/x", "y")})
+	cache := &memCache{recs: map[string][]byte{}}
+	want := snapshot(build(t, img, docker.ImageConfig{}, Limits{}))
+	if _, err := BuildCached(t.Context(), img.layers, img.open, docker.ImageConfig{}, Limits{}, cache); err != nil {
+		t.Fatal(err)
+	}
+	for k, b := range cache.recs {
+		var rec LayerRecord
+		if err := json.Unmarshal(b, &rec); err != nil {
+			t.Fatal(err)
+		}
+		rec.Entries[0].Index = 7 // past the end of the bare members
+		cache.recs[k], _ = json.Marshal(&rec)
+	}
+	var opened int
+	open := func(ctx context.Context, l registry.Layer) (io.ReadCloser, error) {
+		opened++
+		return img.open(ctx, l)
+	}
+	v, err := BuildCached(t.Context(), img.layers, open, docker.ImageConfig{}, Limits{}, cache)
+	if err != nil || opened != 1 {
+		t.Fatalf("opened %d, %v", opened, err)
+	}
+	if got := snapshot(v); got != want {
+		t.Fatalf("view:\n%s\nwant\n%s", got, want)
 	}
 }

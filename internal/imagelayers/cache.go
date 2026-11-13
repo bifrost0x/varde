@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/bifrost0x/varde/internal/inventory/docker"
 	"github.com/bifrost0x/varde/internal/pkgdb"
@@ -24,7 +25,7 @@ import (
 // recordFormat is the version of LayerRecord. Raise it when add, addFile
 // or the meaning of a record changes: every older record is then missed
 // and its layer read again.
-const recordFormat = 3
+const recordFormat = 4
 
 // Cache keeps layer records between builds. Layer returns nil for a key it
 // does not hold.
@@ -42,8 +43,23 @@ type Cache interface {
 // replayed for (Configs). A replay that needs content the record lacks
 // (a program or manifest only another config reads) reads the layer again
 // and adds it.
+//
+// Most members of a layer are files and directories no reader reads, and
+// replaying one needs nothing but its name: a directory replaces what
+// was kept at its path, a file the reader does not read does the same
+// and hides a kept directory it replaces. Those members are kept as bare
+// names (Bare), in a few bytes each; the others in full (Entries). A bare
+// file that another config reads is content the record lacks: replaying
+// it for that config reads the layer again, as any missing content does.
+// So a record replays exactly for every config while it holds little more
+// than the names of a layer and the files a reader reads.
 type LayerRecord struct {
-	Entries []RecordEntry `json:"e"`
+	// Entries are the members recorded in full, by archive position.
+	Entries []RecordEntry `json:"e,omitempty"`
+	// Bare are the other members in archive order, each its type flag
+	// byte and its name, separated by NUL (which no member name holds).
+	// They fill the archive positions Entries leaves.
+	Bare string `json:"b,omitempty"`
 	// Used is the uncompressed size of the layer, counted against
 	// Limits.LayerBytes as when the layer is read.
 	Used int64 `json:"u"`
@@ -51,11 +67,14 @@ type LayerRecord struct {
 	// latest maxRecordConfigs.
 	Configs []string `json:"c,omitempty"`
 
-	// size is the estimated encoded size of Entries; over says the layer
-	// had more members or content than a record holds, which is then
-	// neither kept nor stored.
-	size int64
-	over bool
+	// count is the number of members recorded; size the estimated
+	// encoded size of the record; over says the layer had more members
+	// or content than a record holds, which is then neither kept nor
+	// stored. bare collects Bare while the layer is read.
+	count int
+	size  int64
+	over  bool
+	bare  []byte
 }
 
 // The bounds of one record. A layer beyond them is read every time, like a
@@ -71,23 +90,50 @@ const (
 	maxRecordConfigs = 16
 )
 
-// add appends e unless the record is over its bounds.
-func (rec *LayerRecord) add(e RecordEntry, maxMembers int) {
+// errBadRecord ends a replay of a record whose members do not add up; the
+// layer is read again.
+var errBadRecord = errors.New("imagelayers: inconsistent layer record")
+
+// add records one archive member: bare when its name is all a replay
+// needs, else in full. Nothing is kept once the record is over its bounds.
+func (rec *LayerRecord) add(hdr *tar.Header, made *node, plain bool, maxMembers int) {
 	if rec.over {
 		return
 	}
-	rec.size += e.size()
-	if len(rec.Entries) >= maxMembers || rec.size > MaxRecordBytes {
-		rec.over, rec.Entries = true, nil
-		return
+	if plain && bareName(hdr.Name) {
+		rec.size += int64(len(hdr.Name)) + 2
+		rec.bare = append(rec.bare, hdr.Typeflag)
+		rec.bare = append(rec.bare, hdr.Name...)
+		rec.bare = append(rec.bare, 0)
+	} else {
+		e := recordOf(hdr, made)
+		e.Index = rec.count
+		rec.size += e.size()
+		rec.Entries = append(rec.Entries, e)
 	}
-	rec.Entries = append(rec.Entries, e)
+	rec.count++
+	if rec.count > maxMembers || rec.size > MaxRecordBytes {
+		rec.over, rec.Entries, rec.bare = true, nil, nil
+	}
+}
+
+// finish ends the recording of a layer read to its end.
+func (rec *LayerRecord) finish(used int64) {
+	rec.Used = used
+	rec.Bare = strings.TrimSuffix(string(rec.bare), "\x00")
+	rec.bare = nil
+}
+
+// bareName reports whether a member name can be kept bare: a JSON string
+// carries it unchanged, and NUL separates it from the next.
+func bareName(name string) bool {
+	return name != "" && utf8.ValidString(name) && !strings.ContainsRune(name, 0)
 }
 
 // size estimates the encoded size of e: base64 grows bytes by a third,
 // and every member carries field names and punctuation.
 func (e *RecordEntry) size() int64 {
-	n := int64(len(e.Name)+len(e.Link)+len(e.Data)+len(e.ProgramErr))*4/3 + 48
+	n := int64(len(e.Name)+len(e.Link)+len(e.Data))*4/3 + int64(len(e.Path)+len(e.Target)+len(e.Text)+len(e.ProgramErr)) + 48
 	if e.Program != nil {
 		n += int64(len(e.Program.Info.GoVersion)) + 16
 		for _, p := range append(e.Program.Info.Packages, e.Program.Crates...) {
@@ -113,32 +159,105 @@ func (rec *LayerRecord) Covers(cfg docker.ImageConfig) bool {
 	return slices.Contains(rec.Configs, ConfigKey(cfg))
 }
 
-// RecordEntry is one archive member of a LayerRecord. Name and Link are
-// bytes, so names that are not UTF-8 replay exactly.
+// members calls fn with every member of the record in archive order, bare
+// ones as entries that carry their name and type only.
+func (rec *LayerRecord) members(fn func(e *RecordEntry) error) error {
+	var bare []string
+	if rec.Bare != "" {
+		bare = strings.Split(rec.Bare, "\x00")
+	}
+	ei, bi := 0, 0
+	for i := 0; ei < len(rec.Entries) || bi < len(bare); i++ {
+		if ei < len(rec.Entries) && rec.Entries[ei].Index == i {
+			if err := fn(&rec.Entries[ei]); err != nil {
+				return err
+			}
+			ei++
+			continue
+		}
+		if bi >= len(bare) || len(bare[bi]) < 2 || (ei < len(rec.Entries) && rec.Entries[ei].Index < i) {
+			return errBadRecord
+		}
+		e := RecordEntry{Index: i, Type: bare[bi][0], Path: bare[bi][1:], bare: true}
+		bi++
+		if err := fn(&e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RecordEntry is one archive member of a LayerRecord, at archive position
+// Index. A name or link that is UTF-8 is kept as text (Path, Target),
+// another as bytes (Name, Link), so every name replays exactly; content
+// likewise (Text, or Data).
 type RecordEntry struct {
-	Name []byte `json:"n"`
-	Type byte   `json:"t"`
-	Link []byte `json:"l,omitempty"`
-	Size int64  `json:"s,omitempty"`
-	// HasData says that Data is the member's content.
+	Index  int    `json:"i"`
+	Name   []byte `json:"n,omitempty"`
+	Path   string `json:"m,omitempty"`
+	Type   byte   `json:"t"`
+	Link   []byte `json:"l,omitempty"`
+	Target string `json:"k,omitempty"`
+	Size   int64  `json:"s,omitempty"`
+	// HasData says that Text or Data is the member's content.
 	HasData bool   `json:"h,omitempty"`
 	Data    []byte `json:"d,omitempty"`
+	Text    string `json:"dt,omitempty"`
 	// Program is the build information of a program; NotGo and
 	// ProgramErr what scanning it reported instead.
 	Program    *docker.GoProgram `json:"p,omitempty"`
 	NotGo      bool              `json:"g,omitempty"`
 	ProgramErr string            `json:"x,omitempty"`
+
+	// bare marks a member replayed from its name alone.
+	bare bool
+}
+
+func (e *RecordEntry) name() string {
+	if e.Path != "" {
+		return e.Path
+	}
+	return string(e.Name)
+}
+
+func (e *RecordEntry) link() string {
+	if e.Target != "" {
+		return e.Target
+	}
+	return string(e.Link)
+}
+
+func (e *RecordEntry) content() []byte {
+	if e.Text != "" {
+		return []byte(e.Text)
+	}
+	return e.Data
 }
 
 // errNoContent ends a replay that needs content the record does not hold.
 var errNoContent = errors.New("imagelayers: layer record lacks content")
 
 func recordOf(hdr *tar.Header, made *node) RecordEntry {
-	e := RecordEntry{Name: []byte(hdr.Name), Type: hdr.Typeflag, Link: []byte(hdr.Linkname), Size: hdr.Size}
+	e := RecordEntry{Type: hdr.Typeflag, Size: hdr.Size}
+	if utf8.ValidString(hdr.Name) {
+		e.Path = hdr.Name
+	} else {
+		e.Name = []byte(hdr.Name)
+	}
+	if utf8.ValidString(hdr.Linkname) {
+		e.Target = hdr.Linkname
+	} else {
+		e.Link = []byte(hdr.Linkname)
+	}
 	switch {
 	case made == nil || made.tooLarge:
 	case made.use != docker.Program:
-		e.HasData, e.Data = true, made.data
+		e.HasData = true
+		if utf8.Valid(made.data) {
+			e.Text = string(made.data)
+		} else {
+			e.Data = made.data
+		}
 	case errors.Is(made.progErr, pkgdb.ErrNotGo):
 		e.NotGo = true
 	case made.progErr != nil:
@@ -170,31 +289,57 @@ func (e *RecordEntry) program(n *node) bool {
 
 // merged returns rec with the content old holds and rec lacks; rec itself
 // when both do not record the same members or the merge would not fit a
-// record.
+// record. A member recorded in full by either is recorded in full.
 func (rec *LayerRecord) merged(old *LayerRecord) *LayerRecord {
-	if len(old.Entries) != len(rec.Entries) || old.Used != rec.Used {
+	if old.Used != rec.Used {
 		return rec
 	}
-	for i := range rec.Entries {
-		n, o := &rec.Entries[i], &old.Entries[i]
-		if !bytes.Equal(n.Name, o.Name) || n.Type != o.Type || n.Size != o.Size || !bytes.Equal(n.Link, o.Link) {
+	all := func(r *LayerRecord) []RecordEntry {
+		var out []RecordEntry
+		if r.members(func(e *RecordEntry) error { out = append(out, *e); return nil }) != nil {
+			return nil
+		}
+		return out
+	}
+	news, olds := all(rec), all(old)
+	if news == nil || len(news) != len(olds) {
+		return rec
+	}
+	out := &LayerRecord{Used: rec.Used}
+	for i := range news {
+		n, o := &news[i], &olds[i]
+		if n.name() != o.name() || n.Type != o.Type {
 			return rec
 		}
-	}
-	out := &LayerRecord{Entries: slices.Clone(rec.Entries), Used: rec.Used}
-	for i := range out.Entries {
-		n, o := &out.Entries[i], &old.Entries[i]
-		if !n.HasData && o.HasData && int64(len(o.Data)) == n.Size {
-			n.HasData, n.Data = true, o.Data
+		switch {
+		case n.bare && o.bare:
+			out.bare = append(out.bare, n.Type)
+			out.bare = append(out.bare, n.Path...)
+			out.bare = append(out.bare, 0)
+			out.size += int64(len(n.Path)) + 2
+			continue
+		case n.bare:
+			*n = *o
+		case !o.bare:
+			if n.Size != o.Size || n.link() != o.link() {
+				return rec
+			}
+			if !n.HasData && o.HasData && int64(len(o.content())) == n.Size {
+				n.HasData, n.Data, n.Text = true, o.Data, o.Text
+			}
+			if !n.hasProgram() && o.hasProgram() {
+				n.Program, n.NotGo, n.ProgramErr = o.Program, o.NotGo, o.ProgramErr
+			}
 		}
-		if !n.hasProgram() && o.hasProgram() {
-			n.Program, n.NotGo, n.ProgramErr = o.Program, o.NotGo, o.ProgramErr
-		}
+		n.Index = i
+		out.Entries = append(out.Entries, *n)
 		out.size += n.size()
 	}
 	if out.size > MaxRecordBytes {
 		return rec
 	}
+	out.count = len(news)
+	out.finish(rec.Used)
 	for _, c := range old.Configs {
 		out.addConfig(c)
 	}
@@ -321,19 +466,26 @@ func (v *View) replayLayer(ctx context.Context, rec *LayerRecord, left int64) (i
 		return 0, errNoContent
 	}
 	defer func() { v.replay = nil }()
-	for i := range rec.Entries {
+	err := rec.members(func(e *RecordEntry) error {
 		if err := ctx.Err(); err != nil {
-			return 0, err
+			return err
 		}
-		e := &rec.Entries[i]
 		v.replay = e
-		hdr := &tar.Header{Name: string(e.Name), Typeflag: e.Type, Linkname: string(e.Link), Size: e.Size}
-		if err := v.add(hdr, bytes.NewReader(e.Data)); err != nil {
+		hdr := &tar.Header{Name: e.name(), Typeflag: e.Type, Linkname: e.link(), Size: e.Size}
+		if err := v.add(hdr, bytes.NewReader(e.content())); err != nil {
 			if errors.Is(err, errNoContent) {
-				return 0, err
+				return err
 			}
-			return 0, fmt.Errorf("imagelayers: replaying %q: %w", e.Name, err)
+			return fmt.Errorf("imagelayers: replaying %q: %w", e.name(), err)
 		}
+		return nil
+	})
+	if errors.Is(err, errBadRecord) {
+		// Read the layer instead, and replace the record.
+		return 0, errNoContent
+	}
+	if err != nil {
+		return 0, err
 	}
 	return rec.Used, nil
 }
