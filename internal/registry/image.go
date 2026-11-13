@@ -208,7 +208,8 @@ func (s *session) single(ctx context.Context, digest string, doc manifestDoc, pl
 // while they are read: a content that does not match the digest ends in an
 // error at EOF, so a caller must read to EOF before trusting the data, and
 // more than max bytes is an error too. The registry may redirect to another
-// host; credentials never follow.
+// host; credentials never follow. The HTTP client's request timeout does
+// not apply to the stream: the caller bounds it in time with ctx.
 func (c *Client) Blob(ctx context.Context, repository, digest string, max int64) (io.ReadCloser, error) {
 	host, name, err := endpoint(repository)
 	if err != nil {

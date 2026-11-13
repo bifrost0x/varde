@@ -42,6 +42,14 @@ const (
 	DefaultMaxBytes     = 20 << 30
 )
 
+// Defaults of the time bounds of the registry work (Reader).
+const (
+	DefaultImageTimeout = 30 * time.Minute
+	DefaultBlobTimeout  = 2 * time.Minute
+	DefaultBlobRate     = 1 << 20
+	DefaultOverrun      = 20 * time.Minute
+)
+
 const (
 	// StaleAfter is the age from which a shipped line counts as stale in
 	// Stats; it still ships, with its read time.
@@ -94,8 +102,20 @@ type Reader struct {
 	Log    *slog.Logger
 	// Deadline, when set, ends the run's registry work: no image starts
 	// after it, as when a budget is spent. It keeps the data build inside
-	// its time limit; the images left are read by a later build.
+	// its time limit; the images left are read by a later build. An image
+	// started before it is cut Overrun after it.
 	Deadline time.Time
+
+	// The registry work of one image and of one blob is bounded in time,
+	// so a registry that answers slowly or trickles a blob costs that
+	// image, not the build: ImageTimeout bounds an image (default
+	// DefaultImageTimeout), BlobTimeout plus the time the blob's size
+	// takes at BlobRate bytes a second one blob (defaults
+	// DefaultBlobTimeout and DefaultBlobRate), Overrun how long an image
+	// may run past the Deadline (default DefaultOverrun). The store is
+	// not bounded by them.
+	ImageTimeout, BlobTimeout, Overrun time.Duration
+	BlobRate                           int64
 
 	// registryRepo maps an image to the repository asked of the registry;
 	// tests point it at a server, whose host a catalog image cannot name.
@@ -320,7 +340,11 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 		log.Info(msg, "err", err)
 		return nil
 	}
-	tags, complete, err := r.Registry.AllTags(ctx, r.remote(j.image))
+	// Registry requests run under the image's time bound; the store and
+	// the end of the run under ctx alone.
+	rctx, cancel := r.imageContext(ctx)
+	defer cancel()
+	tags, complete, err := r.Registry.AllTags(rctx, r.remote(j.image))
 	if err != nil {
 		return failed("release read: tag list failed", err)
 	}
@@ -342,7 +366,7 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 		log.Warn("release read: tag names a version the package cannot carry", "tag", tag, "version", version)
 		return nil
 	}
-	digest, err := r.Registry.Digest(ctx, r.remote(j.image), tag)
+	digest, err := r.Registry.Digest(rctx, r.remote(j.image), tag)
 	if err != nil {
 		return failed("release read: tag digest failed", err)
 	}
@@ -355,7 +379,7 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 		cur[j] = readID{tag, digest}
 		return r.confirm(ctx, j, prev, tag, digest)
 	}
-	ms, index, err := r.Registry.Image(ctx, r.remote(j.image), tag, Platforms)
+	ms, index, err := r.Registry.Image(rctx, r.remote(j.image), tag, Platforms)
 	if err != nil {
 		return failed("release read: manifests failed", err)
 	}
@@ -366,7 +390,7 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 	}
 	reads := make([]platformRead, 0, len(ms))
 	for _, m := range ms {
-		cfg, err := r.config(ctx, j.image, m.ConfigDigest)
+		cfg, err := r.config(ctx, rctx, j.image, m.ConfigDigest)
 		var se *storeError
 		if errors.As(err, &se) {
 			return se.err
@@ -404,7 +428,7 @@ func (r *Reader) read(ctx context.Context, j job, start registry.Usage, st *Stat
 	now := r.Now().UTC()
 	lines := make([]feed.ReleaseLine, 0, len(reads))
 	for _, pr := range reads {
-		l, err := r.readPlatform(ctx, j, pr)
+		l, err := r.readPlatform(ctx, rctx, j, pr)
 		if err != nil {
 			if pr.cache.err != nil {
 				return pr.cache.err
@@ -549,7 +573,9 @@ func (r *Reader) confirm(ctx context.Context, j job, prev []stored, tag, digest 
 // layer reads under its own digest (layer records are keyed by
 // imagelayers.LayerKeys, which never equal a blob's digest): a release
 // whose layers are all cached is read again without a blob request.
-func (r *Reader) config(ctx context.Context, image, digest string) (docker.ImageConfig, error) {
+//
+// The store is asked under ctx, the registry under rctx.
+func (r *Reader) config(ctx, rctx context.Context, image, digest string) (docker.ImageConfig, error) {
 	var cfg docker.ImageConfig
 	b, _, ok, err := r.LayerRead(ctx, digest)
 	if err != nil {
@@ -558,7 +584,7 @@ func (r *Reader) config(ctx context.Context, image, digest string) (docker.Image
 	if ok && decodeGzipJSON(b, maxConfigBytes, &cfg) == nil {
 		return cfg, nil
 	}
-	cfg, err = r.fetchConfig(ctx, image, digest)
+	cfg, err = r.fetchConfig(rctx, image, digest)
 	if err != nil {
 		return cfg, err
 	}
@@ -572,6 +598,54 @@ func (r *Reader) config(ctx context.Context, image, digest string) (docker.Image
 	return cfg, nil
 }
 
+// imageContext bounds the registry work of one image: ImageTimeout, and
+// no later than Overrun after the Deadline. Durations, not the Reader's
+// clock, set the bound: Now may be a test's or a replayed clock.
+func (r *Reader) imageContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	d := orDuration(r.ImageTimeout, DefaultImageTimeout)
+	if !r.Deadline.IsZero() {
+		d = min(d, r.Deadline.Sub(r.Now())+orDuration(r.Overrun, DefaultOverrun))
+	}
+	return context.WithTimeout(ctx, d)
+}
+
+// blob opens a blob of image under a time bound of its own: BlobTimeout
+// plus the time max bytes take at BlobRate, within ctx's bound. The bound
+// ends when the blob is closed.
+func (r *Reader) blob(ctx context.Context, image, digest string, max int64) (io.ReadCloser, error) {
+	rate := r.BlobRate
+	if rate <= 0 {
+		rate = DefaultBlobRate
+	}
+	d := orDuration(r.BlobTimeout, DefaultBlobTimeout) + time.Duration(max/rate)*time.Second
+	bctx, cancel := context.WithTimeout(ctx, d)
+	rc, err := r.Registry.Blob(bctx, r.remote(image), digest, max)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	return &boundBlob{ReadCloser: rc, cancel: cancel}, nil
+}
+
+// boundBlob ends a blob's time bound when it is closed.
+type boundBlob struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *boundBlob) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
+func orDuration(d, def time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return def
+}
+
 // storeError marks a store failure among the registry's.
 type storeError struct{ err error }
 
@@ -579,7 +653,7 @@ func (e *storeError) Error() string { return e.err.Error() }
 func (e *storeError) Unwrap() error { return e.err }
 
 func (r *Reader) fetchConfig(ctx context.Context, image, digest string) (docker.ImageConfig, error) {
-	rc, err := r.Registry.Blob(ctx, r.remote(image), digest, maxConfigBytes)
+	rc, err := r.blob(ctx, image, digest, maxConfigBytes)
 	if err != nil {
 		return docker.ImageConfig{}, err
 	}
@@ -611,12 +685,14 @@ type platformRead struct {
 	cache *layerCache
 }
 
-// readPlatform squashes one platform's layers and reads its packages.
-func (r *Reader) readPlatform(ctx context.Context, j job, pr platformRead) (feed.ReleaseLine, error) {
-	open := func(ctx context.Context, l registry.Layer) (io.ReadCloser, error) {
+// readPlatform squashes one platform's layers and reads its packages. The
+// layer cache works under ctx, the registry under rctx.
+func (r *Reader) readPlatform(ctx, rctx context.Context, j job, pr platformRead) (feed.ReleaseLine, error) {
+	open := func(_ context.Context, l registry.Layer) (io.ReadCloser, error) {
 		// imagelayers drains a layer to its end without a bound of its
-		// own; the blob reader ends at the size the manifest gives.
-		return r.Registry.Blob(ctx, r.remote(j.image), l.Digest, l.Size)
+		// own; the blob reader ends at the size the manifest gives, and
+		// the blob's time bound at the time that size may take.
+		return r.blob(rctx, j.image, l.Digest, l.Size)
 	}
 	v, err := imagelayers.BuildCached(ctx, pr.m.Layers, open, pr.cfg, r.Limits, pr.cache)
 	if err != nil {

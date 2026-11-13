@@ -43,8 +43,11 @@ type repo struct {
 // fakeRegistry serves tag lists, manifests and blobs of several
 // repositories without authentication and records every request.
 type fakeRegistry struct {
-	mu       sync.Mutex
-	repos    map[string]*repo
+	mu    sync.Mutex
+	repos map[string]*repo
+	// trickle names blobs served a byte at a time, slowly, until the
+	// client gives up.
+	trickle  map[string]bool
 	requests []string
 	srv      *httptest.Server
 	host     string
@@ -101,11 +104,34 @@ func (f *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 			if !ok {
 				break
 			}
+			if f.trickle[ref] {
+				f.mu.Unlock()
+				defer f.mu.Lock()
+				trickle(w, req, b)
+				return
+			}
 			_, _ = w.Write(b)
 			return
 		}
 	}
 	w.WriteHeader(http.StatusNotFound)
+}
+
+// trickle serves b a byte every 200 ms, as a registry that never quite
+// stalls, until the client goes away.
+func trickle(w http.ResponseWriter, req *http.Request, b []byte) {
+	w.Header().Set("Content-Length", fmt.Sprint(len(b)))
+	for i := range b {
+		if _, err := w.Write(b[i : i+1]); err != nil {
+			return
+		}
+		w.(http.Flusher).Flush()
+		select {
+		case <-req.Context().Done():
+			return
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
 }
 
 func (f *fakeRegistry) repo(name string) *repo {
@@ -467,7 +493,7 @@ func readCfg(t *testing.T, r *Reader, f *fakeRegistry, manifest string) docker.I
 	if err := json.Unmarshal(f.repos["org/app"].manifests[manifest], &m); err != nil {
 		t.Fatal(err)
 	}
-	c, err := r.config(t.Context(), regHost+"/org/app", m.Config.Digest)
+	c, err := r.config(t.Context(), t.Context(), regHost+"/org/app", m.Config.Digest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -762,5 +788,58 @@ func TestDeadlineStopsNewReads(t *testing.T) {
 	}
 	if !st.DeadlinePassed || st.NotStarted != 2 || len(lines) != 4 || lines[0].Tag != "1.0.0" {
 		t.Fatalf("after the deadline: stats %+v, lines %+v", st, lines)
+	}
+}
+
+// layerDigests returns the layer digests of the manifest under tag of a
+// single-platform image.
+func (f *fakeRegistry) layerDigests(t *testing.T, name, tag string) []string {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var m struct {
+		Layers []struct{ Digest string } `json:"layers"`
+	}
+	if err := json.Unmarshal(f.repos[name].manifests[tag], &m); err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, l := range m.Layers {
+		out = append(out, l.Digest)
+	}
+	return out
+}
+
+// A registry that trickles a layer costs that image, not the build: the
+// blob's time bound cuts it, the image counts as failed, and the next image
+// is read.
+func TestTricklingBlobCut(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  func(r *Reader)
+	}{
+		{"blob bound", func(r *Reader) { r.BlobTimeout, r.BlobRate = 300*time.Millisecond, 1<<30 }},
+		{"image bound", func(r *Reader) { r.ImageTimeout = 300 * time.Millisecond }},
+		{"deadline and overrun", func(r *Reader) { r.Deadline, r.Overrun = now0.Add(100*time.Millisecond), 200*time.Millisecond }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRegistry(t)
+			f.push(t, "org/slow", "1.0.0", true, debian("amd64", "", "a=1"))
+			f.push(t, "org/ok", "1.0.0", true, debian("amd64", "", "b=1"))
+			f.trickle = map[string]bool{f.layerDigests(t, "org/slow", "1.0.0")[1]: true}
+			cat := newCatalog(t, []catalog.Entry{reviewedEntry("slow", regHost+"/org/slow"), reviewedEntry("ok", regHost+"/org/ok")}, nil)
+			r, _ := newReader(t, f)
+			// Generous bounds except the one under test.
+			r.BlobTimeout, r.ImageTimeout = time.Minute, time.Minute
+			tc.set(r)
+			start := time.Now()
+			lines, st := run(t, r, cat, "slow", "ok")
+			if took := time.Since(start); took > 10*time.Second {
+				t.Fatalf("run took %v", took)
+			}
+			if st.Failed != 1 || st.Read != 1 || len(lines) != 1 || lines[0].AppID != "ok" {
+				t.Fatalf("stats %+v lines %+v", st, lines)
+			}
+		})
 	}
 }

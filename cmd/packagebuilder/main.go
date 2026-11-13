@@ -105,7 +105,11 @@ const (
 	// anonymousManifests stays below Docker Hub's 100 anonymous pulls in
 	// 6 hours; manifest GETs count as pulls.
 	anonymousManifests = 90
-	// registryTimeout bounds one registry request, a layer blob included.
+	// registryTimeout bounds one registry request that is read whole (a
+	// tag list, a manifest, a token). Blobs are streamed and have no such
+	// bound in the HTTP client: the release reader bounds each blob by its
+	// size and each image by time and the -releases-until deadline
+	// (releases.Reader).
 	registryTimeout = 10 * time.Minute
 )
 
