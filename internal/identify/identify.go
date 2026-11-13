@@ -950,15 +950,8 @@ func ImageLanguagePackages(c *inventory.Container) []distro.Package {
 	seen := map[distro.Package]bool{}
 	var out []distro.Package
 	for _, p := range c.Packages {
-		var pkg distro.Package
-		switch {
-		case p.Manager == "go" && p.Path != "":
-			pkg = distro.Package{Ecosystem: "Go", Name: p.Name, Version: strings.TrimPrefix(p.Version, "v")}
-		case p.Manager == "npm" && path.Base(p.Path) == "package-lock.json":
-			pkg = distro.Package{Ecosystem: "npm", Name: p.Name, Version: p.Version}
-		case p.Path != "" && languageEcosystem[p.Manager] != "":
-			pkg = distro.Package{Ecosystem: languageEcosystem[p.Manager], Name: p.Name, Version: p.Version}
-		default:
+		pkg, ok := languagePackage(p)
+		if !ok {
 			continue
 		}
 		if _, ok := distro.Compare(pkg.Ecosystem, pkg.Version, pkg.Version); !ok || seen[pkg] || changedInside(c, p.Path) {
@@ -968,6 +961,48 @@ func ImageLanguagePackages(c *inventory.Container) []distro.Package {
 		out = append(out, pkg)
 		if len(out) == MaxImagePackages {
 			break
+		}
+	}
+	return out
+}
+
+// languagePackage is a package of an image read as the language package
+// it is; ok is false for system packages and metadata Varde does not check.
+func languagePackage(p inventory.Package) (distro.Package, bool) {
+	switch {
+	case p.Manager == "go" && p.Path != "":
+		return distro.Package{Ecosystem: "Go", Name: p.Name, Version: strings.TrimPrefix(p.Version, "v")}, true
+	case p.Manager == "npm" && path.Base(p.Path) == "package-lock.json":
+		return distro.Package{Ecosystem: "npm", Name: p.Name, Version: p.Version}, true
+	case p.Path != "" && languageEcosystem[p.Manager] != "":
+		return distro.Package{Ecosystem: languageEcosystem[p.Manager], Name: p.Name, Version: p.Version}, true
+	}
+	return distro.Package{}, false
+}
+
+// ImagePackageNames are the "Ecosystem/name" keys of every package an
+// image lists, before the checked lists drop builds from outside the
+// distribution, versions that do not compare and packages past a bound. A
+// system package counts under its own name and its source's. Only a
+// package missing here is missing from the image (remedy.ReleaseFixFor).
+func ImagePackageNames(c *inventory.Container) map[string]bool {
+	out := map[string]bool{}
+	if c == nil {
+		return out
+	}
+	eco, _, system := distro.Ecosystem(c.Distro)
+	for _, p := range c.Packages {
+		if p.Path == "" {
+			if system {
+				out[eco+"/"+p.Name] = true
+				if p.Source != "" {
+					out[eco+"/"+p.Source] = true
+				}
+			}
+			continue
+		}
+		if pkg, ok := languagePackage(p); ok {
+			out[pkg.Ecosystem+"/"+pkg.Name] = true
 		}
 	}
 	return out

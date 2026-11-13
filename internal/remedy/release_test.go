@@ -317,3 +317,44 @@ func TestHostPlatform(t *testing.T) {
 func imagePackages(distroName string, pkgs []inventory.Package) []distro.Package {
 	return identify.ImageCheckedPackages(&inventory.Container{Distro: distroName, Packages: pkgs})
 }
+
+// A package the release still ships but that the checked lists leave out
+// (a build from outside the distribution, a version that does not compare)
+// is not gone: the release has it, and Varde cannot tell whether the
+// finding still applies.
+func TestReleaseFilteredPackageNotFixed(t *testing.T) {
+	findings := containerFindings(t, running)
+	odd := lodash("not a version")
+	rel := line("amd64", "", false,
+		// openssl from a backports-style build the distribution's records
+		// do not cover; libssl3 names openssl as its source.
+		inventory.Package{Manager: "dpkg", Name: "libssl3", Version: "3.0.11-1~bpo12+1", Source: "openssl"},
+		deb("zlib", "1:1.2.13.dfsg-2"), deb("libxml2", "2.9.14+dfsg-1.4"), odd)
+	fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), amd64(), findings, []feed.ReleaseLine{rel}, advsOf)
+	if !ok {
+		t.Fatalf("no release fix: %+v", fix)
+	}
+	if got := ids(fix.Unknown); !slices.Equal(got, []string{"DEBIAN-CVE-2026-1", "GHSA-lodash"}) {
+		t.Errorf("unknown = %v, want the filtered packages", got)
+	}
+	if got := ids(fix.Fixed); !slices.Equal(got, []string{"DEBIAN-CVE-2026-2", "DEBIAN-CVE-2026-3"}) || len(fix.Open) != 0 {
+		t.Errorf("fix = %+v", fix)
+	}
+}
+
+// A release with an arm64 image naming v8 and another naming no variant
+// now ships both lines; an arm64 host, whose variant is not known, cannot
+// tell which one it pulls and gets no claim.
+func TestArmVariantsAmbiguous(t *testing.T) {
+	findings := containerFindings(t, running)
+	v8 := line("arm64", "v8", false, deb("openssl", "3.0.15-1~deb12u1"), deb("zlib", "1:1.2.13.dfsg-2"), deb("libxml2", "2.9.14+dfsg-1.4"), lodash("4.17.21"))
+	plain := line("arm64", "", false, deb("openssl", "3.0.11-1~deb12u2"))
+	x86 := line("amd64", "", false, deb("openssl", "3.0.15-1~deb12u1"))
+	if fix, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), HostPlatform("aarch64"), findings, []feed.ReleaseLine{x86, v8, plain}, advsOf); ok || fix.Total() > 0 {
+		t.Errorf("ambiguous arm64 host claimed %+v", fix)
+	}
+	// The amd64 host still gets its own line.
+	if _, ok := ReleaseFixFor(cyberchef, run("v10.19.0"), HostPlatform("x86_64"), findings, []feed.ReleaseLine{x86, v8, plain}, advsOf); !ok {
+		t.Error("amd64 host lost its line")
+	}
+}

@@ -116,6 +116,10 @@ func ReleaseFixFor(app *catalog.App, run Running, platform registry.Platform, fi
 		k := p.Ecosystem + "/" + p.Name
 		byKey[k] = append(byKey[k], p)
 	}
+	// Presence is read from the release's whole list: a package the checked
+	// lists leave out (a build from outside the distribution, a version
+	// that does not compare) is still in the release.
+	listed := identify.ImagePackageNames(img)
 	// A package missing from the release counts as gone only when the
 	// list is complete: the read did not stop at a bound, and neither did
 	// the checked list.
@@ -126,7 +130,7 @@ func ReleaseFixFor(app *catalog.App, run Running, platform registry.Platform, fi
 			continue
 		}
 		flaw := Flaw{AdvisoryID: f.AdvisoryID, Package: f.Evidence.Package}
-		switch inRelease(f, byKey, complete, advs) {
+		switch inRelease(f, byKey, listed, complete, advs) {
 		case gone:
 			fix.Fixed = append(fix.Fixed, flaw)
 		case still:
@@ -169,13 +173,19 @@ const (
 )
 
 // inRelease tells whether the release still has finding f.
-func inRelease(f match.Finding, byKey map[string][]distro.Package, complete bool, advs func(distro.Package) []match.Advisory) presence {
+// byKey holds the release's checked packages, listed the keys of all the
+// packages it lists.
+func inRelease(f match.Finding, byKey map[string][]distro.Package, listed map[string]bool, complete bool, advs func(distro.Package) []match.Advisory) presence {
 	eco, name, ok := strings.Cut(f.Evidence.Package, "/")
 	if !ok || eco == "" || name == "" {
 		return unknown
 	}
 	copies := byKey[eco+"/"+name]
 	if len(copies) == 0 {
+		// In the release but not comparable: no answer either way.
+		if listed[eco+"/"+name] {
+			return unknown
+		}
 		// Not in the release; on the same distribution release (checked
 		// by the caller), or a language package.
 		if complete {
