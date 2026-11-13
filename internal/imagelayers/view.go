@@ -250,6 +250,14 @@ func (v *View) readLayer(ctx context.Context, l registry.Layer, open Opener, lef
 	br := &boundedReader{r: dec, left: left}
 	fail := func(err error) (int64, error) {
 		if br.hit {
+			// The files read before the cut stay in the view, so the rest
+			// of the compressed blob is read as well: the registry checks
+			// the digest only at its end, and unchecked content must not
+			// enter a release line. The blob is bounded by the layer's size
+			// and its time bound; a layer that does not match fails.
+			if _, err := io.Copy(io.Discard, rc); err != nil {
+				return br.used, fmt.Errorf("imagelayers: layer %s: %w", l.Digest, err)
+			}
 			return br.used, errBound
 		}
 		return br.used, fmt.Errorf("imagelayers: layer %s: %w", l.Digest, err)
@@ -735,6 +743,10 @@ func (s source) ReadGoPrograms(_ context.Context) ([]docker.GoProgram, error) {
 			continue
 		}
 		if files++; files > docker.MaxPrograms {
+			// The reader stops here as in a container, but the programs
+			// past the cut are in the image: without them the read is
+			// incomplete, and their dependencies must not count as gone.
+			s.v.partial.Store(true)
 			break
 		}
 		switch {

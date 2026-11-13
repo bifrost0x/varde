@@ -7,8 +7,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"strings"
@@ -290,6 +293,79 @@ func TestLimitMarksPartial(t *testing.T) {
 	}
 }
 
+// checkedBlob checks a blob against its digest at its end, as the
+// registry's blob reader does, and notes that the end was reached.
+type checkedBlob struct {
+	r    io.Reader
+	h    hash.Hash
+	want string
+	eof  *bool
+}
+
+func (c *checkedBlob) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.h.Write(p[:n])
+	if errors.Is(err, io.EOF) {
+		*c.eof = true
+		if hex.EncodeToString(c.h.Sum(nil)) != c.want {
+			return n, errors.New("blob content does not match its digest")
+		}
+	}
+	return n, err
+}
+
+func (c *checkedBlob) Close() error { return nil }
+
+// A layer cut at LayerBytes is read to its end all the same, so its digest
+// is checked before anything of it stays in the view; a layer that does not
+// match its digest fails the build.
+func TestLayerCutAtLimitIsVerified(t *testing.T) {
+	for _, mediaType := range []string{tarType, gzipType} {
+		t.Run(mediaType, func(t *testing.T) {
+			layer := []entry{file("etc/os-release", "ID=debian\n"), file("var/lib/dpkg/status", statusFile), file("usr/share/doc/big", strings.Repeat("x", 256<<10))}
+			for _, tc := range []struct {
+				name    string
+				corrupt bool
+			}{{"intact", false}, {"tampered", true}} {
+				t.Run(tc.name, func(t *testing.T) {
+					img := newImage(t, mediaType, layer)
+					blob := img.blobs[img.layers[0].Digest]
+					sum := sha256.Sum256(blob)
+					want := hex.EncodeToString(sum[:])
+					if tc.corrupt {
+						// Bytes past the cut differ from what the digest names.
+						blob = bytes.Clone(blob)
+						blob[len(blob)-1] ^= 0xff
+					}
+					eof := false
+					open := func(_ context.Context, _ registry.Layer) (io.ReadCloser, error) {
+						return &checkedBlob{r: bytes.NewReader(blob), h: sha256.New(), want: want, eof: &eof}, nil
+					}
+					v, err := Build(t.Context(), img.layers, open, docker.ImageConfig{}, Limits{LayerBytes: 32 << 10})
+					if !eof {
+						t.Error("the layer cut at the limit was not read to its end")
+					}
+					if tc.corrupt {
+						if err == nil {
+							t.Fatal("a layer that does not match its digest was accepted")
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !v.Partial() {
+						t.Error("layer byte limit not marked partial")
+					}
+					if got, err := readFile(t, v, "/etc/os-release"); err != nil || got != "ID=debian\n" {
+						t.Errorf("what was read before the limit = %q, %v", got, err)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestZstdLayer(t *testing.T) {
 	img := newImage(t, zstdType, []entry{file("etc/os-release", "ID=debian\n")})
 	if got, err := readFile(t, build(t, img, docker.ImageConfig{}, Limits{}), "/etc/os-release"); err != nil || got != "ID=debian\n" {
@@ -371,6 +447,29 @@ func TestGoProgramsOnView(t *testing.T) {
 	}
 	if _, err := v.Source().ReadGoBuildInfo(t.Context(), "/usr/local/bin/docker-entrypoint.sh"); err == nil {
 		t.Fatal("a script read as a Go program")
+	}
+}
+
+// A program directory with more files than the reader reads leaves the
+// view Partial: the dependencies of a program past the cut would else count
+// as gone from the release.
+func TestProgramLimitMarksPartial(t *testing.T) {
+	programs := func(n int) *View {
+		var es []entry
+		for i := range n {
+			es = append(es, file(fmt.Sprintf("usr/local/bin/tool%02d", i), strings.Repeat("#", docker.MinProgramSize)))
+		}
+		v := build(t, newImage(t, tarType, es), docker.ImageConfig{}, Limits{})
+		if _, err := v.Source().ReadGoPrograms(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	if v := programs(docker.MaxPrograms); v.Partial() {
+		t.Error("a program directory within the limit marked partial")
+	}
+	if v := programs(docker.MaxPrograms + 1); !v.Partial() {
+		t.Error("a program directory cut at the limit not marked partial")
 	}
 }
 
