@@ -151,4 +151,17 @@ func TestFindingPageShowsReleaseFix(t *testing.T) {
 	if strings.Contains(body, "fixes 0 of") || !strings.Contains(body, `does not fix these yet:</strong> none of the 2 flaws in the image's packages of immich_server; this one is not fixed in any release yet`) {
 		t.Errorf("finding of a release that fixes nothing:\n%s", body)
 	}
+
+	// A read that stopped before either package: Varde cannot tell about
+	// any of them, which says nothing about whether the release fixes them.
+	arm.Partial, arm.Packages = true, []inventory.Package{deb("libc6", "2.36-9+deb12u9")}
+	keep(x86, arm)
+	_, body = h.do(t, "GET", "/findings", nil, nil)
+	if strings.Contains(body, "does not fix these yet") || !strings.Contains(body, `Varde cannot tell which of the 2 flaws in the image's packages release <span class="mono">v1.121.0</span> fixes.`) {
+		t.Errorf("container group of a release Varde cannot compare:\n%s", body)
+	}
+	_, body = h.do(t, "GET", "/findings/"+findingID["zlib"], nil, nil)
+	if strings.Contains(body, "does not fix these yet") || !strings.Contains(body, `Varde cannot tell</strong> which of the 2 flaws in the image's packages of immich_server release <span class="mono">v1.121.0</span> fixes`) {
+		t.Errorf("finding of a release Varde cannot compare:\n%s", body)
+	}
 }
