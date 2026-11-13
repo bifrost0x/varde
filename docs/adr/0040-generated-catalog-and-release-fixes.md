@@ -44,8 +44,8 @@ reviewed entry costs a person time, so the reviewed catalog cannot grow to the i
   and its id equals the derived id, so what an installation stored under it stays valid. An
   image the generator could not check is read as derived, with derived's advisory sources and no
   CPE.
-- **No human review of generated entries.** The user decided this: an entry that passes all six
-  checks goes live. The audit trail is a readable list, not a pull request: the build writes
+- **No human review of generated entries.** Decision of the maintainer: an entry that passes all
+  six checks goes live. The audit trail is a readable list, not a pull request: the build writes
   `catalog/generated.json` (every entry with its check results) and `catalog/generated.md`
   (counts, and new, changed and dropped entries against the previous build) onto the branch
   `data` and keeps both for 90 days as an artifact of the workflow run.
@@ -55,23 +55,37 @@ reviewed entry costs a person time, so the reviewed catalog cannot grow to the i
   cached by digest in the builder's store, so shared base layers are read once. Whiteouts and
   opaque directories of upper layers are honoured. The result is a new blob `releases`: per
   image, the release tag, version, digest and read time per platform, whether the read was
-  complete, and the package list, deduplicated. It is capped at 32 MiB compressed, and `-force`
-  does not lift that cap.
+  complete, and the name of its package list; each distinct package list is stored once in the
+  blob, under the hash of its encoding, and named by every line that has it. The lines that ship
+  fit 64 MiB unpacked, or less when the other blobs leave less of the 256 MiB an installation
+  unpacks, in priority order (reviewed apps, then generated apps by weight), whole images only;
+  what does not fit is left out, lowest priority first, and once the lines read fill the budget
+  no further image is read. The blob is also capped at 32 MiB compressed, a backstop the budget
+  keeps it well below, and `-force` does not lift that cap.
+- **The builder's store stays publishable.** The store goes onto the branch `data`, where GitHub
+  refuses a file over 100 MiB. A layer record keeps the members no reader reads by name only.
+  After each build the store keeps the release reads that ship and the layer reads they name, at
+  most 40 MiB of those. Over 80 MiB compressed the builder drops its layer reads, and it refuses
+  a store still over that; the summary gives the store's size with every build.
 - **Budgets.** The generator starts no project after 90 minutes into the build, the release
   reads no image after 150 minutes; the advisory collection gets the rest. The release reads
   stop at 600 manifest requests and 20 GiB of layer bytes (Docker Hub counts a manifest request
   as a pull). Without Docker Hub credentials the limit is 90 manifest requests, below the
   anonymous 100 in six hours; the optional secrets `VARDE_DOCKERHUB_USER` and
   `VARDE_DOCKERHUB_TOKEN` raise it. A source that refuses because of its rate limit is not
-  asked again in that build.
+  asked again in that build. The registry work of one image stops after 30 minutes, and at the
+  latest 20 minutes after the 150; a blob gets 2 minutes plus the time its size takes at 1 MiB/s,
+  so a registry that trickles costs an image, not the build.
 - **The installation compares, and makes no request.** For a container with findings in image
   packages and an entry with a release line, it matches the release's package list with the
   same distribution and ecosystem logic as its own image packages and says which findings the
   newest release fixes, which stay open (no release fixes them yet) and which it cannot tell.
-  The platform compared is the container host's, amd64 only when it is unknown. A claim is made
+  The platform compared is the container host's; when that is unknown only a single-platform
+  image, which every host pulls alike, is compared. A claim is made
   only when the release is newer than the running version and of the same image variant; a
   package missing from the release counts as fixed only if the release was read completely.
-  When the container runs the newest release it says so.
+  When the container runs the newest release it says so, and a release that fixes none of the
+  findings is said to fix none of them yet.
 - **Weekly check of the reviewed catalog.** `cmd/catalogcheck` runs C1, C3, C4 and C5 on
   `catalog/apps` every Monday. It corrects only what a check proves: the tag rule when a
   template reads the image's tags, and the note and `verified` date of an entry written without

@@ -92,8 +92,10 @@ All notable changes to this project are documented here. The format follows
   reviewed entries, coverage at most partial) and publishes the readable list as
   `catalog/generated.md` and `.json` on the branch `data`.
 - Release fixes (ADR 0040): the data package carries the package lists of the newest release of
-  catalog apps (blob `releases`). A container's finding names the release that fixes how many of
-  its image-package flaws and which stay open; Varde makes no extra request for it.
+  catalog apps (blob `releases`, each distinct package list once, within a size budget that
+  serves reviewed apps first). A container's finding names the release that fixes how many of
+  its image-package flaws and which stay open, for the platform of the container's host; Varde
+  makes no extra request for it.
 - A weekly check of the reviewed catalog (`cmd/catalogcheck`, workflow `catalog-check`) proposes
   corrections in one pull request, `catalog: weekly check`, once the secret
   `CATALOG_CHECK_TOKEN` exists.

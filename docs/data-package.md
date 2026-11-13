@@ -23,7 +23,7 @@ no package, says so under Settings › Data package and has no advisory data fro
 | `index` | The first-party index, `index/images.tsv` as `main` holds it (ADR 0038). |
 | `advisories/shard-NN` | The published repository security advisories of every GitHub repository a catalog app or an index row names. One request per repository; the result is stored under the derived ID (`gh-<owner>-<repo>`) and under every catalog app that names the repository. |
 | `generated` | Catalog entries the build generated for index images without a reviewed entry, after six machine checks. They rank below reviewed entries; at most 20000. |
-| `releases` | The package lists of the newest release of every catalog app with a confirmed tag rule, per platform (linux/amd64 and linux/arm64), deduplicated. At most 32 MiB compressed. |
+| `releases` | The package lists of the newest release of every catalog app with a confirmed tag rule, per platform (linux/amd64 and linux/arm64). A package list shared by several lines (the two platforms of a release, releases on one base) is stored once. The lines fit 64 MiB unpacked, or less when the other blobs leave less of the 256 MiB an installation unpacks: reviewed apps first, then generated apps by weight; what does not fit is left out, lowest priority first. Capped at 32 MiB compressed, which the budget keeps it well below. |
 | `enrichment/kev` | The CISA KEV list. |
 | `enrichment/epss` | EPSS scores for the CVEs the package names, not the whole dataset. |
 
@@ -59,15 +59,18 @@ what they have. Adding a blob needs nothing: older installations skip it.
    access token) in the environment `data-package` authenticate to Docker Hub. Without them the
    release reads stop at 90 manifest requests, below the anonymous limit of 100 pulls in six
    hours per address, and what does not fit waits for the next build. `GITHUB_TOKEN` also serves
-   the generator's GitHub requests.
+   the generator's GitHub requests. A registry that answers slowly costs one image, not the
+   build: the registry work of an image stops after 30 minutes, and at the latest 20 minutes
+   after `-releases-until`; a blob gets 2 minutes plus the time its size takes at 1 MiB/s. Once
+   the lines read fill the budget of the `releases` blob, no further image is read.
 4. Fetches the KEV list and the EPSS scores of the CVEs it now knows, with every build. If CISA
    or FIRST cannot be reached the build fails and yesterday's package stays.
 5. Refuses to sign when more than 5 % of the repositories could not be read, or when advisories,
    KEV entries or index rows fell by more than 10 % against the package published before
    (`-previous`), or when the generated entries or the release package lines fell by more than
    30 %. It also refuses a `releases` blob above 32 MiB compressed. EPSS is not compared: scores
-   come and go. `-force` lifts the shrink checks, not the cap on the `releases` blob. The counts of the published package
-   are trusted only when the feed key signed them (`stats.json.sig`).
+   come and go. `-force` lifts the shrink checks, not the cap on the `releases` blob. The counts
+   of the published package are trusted only when the feed key signed them (`stats.json.sig`).
 6. Refuses a trust root that is older than the published one, skips a version, changes a
    published version, or is a next version the published root does not endorse.
 7. Signs the package, the counts and the store, then installs the package with the same client
@@ -107,9 +110,10 @@ catalog/generated.json, generated.md the generated entries with their check resu
                                      changes against the previous build (new, changed, dropped)
 ```
 
-The branch always has exactly one commit, so it does not grow. The workflow also keeps `generated.json` and `generated.md` for 90 days as the artifact
-`generated-catalog` of the run, the history beyond the branch's one commit, and puts the list
-(cut at a size GitHub's step summary takes) into the job summary. Installations read
+The branch always has exactly one commit, so it does not grow. The workflow also keeps
+`generated.json` and `generated.md` for 90 days as the artifact `generated-catalog` of the run,
+the history beyond the branch's one commit, and puts the list (cut at a line, at a size GitHub's
+step summary takes) into the job summary. Installations read
 `https://raw.githubusercontent.com/bifrost0x/varde/data/feed`; they never read `cache/` or
 `stats.json`.
 
@@ -121,6 +125,15 @@ else), uses the store and the counts only with a valid signature of the feed key
 only root files that parse and hold the version their name says. Someone who can write the
 branch can therefore make a build fail or make it start cold, but cannot put anything into a
 signed package.
+
+**The store stays below GitHub's file limit.** GitHub refuses a file over 100 MiB on a branch,
+and the store holds what the release reads read. After each build the builder keeps only the
+release reads whose lines ship and the layer reads they name, at most 40 MiB of those (the oldest
+go first), and gives the freed pages back. It then compresses the store as the workflow
+publishes it: over 80 MiB it drops all layer reads (the next build reads those layers again),
+and a store still over 80 MiB is refused like a broken build. `scripts/publish-data.sh` refuses
+a `builder.db.gz` over 95 MiB. The summary of every build gives the size of `builder.db.gz` and
+of the `releases` blob, compressed and unpacked.
 
 ### The weekly catalog check
 
@@ -157,6 +170,10 @@ The data package publishes whatever table `main` holds.
   answer, a catalog or index change that removed many rows, or an attack on a source. If the drop
   is real and intended, run the workflow by hand with "force" ticked. Force does not release
   failed repositories.
+- **The builder's store is too large without its layer reads.** The advisories or the release
+  reads grew past what the branch can hold. Look at the sizes in the last summaries; the store
+  can be dropped (delete `cache/` on the branch, or the branch itself) and the next build starts
+  cold.
 - **The package does not pass the client.** A bug in the builder or a key that the root does not
   list any more. Nothing was published; fix the cause.
 - **The published package has no valid baseline.** `stats.json` on the branch is missing or was
