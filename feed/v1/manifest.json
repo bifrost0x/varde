@@ -1,0 +1,579 @@
+{
+  "type": "manifest",
+  "schema_version": 1,
+  "channel": "package",
+  "sequence": 1794646731,
+  "created_at": "2026-11-14T08:58:51.788129153Z",
+  "expires_at": "2026-11-21T08:58:51.788129153Z",
+  "catalog_version": "2026.11.14",
+  "blobs": [
+    {
+      "name": "advisories/shard-00",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "4d29ce0b9921a8ca53c1c8a75cf92ee9c18ebce65a4803bd0b5d5a33e0993c79",
+      "size": 51026,
+      "uncompressed_size": 446681
+    },
+    {
+      "name": "advisories/shard-01",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "060a0c2c5ffb708771b56d39b7999bbc734fad8976fb5c77f5c699f34a64b108",
+      "size": 50308,
+      "uncompressed_size": 189181
+    },
+    {
+      "name": "advisories/shard-02",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "29813d033368c98b349243b52617242a9b5e7d3dbe2ce5feb3b9ff6a731e4612",
+      "size": 181867,
+      "uncompressed_size": 760437
+    },
+    {
+      "name": "advisories/shard-03",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "1c368089038f048fdf3d45bd77c6f2c532e006c6c9b2a99877b29cf1faef13e3",
+      "size": 48013,
+      "uncompressed_size": 164899
+    },
+    {
+      "name": "advisories/shard-04",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "ec715c73bfbd28946b1b560c4a072e48966118d3ad4e6161ada5cd368f26d252",
+      "size": 97502,
+      "uncompressed_size": 340698
+    },
+    {
+      "name": "advisories/shard-05",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "249177dbb20d182fec4b087a4c849286f38661097bb28ed9874ae9b51fd4a165",
+      "size": 26003,
+      "uncompressed_size": 148294
+    },
+    {
+      "name": "advisories/shard-06",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "183cfe2d9e11b4cbdf6d91b4890cbc8a41d3648a9b7c4efe061da6ab69b48dc7",
+      "size": 181088,
+      "uncompressed_size": 642859
+    },
+    {
+      "name": "advisories/shard-07",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "0b8785f75abf76f976b24776a37d5120868c7853239b4293bfb0c18ad7a04495",
+      "size": 3214,
+      "uncompressed_size": 10991
+    },
+    {
+      "name": "advisories/shard-08",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "5900b51eabf90bcf08752ecbce8524ee08a3594408e5a790e03f3ca65d8623bf",
+      "size": 98911,
+      "uncompressed_size": 388120
+    },
+    {
+      "name": "advisories/shard-09",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "eb9dc4318d5b1a752e857923622648423b0d263f3c86c79339c467c3208bc845",
+      "size": 4026,
+      "uncompressed_size": 14365
+    },
+    {
+      "name": "advisories/shard-10",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "ef609c38d85b70242ff914480cd9686148467628c34f45e946f76be5a41fbf18",
+      "size": 120958,
+      "uncompressed_size": 537297
+    },
+    {
+      "name": "advisories/shard-11",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "d058dd515369562936a773368bf29e65014a2f6036cea96a72ea25f617a1579d",
+      "size": 80259,
+      "uncompressed_size": 276366
+    },
+    {
+      "name": "advisories/shard-12",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "470971ed046c2dc02fc02deedcb5b2e0b2c546aa8d952d913a4d80394b8a707b",
+      "size": 299572,
+      "uncompressed_size": 1164370
+    },
+    {
+      "name": "advisories/shard-13",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "0447eaf3f90723ec303775502fa1ea1af9cf7ded35b86a8230a48053028b66a8",
+      "size": 36906,
+      "uncompressed_size": 117214
+    },
+    {
+      "name": "advisories/shard-14",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "0c5b5debe6fdd2fc842fb6c9370010282877596f013cfeb4abe17998d075cab8",
+      "size": 23909,
+      "uncompressed_size": 160486
+    },
+    {
+      "name": "advisories/shard-15",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "dbe7a9478bec93de6f1d6fd1c4e17dfba86253cc236952d38a5c9399a20d8d89",
+      "size": 51922,
+      "uncompressed_size": 209201
+    },
+    {
+      "name": "advisories/shard-16",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "2bbfb1b2cf7431e7c51a9a5cba45bcc1ac4c0785f9430d376b49715d0563e214",
+      "size": 98867,
+      "uncompressed_size": 412205
+    },
+    {
+      "name": "advisories/shard-17",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "e93afa70ad9c79393171b32ac3f978984a37e0aac7bfee8519dd1f58d398f465",
+      "size": 16220,
+      "uncompressed_size": 97720
+    },
+    {
+      "name": "advisories/shard-18",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "e31b0c9065eedffb96ad9888f6d0d3cb95b7cfd0922122919ededbfed433ff8a",
+      "size": 303502,
+      "uncompressed_size": 1394497
+    },
+    {
+      "name": "advisories/shard-19",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "9be2300d59191bec0e9aa3235a57fcb4988762357a5babc0c805b55e0ae37f9b",
+      "size": 155483,
+      "uncompressed_size": 1003843
+    },
+    {
+      "name": "advisories/shard-20",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "20cfff66a38ff15e1f012ef5c0a681797532a0f22b556470ae11274138e9ff62",
+      "size": 77435,
+      "uncompressed_size": 415000
+    },
+    {
+      "name": "advisories/shard-21",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "320d1d8ff9c60b1fbe66fb4a48d9db576dec4c64d9c7910e7e6dd937e235358f",
+      "size": 124179,
+      "uncompressed_size": 489024
+    },
+    {
+      "name": "advisories/shard-22",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "c2c91ad8ca711a9418882b42965141aefd7bda99d055224090156c3ce23f7684",
+      "size": 25729,
+      "uncompressed_size": 116333
+    },
+    {
+      "name": "advisories/shard-23",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "4d4ef5681b1237ae7b7a03fb97a4898c05e9cc3a1194a829d886b2e6511a7115",
+      "size": 47500,
+      "uncompressed_size": 168423
+    },
+    {
+      "name": "advisories/shard-24",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "01f7b40808e93712d36f31d18c556809053b5a8c16fbca1d6898201cb2ed80bc",
+      "size": 5966,
+      "uncompressed_size": 21204
+    },
+    {
+      "name": "advisories/shard-25",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "ce2a1c39d40d0cf91dd84323c56b6732682da9acb03dde5f4b925dd490d0e25d",
+      "size": 30636,
+      "uncompressed_size": 124882
+    },
+    {
+      "name": "advisories/shard-26",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "938fe1eb9744e3283e748c0937d98ea0fb169492801e7f33277502247d96e35d",
+      "size": 181583,
+      "uncompressed_size": 760488
+    },
+    {
+      "name": "advisories/shard-27",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "cf37323ede5a4441b15eee82a7f31f49ac55a7966ed6bed863cabff79b873268",
+      "size": 126225,
+      "uncompressed_size": 650303
+    },
+    {
+      "name": "advisories/shard-28",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "a47d3d6829016a2019cf53fbadd40a1054923a17cf7b11b8be7d6b7fd66533b1",
+      "size": 164854,
+      "uncompressed_size": 876031
+    },
+    {
+      "name": "advisories/shard-29",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "daaea2547368346c86d30f5581208aabf7294843a9f2b39a7af3c540858e1d5f",
+      "size": 161285,
+      "uncompressed_size": 616626
+    },
+    {
+      "name": "advisories/shard-30",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "93294d8311c5ca438ffc8901fb6ba1156bfeff4f01f701c8f7fed02b2952beb7",
+      "size": 89386,
+      "uncompressed_size": 360453
+    },
+    {
+      "name": "advisories/shard-31",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "02e62a2eb76bffe5dc2a9b62eef52c1a01fcd96691e10d878ef1e318d680d8d5",
+      "size": 193760,
+      "uncompressed_size": 1017848
+    },
+    {
+      "name": "advisories/shard-32",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "69fc174a7842d94c69c7c1b6711d47ee914d52802d4bc8cb08a82139c032f566",
+      "size": 299375,
+      "uncompressed_size": 1096460
+    },
+    {
+      "name": "advisories/shard-33",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "16d31e4f1f50a71c9c76ba981e74e3e97de6a6f2d454bbeca8d70872d517e457",
+      "size": 47487,
+      "uncompressed_size": 345744
+    },
+    {
+      "name": "advisories/shard-34",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "537385ff7501e5ae276655208303c24aa80f77b454685307a7839cc6376ec2ad",
+      "size": 238676,
+      "uncompressed_size": 897807
+    },
+    {
+      "name": "advisories/shard-35",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "69f2932425681c098afc6045f05010e9b1aac943afa9bad5210a4d8e43966487",
+      "size": 174018,
+      "uncompressed_size": 1105841
+    },
+    {
+      "name": "advisories/shard-36",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "44d8edddaed12545807199e447c57b10c35009e7b232350d528f2a10b8ed84cc",
+      "size": 154641,
+      "uncompressed_size": 606154
+    },
+    {
+      "name": "advisories/shard-37",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "17daad0df646987f45f94142a388922c54af8b35146fc7db45d3b134b3e0b603",
+      "size": 184773,
+      "uncompressed_size": 768598
+    },
+    {
+      "name": "advisories/shard-38",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "010c6a0eb5003bcbd42a73fb7605ffab1955ed5b85dc364116cf0bbde4e86d93",
+      "size": 57766,
+      "uncompressed_size": 242623
+    },
+    {
+      "name": "advisories/shard-39",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "a9dd3f8f98b2e6e64995e2a3a139bd3dddecaac49b6d96e91ccdb8a5446fb256",
+      "size": 325184,
+      "uncompressed_size": 1210839
+    },
+    {
+      "name": "advisories/shard-40",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "d3ae9acd609934b9c32e044b86b148aa4b73fe6200d447e4725979a7b9aa2507",
+      "size": 33040,
+      "uncompressed_size": 151965
+    },
+    {
+      "name": "advisories/shard-41",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "dd519a29a615e84c91bc35ae61326e5d73e01e170d1c3ba0aed8e082622bef40",
+      "size": 258213,
+      "uncompressed_size": 1361477
+    },
+    {
+      "name": "advisories/shard-42",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "708e75f1d8bb5ca2bf9052d2ad0e2cce50fd4c5c84d6ca3a3c8c2b5f436132ad",
+      "size": 241826,
+      "uncompressed_size": 935837
+    },
+    {
+      "name": "advisories/shard-43",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "25c07fa97af0aba5138fe4e350d30106245c7275463ff5539eed6c3df47cbf4e",
+      "size": 8521,
+      "uncompressed_size": 55636
+    },
+    {
+      "name": "advisories/shard-44",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "0c89e4f254c510af9b968a6f51b2336007eda2fc76e91f2b1e3413fb6305cd1c",
+      "size": 80956,
+      "uncompressed_size": 318581
+    },
+    {
+      "name": "advisories/shard-45",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "ce834d7cd23eb8ed11d97385f383eefe719b2f0a1ee841def0a8d4c47744a558",
+      "size": 23066,
+      "uncompressed_size": 99846
+    },
+    {
+      "name": "advisories/shard-46",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "9cf01ecf4ecd1ba3434e6572d4ed6a767d6080ff09d6b51625359c1c3904eae3",
+      "size": 217730,
+      "uncompressed_size": 845844
+    },
+    {
+      "name": "advisories/shard-47",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "bcb9541f5af29fcb761c147edccb5cdfa0693f1af6ffa00b783dbe0115b4a1c6",
+      "size": 55294,
+      "uncompressed_size": 183153
+    },
+    {
+      "name": "advisories/shard-48",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "f82276794dc35423495699310aa3aa863ae81a2b31bb4cc4b882f17419e8fdf2",
+      "size": 71256,
+      "uncompressed_size": 543827
+    },
+    {
+      "name": "advisories/shard-49",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "c4322dfdea8bbf95553f856493ae6a447b961e0ec3709c0a11396761fa2aa945",
+      "size": 332064,
+      "uncompressed_size": 1264709
+    },
+    {
+      "name": "advisories/shard-50",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "7d65ad9745c8533f34340646a84126c20fd1aa67aa6225e8308bc40066fbe35e",
+      "size": 258840,
+      "uncompressed_size": 1045767
+    },
+    {
+      "name": "advisories/shard-51",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "4686db7b767e17e2a45e89c9c6d98eef6bc2b6d58e4d48e8a06019d58be65a1c",
+      "size": 18864,
+      "uncompressed_size": 65978
+    },
+    {
+      "name": "advisories/shard-52",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "fe6f4fb9f0b913989f1075dc9aa25b5f73d118ffe2140e188752d5cbb1141712",
+      "size": 84145,
+      "uncompressed_size": 310434
+    },
+    {
+      "name": "advisories/shard-53",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "f175760d118fa875b24378b2c74815f2c2e594a86de39bf1c71c20ec7aedd093",
+      "size": 205245,
+      "uncompressed_size": 772628
+    },
+    {
+      "name": "advisories/shard-54",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "443be4081876ebb488b53d01f2ee62e9a3350d96dc9d05cdcc1e1b5aa89a13e1",
+      "size": 131038,
+      "uncompressed_size": 914767
+    },
+    {
+      "name": "advisories/shard-55",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "f6abae924e9211cd5165fe0bdb3f036da3da22c7037df5a123110ce2eaa167a4",
+      "size": 29589,
+      "uncompressed_size": 97753
+    },
+    {
+      "name": "advisories/shard-56",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "011f16a8db0950dcbf40b8793e974092165db685259d477010181a0bc5108857",
+      "size": 28688,
+      "uncompressed_size": 120482
+    },
+    {
+      "name": "advisories/shard-57",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "ff807a10c8840273cf9df4bcdaa68aec4df2a3bc1e9546f1318c949dd5d1a495",
+      "size": 106041,
+      "uncompressed_size": 387360
+    },
+    {
+      "name": "advisories/shard-58",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "3f3396897605442cd10eddbd74c578942f8e26ea0d2835b94258407f8f8e0dc1",
+      "size": 115486,
+      "uncompressed_size": 438220
+    },
+    {
+      "name": "advisories/shard-59",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "5d51c4c00720ac4444a7b5519c00e343ddafc91dd1ff112610d673b0ef1ef6f3",
+      "size": 42226,
+      "uncompressed_size": 142094
+    },
+    {
+      "name": "advisories/shard-60",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "0101e2f282b9ba0f85dd4e0a72cd96d71d4b1d9800178b05c12cb26d04861023",
+      "size": 69885,
+      "uncompressed_size": 263998
+    },
+    {
+      "name": "advisories/shard-61",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "a870614e5ecb69c19a0b5d48cf858faf4cdf90c731338d8a358edc8734fe3a86",
+      "size": 340727,
+      "uncompressed_size": 2663374
+    },
+    {
+      "name": "advisories/shard-62",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "8b215ec0d3961715ae6324f68b790c8ca931b9d3fae01cd2627e4a66c315d169",
+      "size": 133077,
+      "uncompressed_size": 528328
+    },
+    {
+      "name": "advisories/shard-63",
+      "media_type": "application/vnd.varde.osv.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "3f252073402c52f3da4caed6929b3f3b04e613294bb19ef839fe8d46cc9dd2ec",
+      "size": 89796,
+      "uncompressed_size": 404938
+    },
+    {
+      "name": "catalog",
+      "media_type": "application/vnd.varde.catalog.v1+json",
+      "compression": "zstd",
+      "sha256": "382e1ae1423de2c644f8df7300965424263f0a59abf4042601213314bc15248d",
+      "size": 15308,
+      "uncompressed_size": 74516
+    },
+    {
+      "name": "enrichment/epss",
+      "media_type": "application/vnd.varde.epss.v1+json",
+      "compression": "zstd",
+      "sha256": "c9b7228b1b7e72a120c1395279def8c409518fa10b1a15f76cf4b36f2c74cda1",
+      "size": 48241,
+      "uncompressed_size": 416846
+    },
+    {
+      "name": "enrichment/kev",
+      "media_type": "application/vnd.varde.kev.v1+json",
+      "compression": "zstd",
+      "sha256": "a8f720e537de98fab44e039faafa4dfb982e61260a60cfb6417570ec62f1a131",
+      "size": 11069,
+      "uncompressed_size": 130403
+    },
+    {
+      "name": "generated",
+      "media_type": "application/vnd.varde.catalog-generated.v1+json",
+      "compression": "zstd",
+      "sha256": "0c35174655e8d77bf24b827d98f5c812d468f417a778ac84106f5301283d5663",
+      "size": 7857,
+      "uncompressed_size": 159850
+    },
+    {
+      "name": "index",
+      "media_type": "application/vnd.varde.index.v1+tsv",
+      "compression": "zstd",
+      "sha256": "1d42a7333243b8d0a57bf550d3fae7466021c7e6f041f676648a969aa8b47cbf",
+      "size": 27216,
+      "uncompressed_size": 135336
+    },
+    {
+      "name": "releases",
+      "media_type": "application/vnd.varde.releases.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "a38a80c5fe4239f44123e64d02e0c8cd43b4b3eb110ea938e2eb4e281079a830",
+      "size": 169376,
+      "uncompressed_size": 3998836
+    },
+    {
+      "name": "tags",
+      "media_type": "application/vnd.varde.tags.v1+jsonl",
+      "compression": "zstd",
+      "sha256": "18b87ae35489f6144fc9c68edcf439baaf48055e6c470ae41cdc5b4f9ea46a1e",
+      "size": 70376,
+      "uncompressed_size": 540339
+    }
+  ]
+}

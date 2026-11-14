@@ -1,0 +1,863 @@
+# Generated catalog entries
+
+Build of 2026-11-14 08:58 UTC, package 1794646731. Entries made and checked by machine (checks C1 to C6), not reviewed by a person. Compared with the list of the build of 2026-11-14 06:30 UTC (package 1794637848).
+
+| | |
+|---|---:|
+| Entries shipped | 157 |
+| Images shipped | 165 |
+| New | 24 |
+| Changed | 0 |
+| Dropped | 0 |
+| Failed this build | 814 |
+| Failed C1 | 1 |
+| Failed C2 | 752 |
+| Failed C3 | 57 |
+| Failed C4 | 4 |
+| Not checked (a source did not answer) | 65 |
+
+Stopped early: nvd.
+
+## New
+
+- docker.io/0netx/bw-export
+- docker.io/2manyvcos/enable-actual
+- docker.io/aceberg/exercisediary
+- docker.io/bellamy/wallos
+- docker.io/bellingcat/auto-archiver
+- docker.io/cesura/pastey
+- docker.io/crystaldba/postgres-mcp
+- docker.io/daledavies/jump
+- docker.io/gjergjk/pia-qbittorrent
+- docker.io/glenndehaan/unifi-voucher-site
+- docker.io/habridge/ha-bridge-raspberrypi3
+- docker.io/itschasa/speedrr
+- docker.io/junkerderprovinz/knightloader
+- docker.io/ksjaay/lunalytics
+- docker.io/maikboarder/playerr
+- docker.io/mikaelkw/nodecast-tv-plus
+- docker.io/nofuturekid/tasmofleet
+- docker.io/noisedash/noisedash
+- docker.io/pldubouilh/gossa
+- docker.io/qmcgaw/ss-server
+- docker.io/rdavidoff/twitch-channel-points-miner-v2
+- docker.io/shawly/nut
+- docker.io/skibish/ddns
+- ghcr.io/junkerderprovinz/knightloader
+
+## Failures
+
+- docker.io/11notes/adguard: C2: ghcr.io/11notes/adguard rests on readme alone
+- docker.io/1activegeek/airconnect: C2: docker.io/1activegeek/airconnect rests on hub alone
+- docker.io/7eventy7/discodrome: C2: docker.io/7eventy7/discodrome rests on readme alone
+- docker.io/abrechen2/travstats: C2: docker.io/abrechen2/travstats rests on hub alone
+- docker.io/acaranta/docker-joplin: C2: docker.io/acaranta/docker-joplin rests on readme alone
+- docker.io/aerilym/photoprism-helper: C2: docker.io/aerilym/photoprism-helper rests on hub alone
+- docker.io/agent0ai/agent-zero: C2: docker.io/agent0ai/agent-zero rests on readme alone
+- docker.io/agusalex/grive2: C2: docker.io/agusalex/grive2 rests on readme alone
+- docker.io/ahmadnassri/unifi-api-browser: C2: docker.io/ahmadnassri/unifi-api-browser rests on hub alone
+- docker.io/airsonicadvanced/airsonic-advanced: C2: docker.io/airsonicadvanced/airsonic-advanced rests on hub alone
+- docker.io/alcapone1933/ddns-ipv64: C2: docker.io/alcapone1933/shoutrrr rests on readme alone
+- docker.io/alcapone1933/shoutrrr: C2: docker.io/alcapone1933/shoutrrr rests on readme alone
+- docker.io/alexindigo/globnotes: C2: docker.io/alexindigo/globnotes rests on readme alone
+- docker.io/alexindigo/localsend-nas: C2: docker.io/alexindigo/localsend-nas rests on readme alone
+- docker.io/alexrosbach/lanlens: C2: docker.io/alexrosbach/lanlens rests on readme alone
+- docker.io/alexrosbach/marketplacelens: C2: docker.io/alexrosbach/marketplacelens rests on readme alone
+- docker.io/alexxit/go2rtc: C2: docker.io/alexxit/go2rtc rests on hub alone
+- docker.io/alfhou/hammond: C2: docker.io/alfhou/hammond rests on readme alone
+- docker.io/allaboutduncan/comic-utils-web: C2: docker.io/allaboutduncan/comic-utils-web rests on readme alone
+- docker.io/almeidapaulopt/tsdproxy: C2: docker.io/almeidapaulopt/tsdproxy rests on readme alone
+- docker.io/almir/webhook: C2: docker.io/almir/webhook rests on hub alone
+- docker.io/alturismo/guide2go: C2: docker.io/alturismo/guide2go rests on readme alone
+- docker.io/alturismo/ovpn_privoxy: C2: docker.io/alturismo/ovpn_privoxy rests on readme alone
+- docker.io/alturismo/owi2plex: C2: docker.io/alturismo/owi2plex rests on readme alone
+- docker.io/alturismo/wg_hideme_privoxy: C2: docker.io/alturismo/wg_hideme_privoxy rests on readme alone
+- docker.io/alturismo/xteve: C2: docker.io/alturismo/xteve rests on readme alone
+- docker.io/alturismo/xteve_g2g_owi: C2: docker.io/alturismo/xteve_g2g_owi rests on readme alone
+- docker.io/alturismo/xteve_guide2go: C2: docker.io/alturismo/xteve_guide2go rests on readme alone
+- docker.io/alturismo/xteve_vpn: C2: docker.io/alturismo/xteve_vpn rests on readme alone
+- docker.io/andrijn/plex-ngrok: C2: docker.io/andrijn/plex-ngrok rests on hub alone
+- docker.io/angelics/unraid-docker-javinizer: C2: docker.io/angelics/unraid-docker-javinizer rests on hub alone
+- docker.io/anirdev/slink: C2: docker.io/anirdev/slink rests on hub alone
+- docker.io/anthonyraymond/joal: C2: docker.io/digrouz/joal rests on hub alone
+- docker.io/apotdevin/thunderhub: C2: docker.io/apotdevin/thunderhub rests on hub alone
+- docker.io/appwrite/appwrite: C2: docker.io/appwrite/browser rests on readme alone
+- docker.io/appwrite/browser: C2: docker.io/appwrite/browser rests on readme alone
+- docker.io/appwrite/embedding: C2: docker.io/appwrite/browser rests on readme alone
+- docker.io/appwrite/geo: C2: docker.io/appwrite/browser rests on readme alone
+- docker.io/appwrite/new: C2: docker.io/appwrite/browser rests on readme alone
+- docker.io/aradd7/lightarr: C3: no template matches at least 3 release tags and no floating tag of docker.io/aradd7/lightarr
+- docker.io/arianrhodsandlot/retroassembly: C2: docker.io/arianrhodsandlot/retroassembly rests on hub alone
+- docker.io/aronmarinelli/bitwarden-secure-sync: C2: docker.io/aronmarinelli/bitwarden-secure-sync rests on hub alone
+- docker.io/aschmelyun/subvert: C2: docker.io/aschmelyun/subvert rests on readme alone
+- docker.io/aterfax/pbs-client: C2: docker.io/aterfax/pbs-client rests on hub alone
+- docker.io/athomasson2/ebook2audiobook: C2: docker.io/athomasson2/ebook2audiobookxtts rests on hub alone
+- docker.io/athomasson2/ebook2audiobookxtts: C2: docker.io/athomasson2/ebook2audiobookxtts rests on hub alone
+- docker.io/atribe/apcupsd-influxdb-exporter: C2: docker.io/atribe/apcupsd-influxdb-exporter rests on readme alone
+- docker.io/aunefyren/wrapperr: C2: docker.io/aunefyren/wrapperr rests on hub alone
+- docker.io/automaticrippingmachine/automatic-ripping-machine: C2: docker.io/automaticrippingmachine/automatic-ripping-machine rests on hub alone
+- docker.io/avpnusr/liquidctl: C2: docker.io/avpnusr/liquidctl rests on hub alone
+- docker.io/avpnusr/torprivoxy: C2: docker.io/avpnusr/torprivoxy rests on hub alone
+- docker.io/axelander/openbudgeteer: C2: docker.io/axelander/openbudgeteer rests on hub alone
+- docker.io/azuracast/nowplaying: C2: docker.io/azuracast/nowplaying rests on readme alone
+- docker.io/b1tsized/gcp-dynamic-dns: C2: docker.io/b1tsized/gcp-dynamic-dns rests on readme alone
+- docker.io/b2un0/silabs-multipan-docker: C2: docker.io/b2un0/silabs-multipan-docker rests on readme alone
+- docker.io/balzack/databag: C2: docker.io/balzack/databag rests on hub alone
+- docker.io/banhcanh/docker-fmd2: C2: docker.io/banhcanh/docker-fmd2 rests on readme alone
+- docker.io/barrycarey/speedmon: C3: no template matches at least 3 release tags and no floating tag of docker.io/barrycarey/speedmon
+- docker.io/barrycarey/speedtest-for-influxdb-and-grafana: C2: docker.io/barrycarey/speedtest-for-influxdb-and-grafana rests on readme alone
+- docker.io/basshous3/taggarr: C2: docker.io/basshous3/taggarr rests on readme alone
+- docker.io/benoitpodwinski/phpservermon: C2: docker.io/benoitpodwinski/phpservermon rests on hub alone
+- docker.io/benzino77/tasmocompiler: C2: docker.io/benzino77/tasmocompiler rests on hub alone
+- docker.io/bergasha/kino-swipe: C2: docker.io/bergasha/kino-swipe rests on readme alone
+- docker.io/binhex/arch-code-server: C2: docker.io/binhex/arch-code-server rests on readme alone
+- docker.io/binhex/arch-crafty-4: C2: docker.io/binhex/arch-crafty-4 rests on readme alone
+- docker.io/binhex/arch-deluge: C2: docker.io/binhex/arch-deluge rests on readme alone
+- docker.io/binhex/arch-delugevpn: C2: docker.io/binhex/arch-delugevpn rests on readme alone
+- docker.io/binhex/arch-goland: C2: docker.io/binhex/arch-goland rests on readme alone
+- docker.io/binhex/arch-hexchat: C2: docker.io/binhex/arch-hexchat rests on readme alone
+- docker.io/binhex/arch-intellij: C2: docker.io/binhex/arch-intellij rests on readme alone
+- docker.io/binhex/arch-krusader: C2: docker.io/binhex/arch-krusader rests on readme alone
+- docker.io/binhex/arch-libreoffice: C2: docker.io/binhex/arch-libreoffice rests on readme alone
+- docker.io/binhex/arch-makemkv: C2: docker.io/binhex/arch-makemkv rests on readme alone
+- docker.io/binhex/arch-minidlna: C2: docker.io/binhex/arch-minidlna rests on readme alone
+- docker.io/binhex/arch-nginx: C2: docker.io/binhex/arch-nginx rests on readme alone
+- docker.io/binhex/arch-nicotineplus: C2: docker.io/binhex/arch-nicotineplus rests on readme alone
+- docker.io/binhex/arch-nzbget: C2: docker.io/binhex/arch-nzbget rests on readme alone
+- docker.io/binhex/arch-overseerr: C2: docker.io/binhex/arch-overseerr rests on readme alone
+- docker.io/binhex/arch-plex: C2: docker.io/binhex/arch-plex rests on readme alone
+- docker.io/binhex/arch-plexpass: C2: docker.io/binhex/arch-plexpass rests on readme alone
+- docker.io/binhex/arch-privoxyvpn: C2: docker.io/binhex/arch-privoxyvpn rests on readme alone
+- docker.io/binhex/arch-pycharm: C2: docker.io/binhex/arch-pycharm rests on readme alone
+- docker.io/binhex/arch-qbittorrent: C2: docker.io/binhex/arch-qbittorrent rests on readme alone
+- docker.io/binhex/arch-qbittorrentvpn: C2: docker.io/binhex/arch-qbittorrentvpn rests on readme alone
+- docker.io/binhex/arch-resilio-sync: C2: docker.io/binhex/arch-resilio-sync rests on readme alone
+- docker.io/binhex/arch-rider: C2: docker.io/binhex/arch-rider rests on readme alone
+- docker.io/binhex/arch-rtorrentvpn: C2: docker.io/binhex/arch-rtorrentvpn rests on readme alone
+- docker.io/binhex/arch-rustrover: C2: docker.io/binhex/arch-rustrover rests on readme alone
+- docker.io/binhex/arch-sabnzbd: C2: docker.io/binhex/arch-sabnzbd rests on readme alone
+- docker.io/binhex/arch-sabnzbdvpn: C2: docker.io/binhex/arch-sabnzbdvpn rests on readme alone
+- docker.io/binhex/arch-sonarr: C2: docker.io/binhex/arch-sonarr rests on readme alone
+- docker.io/binhex/arch-syncthing: C2: docker.io/binhex/arch-syncthing rests on readme alone
+- docker.io/binhex/arch-teamspeak: C2: docker.io/binhex/arch-teamspeak rests on readme alone
+- docker.io/binhex/arch-tvheadend: C2: docker.io/binhex/arch-tvheadend rests on readme alone
+- docker.io/binhex/arch-urbackup: C2: docker.io/binhex/arch-urbackup rests on readme alone
+- docker.io/binhex/arch-webstorm: C2: docker.io/binhex/arch-webstorm rests on readme alone
+- docker.io/bitcryptic/nanoclaw: C2: docker.io/bitcryptic/nanoclaw rests on hub alone
+- docker.io/bitcryptic/paperclip: C2: docker.io/bitcryptic/paperclip rests on hub alone
+- docker.io/bitcryptic/pi-network-node: C2: docker.io/bitcryptic/pi-network-node rests on hub alone
+- docker.io/bitlessbyte/prowlarr: C2: docker.io/bitlessbyte/prowlarr rests on hub alone
+- docker.io/bitswired/ai-chat-app: C2: docker.io/bitswired/ai-chat-app rests on readme alone
+- docker.io/bleskomat/bleskomat-server: C3: no template matches at least 3 release tags and no floating tag of docker.io/bleskomat/bleskomat-server
+- docker.io/blinkospace/blinko: C2: docker.io/blinkospace/blinko rests on hub alone
+- docker.io/bmmbmm01/plex-dbrepair: C2: docker.io/bmmbmm01/plex-dbrepair rests on hub alone
+- docker.io/bmmbmm01/sftp2: C3: no template matches at least 3 release tags and no floating tag of docker.io/bmmbmm01/sftp2
+- docker.io/bmmbmm01/unraid-smb-password-portal: C3: no template matches at least 3 release tags and no floating tag of docker.io/bmmbmm01/unraid-smb-password-portal
+- docker.io/bndw/wifi-card: C2: docker.io/bndw/wifi-card rests on readme alone
+- docker.io/bobbintb/docker-rmlint-unraid: C2: docker.io/bobbintb/docker-rmlint-unraid rests on hub alone
+- docker.io/bobbydigital420/q-zandronum-debianslim: C2: docker.io/bobbydigital420/q-zandronum-debianslim rests on readme alone
+- docker.io/bokker/rss.to.telegram: C2: docker.io/bokker/rss.to.telegram rests on hub alone
+- docker.io/bokker/thumba: C2: docker.io/bokker/thumba rests on hub alone
+- docker.io/boramalper/magneticod: C2: docker.io/boramalper/magneticod rests on readme alone
+- docker.io/boramalper/magneticow: C2: docker.io/boramalper/magneticod rests on readme alone
+- docker.io/boypt/cloud-torrent: C2: docker.io/boypt/cloud-torrent rests on readme alone
+- docker.io/bpatrik/pigallery2: C2: docker.io/bpatrik/pigallery2 rests on hub alone
+- docker.io/bplein/mbpfan: C2: docker.io/bplein/mbpfan rests on hub alone
+- docker.io/brandawg93/nut-upsd: C2: docker.io/brandawg93/nut-upsd rests on readme alone
+- docker.io/brandawg93/peanut: C2: docker.io/brandawg93/nut-upsd rests on readme alone
+- docker.io/breadlysm/speedtest-to-influxdb: C2: ghcr.io/breadlysm/speedflux rests on readme alone
+- docker.io/briis/weatherflow2mqtt: C2: docker.io/briis/weatherflow2mqtt rests on readme alone
+- docker.io/bropat/eufy-security-ws: C2: docker.io/bropat/eufy-security-ws rests on hub alone
+- docker.io/browserless/chrome: C2: docker.io/browserless/chrome rests on hub alone
+- docker.io/bryangerlach/episodes: C2: docker.io/bryangerlach/episodes rests on readme alone
+- docker.io/c4illin/convertx: C2: docker.io/c4illin/convertx rests on hub alone
+- docker.io/cabi24/notenregal: C3: no template matches at least 3 release tags and no floating tag of docker.io/cabi24/notenregal
+- docker.io/cachethq/docker: C2: docker.io/cachethq/docker rests on hub alone
+- docker.io/cajuncoding/openrgb-gui-unraid: C2: docker.io/cajuncoding/openrgb-gui-unraid rests on hub alone
+- docker.io/calagopus/panel: C2: docker.io/calagopus/panel rests on hub alone
+- docker.io/calmasacow/torlink-plusplus: C2: docker.io/calmasacow/torlink-plusplus rests on readme alone
+- docker.io/cardanocommunity/cardano-node: C2: docker.io/cardanocommunity/cardano-node rests on hub alone
+- docker.io/carrotwaxr/peek-stash-browser: C2: docker.io/carrotwaxr/peek-stash-browser rests on readme alone
+- docker.io/catalinii/minisatip-build-image: C2: docker.io/catalinii/minisatip-build-image rests on readme alone
+- docker.io/catapultcase/junctionrelay: C2: docker.io/catapultcase/junctionrelay rests on readme alone
+- docker.io/causticlab/hass-configurator-docker: C2: docker.io/causticlab/hass-configurator-docker rests on hub alone
+- docker.io/ccmpbll/docker-diag-tools: C2: docker.io/ccmpbll/docker-diag-tools rests on readme alone
+- docker.io/ccmpbll/loglook: C2: docker.io/ccmpbll/loglook rests on readme alone
+- docker.io/ccmpbll/nvidia-smi-exporter: C2: docker.io/ccmpbll/nvidia-smi-exporter rests on readme alone
+- docker.io/ccmpbll/ookla-speedtest-exporter: C2: docker.io/ccmpbll/ookla-speedtest-exporter rests on readme alone
+- docker.io/ccmpbll/printspy: C2: docker.io/ccmpbll/printspy rests on readme alone
+- docker.io/ccmpbll/ruckus-unleashed-exporter: C2: docker.io/ccmpbll/ruckus-unleashed-exporter rests on readme alone
+- docker.io/celsian/xteve-channel-alerts: C2: docker.io/celsian/xteve-channel-alerts rests on readme alone
+- docker.io/cephyrixzyth/oneirodex: C2: docker.io/cephyrixzyth/oneirodex rests on hub alone
+- docker.io/chacawaca/post-recording: C2: docker.io/chacawaca/post-recording rests on readme alone
+- docker.io/chadwpalm/coming-soon: C3: no template matches at least 3 release tags and no floating tag of docker.io/chadwpalm/coming-soon
+- docker.io/chaptarr/chaptarr: C2: docker.io/chaptarr/chaptarr rests on readme alone
+- docker.io/charlocharlie/epicgames-freegames: C2: docker.io/charlocharlie/epicgames-freegames rests on hub alone
+- docker.io/charmcli/charm: C2: docker.io/charmcli/charm rests on hub alone
+- docker.io/charmcli/soft-serve: C2: docker.io/charmcli/soft-serve rests on hub alone
+- docker.io/chrisashtear/zomboid-discobot: C2: docker.io/chrisashtear/zomboid-discobot rests on readme alone
+- docker.io/chrisashtear/zomboid-reporter: C2: docker.io/chrisashtear/zomboid-discobot rests on readme alone
+- docker.io/chrisashtear/zomboid-reporter-backend: C2: docker.io/chrisashtear/zomboid-discobot rests on readme alone
+- docker.io/chrisashtear/zomboid-reporter-frontend: C2: docker.io/chrisashtear/zomboid-discobot rests on readme alone
+- docker.io/cioraneanu/firefly-pico: C2: docker.io/cioraneanu/firefly-pico rests on hub alone
+- docker.io/cloudreve/cloudreve: C2: docker.io/xavierniu/cloudreve rests on hub alone
+- docker.io/cncjs/cncjs: C2: docker.io/cncjs/cncjs rests on hub alone
+- docker.io/codercom/code-server: C2: docker.io/codercom/code-server rests on hub alone
+- docker.io/comixed/comixed: C2: docker.io/comixed/comixed rests on hub alone
+- docker.io/composecraft/composecraft: C2: docker.io/composecraft/composecraft rests on readme alone
+- docker.io/confinedfish/trackarr: C3: no template matches at least 3 release tags and no floating tag of docker.io/confinedfish/trackarr
+- docker.io/corentinth/enclosed: C2: docker.io/corentinth/enclosed rests on readme alone
+- docker.io/coturn/coturn: C2: docker.io/instrumentisto/coturn rests on hub alone
+- docker.io/cplieger/docker-fclones-scheduler: C2: docker.io/cplieger/docker-fclones-scheduler rests on hub alone
+- docker.io/cplieger/plex-exporter: C2: docker.io/cplieger/plex-exporter rests on hub alone
+- docker.io/cplieger/plex-language-sync: C2: docker.io/cplieger/plex-language-sync rests on hub alone
+- docker.io/cplieger/seadex-scout: C2: docker.io/cplieger/seadex-scout rests on hub alone
+- docker.io/crazymax/ddns-route53: C2: docker.io/crazymax/ddns-route53 rests on hub alone
+- docker.io/crzynik/swatch: C2: docker.io/crzynik/swatch rests on hub alone
+- docker.io/cyaondanet/plex_discord_role_management: C2: docker.io/cyaondanet/plex_discord_role_management rests on readme alone
+- docker.io/d34dc3n73r/netdata-glibc: C2: docker.io/d34dc3n73r/netdata-glibc rests on readme alone
+- docker.io/d8ahazard/glimmr: C2: docker.io/d8ahazard/glimmr rests on readme alone
+- docker.io/damongolding/immich-kiosk: C2: docker.io/damongolding/immich-kiosk rests on hub alone
+- docker.io/daredoes/mopidy3: C2: docker.io/daredoes/mopidy3 rests on readme alone
+- docker.io/darkmatterforge/chowkidar: C4: newest tag 1.1.0 is not on the line of the newest release 0.5.23
+- docker.io/darthnorse/dockmon: C2: docker.io/darthnorse/dockmon rests on hub alone
+- docker.io/dartsteven/nutify: C2: docker.io/dartsteven/nutify rests on readme alone
+- docker.io/dastron/video-ware: C2: docker.io/dastron/video-ware rests on hub alone
+- docker.io/davidcrty/databasement: C2: docker.io/davidcrty/databasement-php rests on readme alone
+- docker.io/davidcrty/databasement-php: C2: docker.io/davidcrty/databasement-php rests on readme alone
+- docker.io/dbeaver/cloudbeaver: C2: docker.io/dbeaver/cloudbeaver rests on hub alone
+- docker.io/dchesterton/amcrest2mqtt: C2: docker.io/dchesterton/amcrest2mqtt rests on readme alone
+- docker.io/delsolger/bfbackup: C2: docker.io/delsolger/bfbackup rests on hub alone
+- docker.io/denverquane/amongusdiscord: C2: docker.io/denverquane/amongusdiscord rests on hub alone
+- docker.io/dervish/readarr-redux: C3: no template matches at least 3 release tags and no floating tag of docker.io/dervish/readarr-redux
+- docker.io/devedse/develancacheui_backend: C2: docker.io/devedse/develancacheui_backend rests on readme alone
+- docker.io/devedse/develancacheui_frontend: C2: docker.io/devedse/develancacheui_backend rests on readme alone
+- docker.io/devzwf/brscan-skey: C3: no template matches at least 3 release tags and no floating tag of docker.io/devzwf/brscan-skey
+- docker.io/devzwf/mimosa: C2: docker.io/devzwf/mimosa rests on hub alone
+- docker.io/dhruvinsh/ws-ephemeral: C2: docker.io/dhruvinsh/ws-ephemeral rests on readme alone
+- docker.io/dialmaster/youtarr: C2: docker.io/dialmaster/youtarr rests on hub alone
+- docker.io/diamkil/notea: C2: docker.io/diamkil/notea rests on readme alone
+- docker.io/didmar/whisper-api-server: C2: docker.io/didmar/whisper-api-server rests on readme alone
+- docker.io/difegue/lanraragi: C2: docker.io/difegue/lanraragi rests on hub alone
+- docker.io/digitalhigh/flextv: C2: docker.io/digitalhigh/flextv rests on hub alone
+- docker.io/digitalhigh/glimmr: C2: docker.io/d8ahazard/glimmr rests on readme alone
+- docker.io/digrouz/joal: C2: docker.io/digrouz/joal rests on hub alone
+- docker.io/directus/directus: C2: docker.io/directus/directus rests on hub alone
+- docker.io/dmitriy/broadlink-mqtt: C2: docker.io/dmitriy/broadlink-mqtt rests on hub alone
+- docker.io/drakkan/sftpgo: C2: docker.io/drakkan/sftpgo rests on hub alone
+- docker.io/drgonzo65/liveposter: C2: docker.io/drgonzo65/liveposter rests on readme alone
+- docker.io/droideparanoico/dostalgia: C3: no template matches at least 3 release tags and no floating tag of docker.io/droideparanoico/dostalgia
+- docker.io/droppedneedle/droppedneedle: C2: docker.io/droppedneedle/droppedneedle rests on readme alone
+- docker.io/drumsergio/akou: C2: docker.io/drumsergio/akou rests on hub alone
+- docker.io/drumsergio/jellyfin-telegram-channel-sync: C3: no template matches at least 3 release tags and no floating tag of docker.io/drumsergio/jellyfin-telegram-channel-sync
+- docker.io/drumsergio/lynxprompt: C2: docker.io/drumsergio/lynxprompt rests on hub alone
+- docker.io/drumsergio/nginx-mailer: C3: no template matches at least 3 release tags and no floating tag of docker.io/drumsergio/nginx-mailer
+- docker.io/drumsergio/pumperly: C2: docker.io/drumsergio/pumperly rests on hub alone
+- docker.io/drumsergio/quality-gate-encoder: C3: no template matches at least 3 release tags and no floating tag of docker.io/drumsergio/quality-gate-encoder
+- docker.io/drumsergio/telegram-delay-channel-cloner: C3: no template matches at least 3 release tags and no floating tag of docker.io/drumsergio/telegram-delay-channel-cloner
+- docker.io/drumsergio/vettarr: C2: docker.io/drumsergio/vettarr rests on hub alone
+- docker.io/drumsergio/way-cms: C2: docker.io/drumsergio/way-cms rests on hub alone
+- docker.io/drumsergio/web-mirror: C2: docker.io/drumsergio/web-mirror rests on hub alone
+- docker.io/dullage/flatnotes: C2: docker.io/dullage/flatnotes rests on readme alone
+- docker.io/dumbwareio/dumbassets: C2: docker.io/dumbwareio/dumbassets rests on readme alone
+- docker.io/dungfu/twitch-drops-miner: C2: docker.io/dungfu/twitch-drops-miner rests on hub alone
+- docker.io/dweagle/posterflow: C2: docker.io/dweagle/posterflow rests on readme alone
+- docker.io/dyonr/jackettvpn: C2: docker.io/dyonr/jackettvpn rests on hub alone
+- docker.io/dyonr/magnetico-environment: C2: docker.io/boramalper/magneticod rests on readme alone
+- docker.io/dyonr/nzbgetvpn: C2: docker.io/dyonr/nzbgetvpn rests on hub alone
+- docker.io/dyonr/passthroughvpn: C2: docker.io/dyonr/passthroughvpn rests on hub alone
+- docker.io/dyonr/qbittorrentvpn: C2: docker.io/dyonr/qbittorrentvpn rests on hub alone
+- docker.io/dyonr/sabnzbdvpn: C2: docker.io/dyonr/sabnzbdvpn rests on hub alone
+- docker.io/eafxx/rebuild-dndc: C2: docker.io/eafxx/rebuild-dndc rests on hub alone
+- docker.io/ecoblaster/medialens: C2: docker.io/ecoblaster/medialens rests on readme alone
+- docker.io/edddeduck/nvidia-status: C2: docker.io/edddeduck/nvidia-status rests on readme alone
+- docker.io/egg82/fetcharr: C2: docker.io/egg82/fetcharr rests on readme alone
+- docker.io/epoupon/lms: C2: docker.io/epoupon/lms rests on hub alone
+- docker.io/erikdevries/spotweb: C2: docker.io/erikdevries/spotweb rests on hub alone
+- docker.io/erikvl87/languagetool: C2: docker.io/erikvl87/languagetool rests on hub alone
+- docker.io/esanchezm/prometheus-qbittorrent-exporter: C2: docker.io/esanchezm/prometheus-qbittorrent-exporter rests on hub alone
+- docker.io/evoesports/trackmania: C2: docker.io/evoesports/trackmania rests on readme alone
+- docker.io/fallenbagel/jellyseerr: C2: docker.io/fallenbagel/jellyseerr rests on hub alone
+- docker.io/fanman03/camviewerplus: C2: docker.io/fanman03/camviewerplus rests on readme alone
+- docker.io/farmos/farmos: C2: docker.io/farmos/farmos rests on hub alone
+- docker.io/fbonalair/traefik-crowdsec-bouncer: C2: docker.io/fbonalair/traefik-crowdsec-bouncer rests on hub alone
+- docker.io/felddy/foundryvtt: C2: docker.io/felddy/foundryvtt rests on hub alone
+- docker.io/felddy/weewx: C2: docker.io/felddy/weewx rests on hub alone
+- docker.io/ferdium/ferdium-server: C2: docker.io/ferdium/ferdium-server rests on readme alone
+- docker.io/ferment9348/ark-survival-ascended: C2: docker.io/ferment9348/ark-survival-ascended rests on hub alone
+- docker.io/ferment9348/dragonwilds: C2: docker.io/ferment9348/ark-survival-ascended rests on hub alone
+- docker.io/ferment9348/terraria: C2: docker.io/ferment9348/ark-survival-ascended rests on hub alone
+- docker.io/ferment9348/v-rising: C2: docker.io/ferment9348/ark-survival-ascended rests on hub alone
+- docker.io/ferment9348/valheim: C2: docker.io/ferment9348/ark-survival-ascended rests on hub alone
+- docker.io/ferretproject/ferret: C2: docker.io/ferretproject/ferret rests on hub alone
+- docker.io/fgrfn/nmcontroller_web: C2: docker.io/fgrfn/nmcontroller_web rests on hub alone
+- docker.io/fireflyiii/core: C2: docker.io/fireflyiii/core rests on hub alone
+- docker.io/fireflyiii/data-importer: C2: docker.io/fireflyiii/data-importer rests on hub alone
+- docker.io/flaresolverr/flaresolverr: C2: docker.io/flaresolverr/flaresolverr rests on hub alone
+- docker.io/fletchto99/preview-maid: C2: docker.io/fletchto99/preview-maid rests on hub alone
+- docker.io/flexget/flexget: C2: docker.io/flexget/flexget rests on hub alone
+- docker.io/flomp/wanderer-db: C2: docker.io/flomp/wanderer-db rests on readme alone
+- docker.io/flomp/wanderer-web: C2: docker.io/flomp/wanderer-db rests on readme alone
+- docker.io/foorschtbar/hyperion: C2: docker.io/foorschtbar/hyperion rests on hub alone
+- docker.io/fredboat/lavalink: C2: docker.io/fredboat/lavalink rests on hub alone
+- docker.io/freeskier93/apcupsd2influx2.x: C2: docker.io/freeskier93/apcupsd2influx2.x rests on readme alone
+- docker.io/ganeshlab/opodsync: C2: docker.io/ganeshlab/opodsync rests on hub alone
+- docker.io/gangefors/airdcpp-webclient: C2: docker.io/gangefors/airdcpp-webclient rests on hub alone
+- docker.io/garethgeorge/backrest: C2: docker.io/garethgeorge/backrest rests on hub alone
+- docker.io/gbendy/sonarrtorss: C2: docker.io/gbendy/sonarrtorss rests on hub alone
+- docker.io/germannewsmaker/myspeed: C2: docker.io/germannewsmaker/myspeed rests on hub alone
+- docker.io/giiibates/fetchly: C3: no template matches at least 3 release tags and no floating tag of docker.io/giiibates/fetchly
+- docker.io/giiibates/fritzfluxdb: C2: docker.io/giiibates/fritzfluxdb rests on hub alone
+- docker.io/giiibates/rct-manager: C2: docker.io/giiibates/rct-manager rests on hub alone
+- docker.io/giiibates/unifi-os-server: C2: docker.io/giiibates/unifi-os-server rests on hub alone
+- docker.io/gjergjk/folder2photos: C2: docker.io/gjergjk/folder2photos rests on hub alone
+- docker.io/gjergjk/pia-iptv: C2: docker.io/gjergjk/pia-iptv rests on hub alone
+- docker.io/glanceapp/glance: C2: docker.io/glanceapp/glance rests on readme alone
+- docker.io/godver3/cli_debrid: C2: docker.io/godver3/cli_debrid rests on readme alone
+- docker.io/godver3/mediastorm: C2: docker.io/godver3/mediastorm rests on readme alone
+- docker.io/golift/notifiarr: C2: docker.io/golift/notifiarr rests on hub alone
+- docker.io/gollumwiki/gollum: C2: docker.io/gollumwiki/gollum rests on hub alone
+- docker.io/goodieshq/headscale-admin: C2: docker.io/goodieshq/headscale-admin rests on readme alone
+- docker.io/googleg/ipxbox: C2: docker.io/googleg/ipxbox rests on hub alone
+- docker.io/gotson/komga: C2: docker.io/gotson/komga rests on hub alone
+- docker.io/grafana/alloy: C2: docker.io/grafana/alloy rests on hub alone
+- docker.io/grafana/grafana-image-renderer: C2: docker.io/grafana/grafana-image-renderer rests on hub alone
+- docker.io/grafana/mcp-grafana: C2: docker.io/grafana/mcp-grafana rests on readme alone
+- docker.io/grafana/mimir: C2: docker.io/grafana/mimir rests on hub alone
+- docker.io/graphprotocol/graph-node: C2: docker.io/graphprotocol/graph-node rests on hub alone
+- docker.io/gtstef/filebrowser: C2: docker.io/gtstef/filebrowser rests on hub alone
+- docker.io/hacdias/webdav: C2: docker.io/hacdias/webdav rests on readme alone
+- docker.io/haggardj2/karaokedock: C2: docker.io/haggardj2/karaokedock rests on readme alone
+- docker.io/harness/harness: C2: docker.io/harness/harness rests on readme alone
+- docker.io/harshavardhanj/pwndrop: C2: docker.io/harshavardhanj/pwndrop rests on hub alone
+- docker.io/hascheksolutions/pictshare: C2: docker.io/hascheksolutions/pictshare rests on hub alone
+- docker.io/healthchecks/dashboard: C2: docker.io/healthchecks/dashboard rests on readme alone
+- docker.io/helfrichmichael/plant-stake-labeler: C2: docker.io/helfrichmichael/plant-stake-labeler rests on readme alone
+- docker.io/helliott20/prunerr: C2: docker.io/helliott20/prunerr rests on readme alone
+- docker.io/hellreaver/lemon-manuals: C2: docker.io/hellreaver/lemon-manuals rests on readme alone
+- docker.io/henrygd/beszel: C2: docker.io/henrygd/beszel rests on hub alone
+- docker.io/henrygd/beszel-agent: C2: docker.io/henrygd/beszel rests on hub alone
+- docker.io/heroeswearkapes/comfyui-intel-xpu: C3: no template matches at least 3 release tags and no floating tag of docker.io/heroeswearkapes/comfyui-intel-xpu
+- docker.io/heroeswearkapes/ffmpeg-ssh-worker: C3: no template matches at least 3 release tags and no floating tag of docker.io/heroeswearkapes/ffmpeg-ssh-worker
+- docker.io/heroeswearkapes/schedules-direct-xmltv: C3: no template matches at least 3 release tags and no floating tag of docker.io/heroeswearkapes/schedules-direct-xmltv
+- docker.io/heroeswearkapes/tts-workbench: C2: docker.io/heroeswearkapes/tts-workbench rests on hub alone
+- docker.io/heywoodlh/hydroxide: C2: docker.io/heywoodlh/hydroxide rests on hub alone
+- docker.io/hhftechnology/pangolin-cloudflare-tunnel: C2: docker.io/hhftechnology/pangolin-cloudflare-tunnel rests on readme alone
+- docker.io/homebridge/homebridge: C2: docker.io/homebridge/homebridge rests on hub alone
+- docker.io/hrfee/jfa-go: C2: docker.io/hrfee/jfa-go rests on hub alone
+- docker.io/icereed/paperless-gpt: C2: docker.io/icereed/paperless-gpt rests on readme alone
+- docker.io/ich777/foo: C2: docker.io/ich777/foo rests on readme alone
+- docker.io/ich777/openvpn-client: C2: docker.io/ich777/foo rests on readme alone
+- docker.io/ich777/proxy-server: C2: docker.io/ich777/proxy-server rests on readme alone
+- docker.io/iflip721/airconnect: C2: docker.io/iflip721/airconnect rests on readme alone
+- docker.io/infotrend/ctpo-cuda_tensorflow_pytorch_opencv: C2: docker.io/infotrend/ctpo-jupyter-cuda_tensorflow_pytorch_opencv-unraid rests on hub alone
+- docker.io/infotrend/ctpo-jupyter-cuda_tensorflow_pytorch_opencv: C2: docker.io/infotrend/ctpo-jupyter-cuda_tensorflow_pytorch_opencv-unraid rests on hub alone
+- docker.io/infotrend/ctpo-jupyter-cuda_tensorflow_pytorch_opencv-unraid: C2: docker.io/infotrend/ctpo-jupyter-cuda_tensorflow_pytorch_opencv-unraid rests on hub alone
+- docker.io/infotrend/ctpo-jupyter-tensorflow_pytorch_opencv-unraid: C2: docker.io/infotrend/ctpo-jupyter-cuda_tensorflow_pytorch_opencv-unraid rests on hub alone
+- docker.io/infotrend/ctpo-tensorflow_opencv: C2: docker.io/infotrend/ctpo-jupyter-cuda_tensorflow_pytorch_opencv-unraid rests on hub alone
+- docker.io/inrix/floatplane-downloader: C2: docker.io/inrix/floatplane-downloader rests on hub alone
+- docker.io/instrumentisto/coturn: C2: docker.io/instrumentisto/coturn rests on hub alone
+- docker.io/itzg/rcon: C2: docker.io/itzg/rcon rests on hub alone
+- docker.io/jackjoe/mailgun_logger: C2: docker.io/jackjoe/mailgun_logger rests on readme alone
+- docker.io/jamisonfitz/fliparr: C3: no template matches at least 3 release tags and no floating tag of docker.io/jamisonfitz/fliparr
+- docker.io/jamisonfitz/marquee: C2: docker.io/jamisonfitz/marquee rests on hub alone
+- docker.io/jasongdove/tvrename: C2: docker.io/jasongdove/tvrename rests on readme alone
+- docker.io/javinizer/javinizer: C2: docker.io/angelics/unraid-docker-javinizer rests on hub alone
+- docker.io/jaydenroberts/tally: C2: docker.io/jaydenroberts/tally rests on readme alone
+- docker.io/jbreed/nessus: C2: docker.io/jbreed/nessus rests on readme alone
+- docker.io/jbtronics/part-db1: C2: docker.io/jbtronics/part-db1 rests on hub alone
+- docker.io/jeffersonjhunt/shinysdr: C2: docker.io/jeffersonjhunt/shinysdr rests on hub alone
+- docker.io/jez500/bender: C2: docker.io/jez500/bender rests on readme alone
+- docker.io/jgeusebroek/spotweb: C2: docker.io/erikdevries/spotweb rests on hub alone
+- docker.io/jgraph/drawio: C2: docker.io/jgraph/drawio rests on hub alone
+- docker.io/jivandabeast/ticketarr: C2: docker.io/jivandabeast/ticketarr rests on readme alone
+- docker.io/jjdenhertog/spotify-to-plex: C2: docker.io/jjdenhertog/spotify-to-plex rests on readme alone
+- docker.io/jkcoxson/jitstreamer-eb: C2: docker.io/jkcoxson/jitstreamer-eb rests on readme alone
+- docker.io/jl94x4/collexionsui: C2: docker.io/jl94x4/collexionsui rests on readme alone
+- docker.io/jlesage/czkawka: C2: docker.io/jlesage/czkawka rests on hub alone
+- docker.io/jlesage/jmkvpropedit: C2: docker.io/jlesage/jmkvpropedit rests on hub alone
+- docker.io/jlesage/krokiet: C2: docker.io/jlesage/czkawka rests on hub alone
+- docker.io/jlesage/qdirstat: C2: docker.io/jlesage/qdirstat rests on hub alone
+- docker.io/jlesage/tsmuxer: C2: docker.io/jlesage/tsmuxer rests on hub alone
+- docker.io/jlesage/video-duplicate-finder: C2: docker.io/jlesage/video-duplicate-finder rests on hub alone
+- docker.io/johannesjo/super-productivity: C2: docker.io/johannesjo/super-productivity rests on hub alone
+- docker.io/johly/airtrail: C2: docker.io/johly/airtrail rests on hub alone
+- docker.io/jonaxio/ftb-skies-2-aero: C3: no template matches at least 3 release tags and no floating tag of docker.io/jonaxio/ftb-skies-2-aero
+- docker.io/josh5/lancache-bundle: C2: docker.io/josh5/lancache-bundle rests on readme alone
+- docker.io/joshgaby/tor-server: C2: docker.io/joshgaby/tor-server rests on readme alone
+- docker.io/joshsalvi/chirp: C2: docker.io/joshsalvi/chirp rests on hub alone
+- docker.io/joshsalvi/chirp-caddy: C2: docker.io/joshsalvi/chirp rests on hub alone
+- docker.io/joshsalvi/chirp-headscale: C2: docker.io/joshsalvi/chirp rests on hub alone
+- docker.io/jshridha/docker-nzbgetvpn: C2: docker.io/jshridha/docker-nzbgetvpn rests on readme alone
+- docker.io/jsonbateman/watchma: C3: no template matches at least 3 release tags and no floating tag of docker.io/jsonbateman/watchma
+- docker.io/jsonbored/dify-aio: C2: docker.io/jsonbored/dify-aio rests on hub alone
+- docker.io/jsonbored/infisical-aio: C2: docker.io/jsonbored/infisical-aio rests on hub alone
+- docker.io/jsonbored/khoj-aio: C2: docker.io/jsonbored/khoj-aio rests on hub alone
+- docker.io/jsonbored/mem0-aio: C2: docker.io/jsonbored/mem0-aio rests on hub alone
+- docker.io/jsonbored/nanoclaw-aio: C2: docker.io/jsonbored/nanoclaw-aio rests on hub alone
+- docker.io/jsonbored/penpot-aio: C2: docker.io/jsonbored/penpot-aio rests on hub alone
+- docker.io/jsonbored/signoz-agent: C2: docker.io/jsonbored/signoz-agent rests on hub alone
+- docker.io/jsonbored/simplelogin-aio: C2: docker.io/jsonbored/simplelogin-aio rests on hub alone
+- docker.io/judochinx/rangarr: C2: docker.io/judochinx/rangarr rests on readme alone
+- docker.io/junkerderprovinz/arrowloop: C2: docker.io/junkerderprovinz/arrowloop rests on readme alone
+- docker.io/junkerderprovinz/bombvault: C2: docker.io/junkerderprovinz/bombvault rests on hub alone
+- docker.io/junkerderprovinz/cadcraft: C2: docker.io/junkerderprovinz/cadcraft rests on hub alone
+- docker.io/junkerderprovinz/castleparcel: C2: docker.io/junkerderprovinz/castleparcel rests on readme alone
+- docker.io/junkerderprovinz/deckcraft: C2: docker.io/junkerderprovinz/deckcraft rests on hub alone
+- docker.io/junkerderprovinz/designcraft: C2: docker.io/junkerderprovinz/designcraft rests on hub alone
+- docker.io/junkerderprovinz/effectcraft: C2: docker.io/junkerderprovinz/effectcraft rests on hub alone
+- docker.io/junkerderprovinz/featherdrop: C2: docker.io/junkerderprovinz/castleparcel rests on readme alone
+- docker.io/junkerderprovinz/figcraft: C2: docker.io/junkerderprovinz/figcraft rests on hub alone
+- docker.io/junkerderprovinz/filmcraft: C2: docker.io/junkerderprovinz/filmcraft rests on hub alone
+- docker.io/junkerderprovinz/gridcraft: C2: docker.io/junkerderprovinz/gridcraft rests on hub alone
+- docker.io/junkerderprovinz/juicefs: C2: docker.io/junkerderprovinz/juicefs rests on hub alone
+- docker.io/junkerderprovinz/lightcraft: C2: docker.io/junkerderprovinz/lightcraft rests on hub alone
+- docker.io/junkerderprovinz/parleyport: C2: docker.io/junkerderprovinz/parleyport rests on readme alone
+- docker.io/junkerderprovinz/pdfcraft: C2: docker.io/junkerderprovinz/pdfcraft rests on hub alone
+- docker.io/junkerderprovinz/photocraft: C2: docker.io/junkerderprovinz/photocraft rests on hub alone
+- docker.io/junkerderprovinz/rustdesk: C2: docker.io/junkerderprovinz/rustdesk rests on hub alone
+- docker.io/junkerderprovinz/securo: C2: docker.io/junkerderprovinz/securo rests on hub alone
+- docker.io/junkerderprovinz/soundcraft: C2: docker.io/junkerderprovinz/soundcraft rests on hub alone
+- docker.io/junkerderprovinz/strawdroid: C2: docker.io/junkerderprovinz/strawdroid rests on readme alone
+- docker.io/junkerderprovinz/vectorcraft: C2: docker.io/junkerderprovinz/vectorcraft rests on hub alone
+- docker.io/junkerderprovinz/wordcraft: C2: docker.io/junkerderprovinz/wordcraft rests on hub alone
+- docker.io/justarchi/archisteamfarm: C2: docker.io/justarchi/archisteamfarm rests on hub alone
+- docker.io/jvmilazz0/kavita: C2: docker.io/jvmilazz0/kavita rests on hub alone
+- docker.io/jwillmer/nut-influxdbv2: C2: docker.io/jwillmer/nut-influxdbv2 rests on hub alone
+- docker.io/jxxghp/moviepilot-v3: C2: docker.io/jxxghp/moviepilot-v3 rests on hub alone
+- docker.io/kartoffelchipss/pelagica: C2: docker.io/kartoffelchipss/pelagica rests on hub alone
+- docker.io/keatontaylor/healthchecker-go: C2: docker.io/keatontaylor/healthchecker-go rests on readme alone
+- docker.io/kevincardwell/galley: C2: docker.io/kevincardwell/galley rests on hub alone
+- docker.io/keyfactor/signserver-ce: C2: docker.io/keyfactor/signserver-ce rests on hub alone
+- docker.io/kezzkezz/belabox: C2: docker.io/kezzkezz/belabox rests on hub alone
+- docker.io/khlieng/dispatch: C2: docker.io/khlieng/dispatch rests on hub alone
+- docker.io/kimai/kimai2: C2: docker.io/kimai/kimai2 rests on hub alone
+- docker.io/kirantheram/mangarr: C2: docker.io/kirantheram/mangarr rests on readme alone
+- docker.io/kirantheram/nextpanel: C2: docker.io/kirantheram/nextpanel rests on readme alone
+- docker.io/kirantheram/pullarr: C2: docker.io/kirantheram/pullarr rests on readme alone
+- docker.io/knex666/prpdf: C2: docker.io/knex666/prpdf rests on hub alone
+- docker.io/koenkk/zigbee2mqtt: C2: docker.io/koenkk/zigbee2mqtt rests on hub alone
+- docker.io/koillection/koillection: C2: docker.io/koillection/koillection rests on hub alone
+- docker.io/kometateam/quickstart: C2: docker.io/kometateam/quickstart rests on readme alone
+- docker.io/kopia/kopia: C2: docker.io/kopia/kopia rests on hub alone
+- docker.io/koreader/kosync: C2: docker.io/koreader/kosync rests on readme alone
+- docker.io/kosdk/mqtt-camera-ai-monitor: C3: no template matches at least 3 release tags and no floating tag of docker.io/kosdk/mqtt-camera-ai-monitor
+- docker.io/krillsson/sys-api: C2: docker.io/krillsson/sys-api rests on readme alone
+- docker.io/kroeberd/jdownloader-docker-monitor: C2: docker.io/kroeberd/jdownloader-docker-monitor rests on hub alone
+- docker.io/kryspal/kryspalmedia: C3: no template matches at least 3 release tags and no floating tag of docker.io/kryspal/kryspalmedia, docker.io/kryspal/kryspalmedia-postgres
+- docker.io/kryspal/kryspalmedia-postgres: C3: no template matches at least 3 release tags and no floating tag of docker.io/kryspal/kryspalmedia, docker.io/kryspal/kryspalmedia-postgres
+- docker.io/kutzilla/hetzner-ddns: C2: docker.io/kutzilla/hetzner-ddns rests on readme alone
+- docker.io/kuvaszmonitoring/kuvasz: C2: docker.io/kuvaszmonitoring/kuvasz rests on hub alone
+- docker.io/kyantech/palmr: C2: docker.io/kyantech/palmr rests on hub alone
+- docker.io/l4rm4nd/traefikshaper: C2: docker.io/l4rm4nd/traefikshaper rests on readme alone
+- docker.io/l4rm4nd/vouchervault: C2: docker.io/l4rm4nd/vouchervault rests on hub alone
+- docker.io/lastelement21/emby-sync: C2: docker.io/lastelement21/emby-sync rests on hub alone
+- docker.io/libretranslate/libretranslate: C2: docker.io/libretranslate/libretranslate rests on readme alone
+- docker.io/lightninglabs/lightning-terminal: C2: docker.io/lightninglabs/lightning-terminal rests on hub alone
+- docker.io/lingarr/lingarr: C2: docker.io/lingarr/lingarr rests on hub alone
+- docker.io/linkstackorg/linkstack: C2: docker.io/linkstackorg/linkstack rests on hub alone
+- docker.io/lissy93/networking-toolbox: C2: docker.io/lissy93/networking-toolbox rests on readme alone
+- docker.io/litongjava/whisper-cpp-server: C3: no template matches at least 3 release tags and no floating tag of docker.io/litongjava/whisper-cpp-server
+- docker.io/lmmendes/linkdinger: C2: docker.io/lmmendes/linkdinger rests on readme alone
+- docker.io/lobehub/lobe-chat: C2: docker.io/lobehub/lobe-chat rests on hub alone
+- docker.io/localstack/localstack: C2: docker.io/localstack/localstack rests on readme alone
+- docker.io/lomorage/amd64-lomorage: C2: docker.io/lomorage/arm64-lomorage rests on readme alone
+- docker.io/lomorage/arm64-lomorage: C2: docker.io/lomorage/arm64-lomorage rests on readme alone
+- docker.io/lomorage/raspberrypi-lomorage: C2: docker.io/lomorage/arm64-lomorage rests on readme alone
+- docker.io/louij2/ios-backup: C2: docker.io/louij2/ios-backup rests on readme alone
+- docker.io/lowess/chdman-walker: C2: docker.io/lowess/chdman-walker rests on readme alone
+- docker.io/lowess/yasha: C2: docker.io/lowess/yasha rests on hub alone
+- docker.io/lucifix/model-workshop-manager: C2: docker.io/lucifix/model-workshop-manager rests on hub alone
+- docker.io/lucifix/newsnest: C2: docker.io/lucifix/newsnest rests on hub alone
+- docker.io/luigi311/jellyplex-watched: C2: docker.io/luigi311/jellyplex-watched rests on readme alone
+- docker.io/lukechannings/moviematch: C2: docker.io/lukechannings/moviematch rests on hub alone
+- docker.io/lumbeecheraw75/tabvault: C3: no template matches at least 3 release tags and no floating tag of docker.io/lumbeecheraw75/tabvault
+- docker.io/lunik1/tt-rss: C2: docker.io/lunik1/tt-rss rests on readme alone
+- docker.io/lymphatus/caesium-app-web: C2: docker.io/lymphatus/caesium-app-web rests on readme alone
+- docker.io/m0ngr31/genmon: C2: docker.io/m0ngr31/genmon rests on hub alone
+- docker.io/madeofpendletonwool/cecil: C2: docker.io/madeofpendletonwool/cecil rests on readme alone
+- docker.io/maelgangloff/domain-watchdog: C2: docker.io/maelgangloff/domain-watchdog rests on readme alone
+- docker.io/mailserver/docker-mailserver: C2: docker.io/mailserver/docker-mailserver rests on hub alone
+- docker.io/mangolila/stockinfo: C3: no template matches at least 3 release tags and no floating tag of docker.io/mangolila/stockinfo
+- docker.io/mangolila/stockportfolio: C3: no template matches at least 3 release tags and no floating tag of docker.io/mangolila/stockportfolio
+- docker.io/maptiler/tileserver-gl: C2: docker.io/maptiler/tileserver-gl rests on readme alone
+- docker.io/markusmcnugen/sftp: C2: docker.io/markusmcnugen/sftp rests on readme alone
+- docker.io/mastiffmushroom/trackerautologin: C3: no template matches at least 3 release tags and no floating tag of docker.io/mastiffmushroom/trackerautologin
+- docker.io/masutayunikon/fankarr: C2: docker.io/masutayunikon/fankarr rests on readme alone
+- docker.io/mattermost/focalboard: C2: docker.io/mattermost/focalboard rests on hub alone
+- docker.io/mattermost/mattermost-push-proxy: C2: docker.io/mattermost/mattermost-push-proxy rests on hub alone
+- docker.io/mattwebbio/orbital-sync: C2: docker.io/mattwebbio/orbital-sync rests on hub alone
+- docker.io/mauricenino/dashdot: C2: docker.io/mauricenino/dashdot rests on hub alone
+- docker.io/maxmindinc/geoipupdate: C2: docker.io/maxmindinc/geoipupdate rests on hub alone
+- docker.io/mayswind/ezbookkeeping: C2: docker.io/mayswind/ezbookkeeping rests on hub alone
+- docker.io/mbirnbach/plex-overlay: C2: docker.io/mbirnbach/plex-overlay rests on hub alone
+- docker.io/meltyshev/planka: C2: docker.io/meltyshev/planka rests on hub alone
+- docker.io/meminiau/pisynchub-dev: C2: docker.io/meminiau/pisynchub-dev rests on readme alone
+- docker.io/memtly/memtly: C2: docker.io/memtly/memtly rests on hub alone
+- docker.io/metronade/ffmpeg-easy-unraid: C3: no template matches at least 3 release tags and no floating tag of docker.io/metronade/ffmpeg-easy-unraid
+- docker.io/mhdzumair/mediafusion: C2: docker.io/mhdzumair/mediafusion rests on hub alone
+- docker.io/mikeah/orcaslicer-novnc: C2: docker.io/mikeah/orcaslicer-novnc rests on hub alone
+- docker.io/mikeah/plant-stake-labeler: C2: docker.io/helfrichmichael/plant-stake-labeler rests on readme alone
+- docker.io/mikeah/superslicer-novnc: C2: docker.io/mikeah/superslicer-novnc rests on hub alone
+- docker.io/mingruixia/brainnet-viewer: C2: docker.io/mingruixia/brainnet-viewer rests on hub alone
+- docker.io/mintplexlabs/anythingllm: C2: docker.io/mintplexlabs/anythingllm rests on hub alone
+- docker.io/misterk-qc/plexharvester: C2: docker.io/misterk-qc/plexharvester rests on readme alone
+- docker.io/misterkqc/plexharvester: C2: docker.io/misterk-qc/plexharvester rests on readme alone
+- docker.io/modomofn/auth-portal: C2: docker.io/modomofn/auth-portal rests on hub alone
+- docker.io/modomofn/ldap-sync: C3: no template matches at least 3 release tags and no floating tag of docker.io/modomofn/ldap-sync
+- docker.io/monitorr/logarr-alpha: C2: docker.io/monitorr/logarr-alpha rests on hub alone
+- docker.io/monitorr/monitorr: C2: docker.io/monitorr/monitorr rests on hub alone
+- docker.io/mostafawahied/portracker: C2: docker.io/mostafawahied/portracker rests on readme alone
+- docker.io/mpdcampbell/traefik-geoip-filter: C2: docker.io/mpdcampbell/traefik-geoip-filter rests on hub alone
+- docker.io/mplogas/laac: C3: no template matches at least 3 release tags and no floating tag of docker.io/mplogas/laac
+- docker.io/mrtbot/mesh-api: C2: docker.io/mrtbot/mesh-api rests on readme alone
+- docker.io/mscrnt/patreon-credits: C2: docker.io/mscrnt/patreon-credits rests on readme alone
+- docker.io/msjpq/firefox-vnc: C2: docker.io/msjpq/firefox-vnc rests on hub alone
+- docker.io/msroest/sabnzbd_exporter: C2: docker.io/msroest/sabnzbd_exporter rests on hub alone
+- docker.io/muerorg/muer: C2: docker.io/muerorg/muer rests on readme alone
+- docker.io/mumblevoip/mumble-server: C2: docker.io/mumblevoip/mumble-server rests on hub alone
+- docker.io/mxpv/podsync: C2: docker.io/mxpv/podsync rests on readme alone
+- docker.io/myoung34/github-runner: C2: docker.io/myoung34/github-runner rests on hub alone
+- docker.io/nandyalu/trailarr: C2: docker.io/nandyalu/trailarr rests on hub alone
+- docker.io/need4swede/sidequests: C2: docker.io/need4swede/sidequests rests on readme alone
+- docker.io/netpersona/popcorn: C2: docker.io/netpersona/popcorn rests on readme alone
+- docker.io/netplexflix/mtdp: C2: docker.io/netplexflix/mtdp rests on readme alone
+- docker.io/netplexflix/tssk: C2: docker.io/netplexflix/tssk rests on readme alone
+- docker.io/netplexflix/uldas: C2: docker.io/netplexflix/uldas rests on readme alone
+- docker.io/netplexflix/umtk: C2: docker.io/netplexflix/umtk rests on readme alone
+- docker.io/netplexflix/wtwp: C2: docker.io/netplexflix/wtwp rests on readme alone
+- docker.io/newterry/get-icon: C3: no template matches at least 3 release tags and no floating tag of docker.io/newterry/get-icon
+- docker.io/nextcloud/all-in-one: C2: docker.io/nextcloud/all-in-one rests on hub alone
+- docker.io/nheinemans/storman: C2: docker.io/nheinemans/storman rests on readme alone
+- docker.io/nikorag/iplayarr: C2: docker.io/nikorag/iplayarr rests on readme alone
+- docker.io/nilsleo/kcc-cloud: C2: docker.io/nilsleo/kcc-cloud rests on readme alone
+- docker.io/ninthwalker/nowshowing: C2: docker.io/ninthwalker/nowshowing rests on hub alone
+- docker.io/nitnelave/lldap: C2: docker.io/nitnelave/lldap rests on hub alone
+- docker.io/novakeith/nextsound: C3: no template matches at least 3 release tags and no floating tag of docker.io/novakeith/nextsound
+- docker.io/nullata/llamaman: C2: docker.io/nullata/llamaman rests on hub alone
+- docker.io/nullata/nullinvoice: C2: docker.io/nullata/nullinvoice rests on hub alone
+- docker.io/nxzai/explorer: C2: docker.io/nxzai/explorer rests on readme alone
+- docker.io/nylonee/watchlistarr: C2: docker.io/nylonee/watchlistarr rests on readme alone
+- docker.io/obviousviking/artillery: C2: docker.io/obviousviking/artillery rests on readme alone
+- docker.io/octoprint/octoprint: C2: docker.io/octoprint/octoprint rests on hub alone
+- docker.io/ofark/compressarr: C2: docker.io/ofark/compressarr rests on hub alone
+- docker.io/ohmzii/immaculaterr: C2: docker.io/ohmzii/immaculaterr rests on hub alone
+- docker.io/oleduc/docker-obsidian-livesync-couchdb: C2: docker.io/oleduc/docker-obsidian-livesync-couchdb rests on readme alone
+- docker.io/olilanz/ai-yue-gp: C2: docker.io/olilanz/ai-yue-gp rests on hub alone
+- docker.io/ollama/ollama: C2: docker.io/ollama/ollama rests on hub alone
+- docker.io/omnirise/linkbreeze: C2: docker.io/omnirise/linkbreeze rests on readme alone
+- docker.io/openhop/openhop-repeater: C2: docker.io/openhop/openhop-repeater rests on hub alone
+- docker.io/openlistteam/openlist: C2: docker.io/openlistteam/openlist rests on readme alone
+- docker.io/organizr/organizr: C2: docker.io/organizr/organizr rests on hub alone
+- docker.io/otherguy/dropbox: C2: docker.io/otherguy/dropbox rests on hub alone
+- docker.io/overboardkiller/media-watchdog: C2: docker.io/overboardkiller/media-watchdog rests on readme alone
+- docker.io/overv/openstreetmap-tile-server: C2: docker.io/overv/openstreetmap-tile-server rests on readme alone
+- docker.io/owncloud/server: C2: docker.io/owncloud/server rests on hub alone
+- docker.io/oxtyped/gpodder2go: C2: docker.io/oxtyped/gpodder2go rests on readme alone
+- docker.io/ozangulle/plauna: C2: docker.io/ozangulle/plauna rests on hub alone
+- docker.io/pacnpal/compressatorium: C2: docker.io/pacnpal/compressatorium rests on readme alone
+- docker.io/pacnpal/simpleguardhome: C3: no template matches at least 3 release tags and no floating tag of docker.io/pacnpal/simpleguardhome
+- docker.io/pandacreatornl/torrent-maker-pro: C2: docker.io/pandacreatornl/torrent-maker-pro rests on readme alone
+- docker.io/pantanet96/accessflow: C2: docker.io/pantanet96/accessflow rests on hub alone
+- docker.io/particular/servicecontrol: C2: docker.io/particular/servicecontrol rests on hub alone
+- docker.io/particular/servicecontrol-audit: C2: docker.io/particular/servicecontrol rests on hub alone
+- docker.io/particular/servicecontrol-monitoring: C2: docker.io/particular/servicecontrol rests on hub alone
+- docker.io/particular/servicepulse: C2: docker.io/particular/servicepulse rests on hub alone
+- docker.io/patrickstigler/docker-fetchmail: C2: docker.io/patrickstigler/docker-fetchmail rests on readme alone
+- docker.io/patrickstigler/youtube-transcript-to-article: C2: docker.io/patrickstigler/youtube-transcript-to-article rests on readme alone
+- docker.io/pcjones/umlautadaptarr: C2: docker.io/pcjones/umlautadaptarr rests on hub alone
+- docker.io/pergolafabio/hikvision-doorbell: C2: docker.io/pergolafabio/hikvision-doorbell rests on hub alone
+- docker.io/pglombardo/pwpush: C2: docker.io/pglombardo/pwpush-ephemeral rests on hub alone
+- docker.io/pglombardo/pwpush-ephemeral: C2: docker.io/pglombardo/pwpush-ephemeral rests on hub alone
+- docker.io/pglombardo/pwpush-postgres: C2: docker.io/pglombardo/pwpush-ephemeral rests on hub alone
+- docker.io/photoprism/dummy-oidc: C2: docker.io/photoprism/dummy-oidc rests on readme alone
+- docker.io/photoprism/dummy-webdav: C2: docker.io/photoprism/dummy-oidc rests on readme alone
+- docker.io/photoprism/photoprism: C2: docker.io/photoprism/dummy-oidc rests on readme alone
+- docker.io/photoprism/vision: C2: docker.io/photoprism/dummy-oidc rests on readme alone
+- docker.io/photoview/api: C2: docker.io/photoview/api rests on readme alone
+- docker.io/photoview/ui: C2: docker.io/photoview/api rests on readme alone
+- docker.io/pierredurrr/plex-randomizer: C2: docker.io/pierredurrr/plex-randomizer rests on readme alone
+- docker.io/pomerium/pomerium: C2: docker.io/pomerium/pomerium rests on hub alone
+- docker.io/ponylucky/tenda-controller: C2: docker.io/ponylucky/tenda-controller rests on hub alone
+- docker.io/portabase/portabase: C2: docker.io/portabase/portabase rests on hub alone
+- docker.io/privatebin/nginx-fpm-alpine: C2: docker.io/privatebin/nginx-fpm-alpine rests on hub alone
+- docker.io/prologic/golinks: C2: docker.io/prologic/golinks rests on hub alone
+- docker.io/prom/alertmanager: C2: docker.io/prom/alertmanager rests on hub alone
+- docker.io/prosthetichead/printbed: C3: no template matches at least 3 release tags and no floating tag of docker.io/prosthetichead/printbed
+- docker.io/qmcgaw/ddns-updater: C2: docker.io/qmcgaw/ddns-updater rests on hub alone
+- docker.io/querylab/lazywarden: C2: docker.io/querylab/lazywarden rests on readme alone
+- docker.io/radhifadlillah/shiori: C2: docker.io/radhifadlillah/shiori rests on hub alone
+- docker.io/railline/pigallery2plus: C2: docker.io/railline/pigallery2plus rests on readme alone
+- docker.io/rand256/valetudo-mapper: C2: docker.io/rand256/valetudo-mapper rests on hub alone
+- docker.io/rapidmark/nntmux: C2: docker.io/rapidmark/nntmux rests on hub alone
+- docker.io/reaparr/reaparr: C2: docker.io/reaparr/reaparr rests on hub alone
+- docker.io/redvex2460/autofillerweb: C2: docker.io/redvex2460/autofillerweb rests on hub alone
+- docker.io/redzguilt/unifi-webhook-to-discord: C3: no template matches at least 3 release tags and no floating tag of docker.io/redzguilt/unifi-webhook-to-discord
+- docker.io/remyfv/woli-webgui: C2: docker.io/remyfv/woli-webgui rests on hub alone
+- docker.io/requarks/wiki: C2: docker.io/requarks/wiki rests on hub alone
+- docker.io/rfsbraz/deleterr: C2: docker.io/rfsbraz/deleterr rests on hub alone
+- docker.io/rhasspy/wyoming-openwakeword: C2: docker.io/rhasspy/wyoming-openwakeword rests on readme alone
+- docker.io/rhasspy/wyoming-piper: C2: docker.io/rhasspy/wyoming-piper rests on readme alone
+- docker.io/richy1989/keepit: C2: docker.io/richy1989/keepit rests on readme alone
+- docker.io/rleeon/hoard: C2: docker.io/rleeon/hoard rests on hub alone
+- docker.io/roastslav/quickdrop: C2: docker.io/roastslav/quickdrop rests on readme alone
+- docker.io/rogerfar/rdtclient: C2: docker.io/rogerfar/rdtclient rests on hub alone
+- docker.io/rommapp/romm: C2: docker.io/rommapp/romm rests on hub alone
+- docker.io/ronnieroller/dahuavto2mqtt: C2: docker.io/ronnieroller/dahuavto2mqtt rests on hub alone
+- docker.io/rootgg/plik: C2: docker.io/rootgg/plik rests on readme alone
+- docker.io/rotki/rotki: C2: docker.io/rotki/rotki rests on hub alone
+- docker.io/roxedus/ts-dnsserver: C2: docker.io/roxedus/ts-dnsserver rests on hub alone
+- docker.io/rtuszik/photon-docker: C2: docker.io/rtuszik/photon-docker rests on readme alone
+- docker.io/runitor/runitor: C2: docker.io/runitor/runitor rests on hub alone
+- docker.io/rustdesk/rustdesk-server: C2: docker.io/rustdesk/rustdesk-server rests on readme alone
+- docker.io/rustmailer/bichon: C2: docker.io/rustmailer/bichon rests on readme alone
+- docker.io/s1t5/mailarchiver: C2: docker.io/s1t5/mailarchiver rests on readme alone
+- docker.io/samdbmg/dhcp-netboot.xyz: C2: docker.io/samdbmg/dhcp-netboot.xyz rests on readme alone
+- docker.io/santiagosayshey/profilarr: C2: docker.io/santiagosayshey/profilarr rests on hub alone
+- docker.io/savewithstash/stash: C2: docker.io/savewithstash/stash rests on readme alone
+- docker.io/sclaflin/open-alpr-http-wrapper: C2: docker.io/sclaflin/open-alpr-http-wrapper rests on readme alone
+- docker.io/sclaflin/plate-minder: C2: docker.io/sclaflin/open-alpr-http-wrapper rests on readme alone
+- docker.io/sclaflin/plate-minder-web: C2: docker.io/sclaflin/open-alpr-http-wrapper rests on readme alone
+- docker.io/sctx/overseerr: C2: docker.io/sctx/overseerr rests on hub alone
+- docker.io/sdblepas/cineplete: C2: docker.io/sdblepas/cineplete rests on readme alone
+- docker.io/seanap/auto-m4b: C2: docker.io/seanap/auto-m4b rests on readme alone
+- docker.io/searx/searx: C2: docker.io/searx/searx rests on hub alone
+- docker.io/semaphoreui/semaphore: C2: docker.io/semaphoreui/semaphore rests on readme alone
+- docker.io/shaarli/shaarli: C2: docker.io/shaarli/shaarli rests on hub alone
+- docker.io/sharkord/sharkord: C2: docker.io/sharkord/sharkord rests on readme alone
+- docker.io/shish2k/shimmie2: C2: docker.io/shish2k/shimmie2 rests on hub alone
+- docker.io/shoginn/dump1090: C2: docker.io/shoginn/dump1090 rests on readme alone
+- docker.io/shoginn/flightradar24: C2: docker.io/shoginn/flightradar24 rests on readme alone
+- docker.io/signtools/signtools: C2: docker.io/signtools/signtools rests on hub alone
+- docker.io/simojenki/bonob: C2: docker.io/simojenki/bonob rests on readme alone
+- docker.io/simonjenny/fastcom-mqtt: C2: docker.io/simonjenny/fastcom-mqtt rests on readme alone
+- docker.io/simonjenny/fastcom-mysql: C2: docker.io/simonjenny/fastcom-mysql rests on readme alone
+- docker.io/sintan1729/chhoto-url: C2: docker.io/sintan1729/chhoto-url rests on hub alone
+- docker.io/sipeed/picoclaw: C2: docker.io/sipeed/picoclaw rests on hub alone
+- docker.io/sismics/docs: C2: docker.io/sismics/docs rests on readme alone
+- docker.io/sissbruecker/linkding: C2: docker.io/sissbruecker/linkding rests on readme alone
+- docker.io/skanehira/docker.vim: C2: docker.io/skanehira/docker.vim rests on readme alone
+- docker.io/slimjimserver/melodarr: C2: docker.io/slimjimserver/melodarr rests on readme alone
+- docker.io/smallstep/step-ca: C2: docker.io/smallstep/step-ca rests on hub alone
+- docker.io/smeagolworms4/mqtt-explorer: C2: docker.io/smeagolworms4/mqtt-explorer rests on hub alone
+- docker.io/smidley/dovi-convert: C2: docker.io/smidley/dovi-convert rests on readme alone
+- docker.io/smp46/pingvin-share-x: C2: docker.io/smp46/pingvin-share-x rests on readme alone
+- docker.io/soulteary/cronicle: C2: docker.io/soulteary/cronicle rests on hub alone
+- docker.io/spaceinvaderone/a-eye: C2: docker.io/spaceinvaderone/a-eye rests on readme alone
+- docker.io/spaceinvaderone/beep_music_converter: C2: docker.io/spaceinvaderone/beep_music_converter rests on hub alone
+- docker.io/spaceinvaderone/jellemplex-dedupe: C2: docker.io/spaceinvaderone/jellemplex-dedupe rests on readme alone
+- docker.io/spaceinvaderone/ollama-intel-gpu: C2: docker.io/spaceinvaderone/ollama-intel-gpu rests on readme alone
+- docker.io/spotdl/spotify-downloader: C2: docker.io/spotdl/spotify-downloader rests on readme alone
+- docker.io/spx01/blocky: C2: docker.io/spx01/blocky rests on hub alone
+- docker.io/stalwartlabs/stalwart: C2: docker.io/stalwartlabs/stalwart rests on hub alone
+- docker.io/stashapp/stash: C2: docker.io/stashapp/stash rests on hub alone
+- docker.io/stevenlafl/meshtile: C2: docker.io/stevenlafl/meshtile rests on readme alone
+- docker.io/stomko11/roadlog: C2: docker.io/stomko11/roadlog rests on readme alone
+- docker.io/stonith404/pingvin-share: C2: docker.io/stonith404/pingvin-share rests on readme alone
+- docker.io/swiss01/eas3-mqtt: C2: docker.io/swiss01/eas3-mqtt rests on hub alone
+- docker.io/syncarr/syncarr: C2: docker.io/syncarr/syncarr rests on readme alone
+- docker.io/synzen/monitorss: C2: docker.io/synzen/monitorss rests on hub alone
+- docker.io/tailscale/tailscale: C2: docker.io/tailscale/tailscale rests on hub alone
+- docker.io/tajniak81/gsmnode-aio: C2: docker.io/tajniak81/gsmnode-aio rests on hub alone
+- docker.io/tamland/airsonic-refix: C2: docker.io/tamland/airsonic-refix rests on readme alone
+- docker.io/tannermiddleton/recommendarr: C2: docker.io/tannermiddleton/recommendarr rests on hub alone
+- docker.io/tareku99/amp-v3-dockerized: C2: docker.io/tareku99/amp-v3-dockerized rests on hub alone
+- docker.io/technitium/dns-server: C2: docker.io/roxedus/ts-dnsserver rests on hub alone
+- docker.io/tensorchord/vchord-postgres: C2: docker.io/tensorchord/vchord-postgres rests on hub alone
+- docker.io/testdasi/gluster-server: C2: docker.io/testdasi/gluster-server rests on readme alone
+- docker.io/testdasi/grafana-unraid-stack: C2: docker.io/testdasi/grafana-unraid-stack rests on readme alone
+- docker.io/testdasi/openvpn-client-aio: C2: docker.io/testdasi/openvpn-client-aio rests on readme alone
+- docker.io/testdasi/openvpn-hydesa: C2: docker.io/testdasi/openvpn-hydesa rests on readme alone
+- docker.io/testdasi/openvpn-hyrosa: C2: docker.io/testdasi/openvpn-hyrosa rests on readme alone
+- docker.io/thedaviddelta/lingva-translate: C2: docker.io/thedaviddelta/lingva-translate rests on readme alone
+- docker.io/theoriginalbrian/phvalheim-server: C2: docker.io/theoriginalbrian/phvalheim-server rests on hub alone
+- docker.io/therealshadoh/babel: C2: docker.io/therealshadoh/babel rests on readme alone
+- docker.io/theshulk/teslacam-browser: C2: docker.io/theshulk/teslacam-browser rests on hub alone
+- docker.io/thetvliam/remuxarr: C2: docker.io/thetvliam/remuxarr rests on readme alone
+- docker.io/thewicklowwolf/bookbounty: C2: docker.io/thewicklowwolf/bookbounty rests on readme alone
+- docker.io/thewicklowwolf/channeltube: C2: docker.io/thewicklowwolf/channeltube rests on readme alone
+- docker.io/thewicklowwolf/lidatube: C2: docker.io/thewicklowwolf/lidatube rests on readme alone
+- docker.io/thinkst/opencanary: C2: docker.io/thinkst/opencanary rests on readme alone
+- docker.io/thomst08/requestrr: C2: docker.io/thomst08/requestrr rests on readme alone
+- docker.io/thomx/fr24feed-piaware: C2: docker.io/thomx/fr24feed-piaware rests on readme alone
+- docker.io/thraxis/lazylibrarian-calibre: C2: docker.io/thraxis/lazylibrarian-calibre rests on hub alone
+- docker.io/thrnz/docker-wireguard-pia: C2: docker.io/thrnz/docker-wireguard-pia rests on readme alone
+- docker.io/tidyquest/tidyquest: C2: docker.io/tidyquest/tidyquest rests on readme alone
+- docker.io/timmyamant/marquee: C2: docker.io/timmyamant/marquee rests on readme alone
+- docker.io/timoschlueter/nightscout-librelink-up: C2: docker.io/timoschlueter/nightscout-librelink-up rests on readme alone
+- docker.io/tombursch/kitchenowl-backend: C2: docker.io/tombursch/kitchenowl-backend rests on readme alone
+- docker.io/tombursch/kitchenowl-web: C2: docker.io/tombursch/kitchenowl-backend rests on readme alone
+- docker.io/tophat17/jelly-request: C2: docker.io/tophat17/jelly-request rests on readme alone
+- docker.io/tophat17/mediacleanuparr: C2: docker.io/tophat17/mediacleanuparr rests on readme alone
+- docker.io/towfiqi/serpbear: C2: docker.io/towfiqi/serpbear rests on readme alone
+- docker.io/tranceer/namecheap-ddns-updater: C2: docker.io/tranceer/namecheap-ddns-updater rests on readme alone
+- docker.io/trentferguson/homescreen-hero: C2: docker.io/trentferguson/homescreen-hero rests on readme alone
+- docker.io/treyyoder/quakejs: C2: docker.io/treyyoder/quakejs rests on readme alone
+- docker.io/triliumnext/trilium: C2: docker.io/triliumnext/trilium rests on readme alone
+- docker.io/tsaridas/stremio-docker: C2: docker.io/tsaridas/stremio-docker rests on readme alone
+- docker.io/twiddly/happypandax: C2: docker.io/twiddly/happypandax rests on hub alone
+- docker.io/varthe/redirecterr: C2: docker.io/varthe/redirecterr rests on readme alone
+- docker.io/vdsm/virtual-dsm: C2: docker.io/vdsm/virtual-dsm rests on readme alone
+- docker.io/vergoh/vnstat: C2: docker.io/vergoh/vnstat rests on readme alone
+- docker.io/vexdev/amarr: C2: docker.io/vexdev/amarr rests on readme alone
+- docker.io/vibralabs/atrium: C2: docker.io/vibralabs/atrium rests on readme alone
+- docker.io/viyh/whisper: C2: docker.io/viyh/whisper rests on readme alone
+- docker.io/voc0der/ytdl-material: C2: docker.io/voc0der/ytdl-material rests on readme alone
+- docker.io/voska/hass-mcp: C2: docker.io/voska/hass-mcp rests on readme alone
+- docker.io/vstavrinov/acestream-engine: C2: docker.io/vstavrinov/acestream-engine rests on readme alone
+- docker.io/waazaafr/rdiff-backup-rdiffweb: C2: docker.io/waazaafr/rdiff-backup-rdiffweb rests on readme alone
+- docker.io/waterboy1602/addarr: C2: docker.io/waterboy1602/addarr rests on readme alone
+- docker.io/wbynum/qemubackup: C2: docker.io/wbynum/qemubackup rests on readme alone
+- docker.io/wealthfolio/wealthfolio: C2: docker.io/wealthfolio/wealthfolio rests on readme alone
+- docker.io/webstas/supersync: C2: docker.io/webstas/supersync rests on hub alone
+- docker.io/whatname/docker-s3sync: C2: docker.io/whatname/docker-s3sync rests on readme alone
+- docker.io/willfarrell/autoheal: C2: docker.io/willfarrell/autoheal rests on readme alone
+- docker.io/wingysam/christmas-community: C2: docker.io/wingysam/christmas-community rests on readme alone
+- docker.io/wollomatic/socket-proxy: C2: docker.io/wollomatic/socket-proxy rests on readme alone
+- docker.io/wupasscat/continentbot: C2: docker.io/wupasscat/continentbot rests on readme alone
+- docker.io/xacnio/tweetcapture: C2: docker.io/xacnio/tweetcapture rests on readme alone
+- docker.io/xanderstrike/goplaxt: C2: docker.io/xanderstrike/goplaxt rests on readme alone
+- docker.io/xavierniu/cloudreve: C2: docker.io/xavierniu/cloudreve rests on hub alone
+- docker.io/xbgmsharp/docker-trakt-tools: C2: docker.io/xbgmsharp/docker-trakt-tools rests on readme alone
+- docker.io/xboarder56/velociraptor: C2: docker.io/xboarder56/velociraptor rests on readme alone
+- docker.io/xexsolutions/unraid-stats: C2: docker.io/xexsolutions/unraid-stats rests on readme alone
+- docker.io/xhofe/alist: C2: docker.io/xhofe/alist rests on readme alone
+- docker.io/yooooomi/your_spotify_client: C2: docker.io/yooooomi/your_spotify_client rests on readme alone
+- docker.io/yooooomi/your_spotify_server: C2: docker.io/yooooomi/your_spotify_client rests on readme alone
+- docker.io/yusseiin/unmove: C2: docker.io/yusseiin/unmove rests on readme alone
+- docker.io/yusseiin/weighttracker: C2: docker.io/yusseiin/weighttracker rests on readme alone
+- docker.io/zackwag/caddy-ui-backend: C2: docker.io/zackwag/caddy-ui-backend rests on readme alone
+- docker.io/zackwag/caddy-ui-frontend: C2: docker.io/zackwag/caddy-ui-backend rests on readme alone
+- docker.io/zcaddick/music-manager-for-plex: C3: no template matches at least 3 release tags and no floating tag of docker.io/zcaddick/music-manager-for-plex
+- docker.io/zedeus/nitter: C2: docker.io/zedeus/nitter rests on readme alone
+- docker.io/zeetlex/knitting-library: C2: docker.io/zeetlex/knitting-library rests on readme alone
+- docker.io/zelon88/hrconvert2: C2: docker.io/zelon88/hrconvert2 rests on readme alone
+- docker.io/zggis/dobby: C2: docker.io/zggis/dobby rests on readme alone
+- docker.io/zggis/howler: C2: docker.io/zggis/howler rests on readme alone
+- docker.io/zggis/plex-tvtime: C2: docker.io/zggis/plex-tvtime rests on readme alone
+- docker.io/zkkzkk32312/crawl4ai-proxy: C2: docker.io/zkkzkk32312/crawl4ai-proxy rests on readme alone
+- docker.io/zoeyvid/npmplus: C2: docker.io/zoeyvid/npmplus rests on readme alone
+- docker.io/zxdong262/electerm-web: C2: docker.io/zxdong262/electerm-web rests on hub alone
+- docker.litellm.ai/berriai/litellm: C2: docker.litellm.ai/berriai/litellm rests on readme alone
+- docker.stirlingpdf.com/stirlingtools/stirling-pdf: C1: source github.com/stirling-tools/stirling-pdf is claimed by reviewed entry stirling-pdf
+- docker.umami.is/umami-software/umami: C2: docker.umami.is/umami-software/umami rests on readme alone
+- ghcr.io/007darkmatter5/meshvault: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/007darkmatter5/meshvault
+- ghcr.io/007darkmatter5/pantrix: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/007darkmatter5/pantrix, ghcr.io/007darkmatter5/pantrix-browser
+- ghcr.io/007darkmatter5/pantrix-browser: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/007darkmatter5/pantrix, ghcr.io/007darkmatter5/pantrix-browser
+- ghcr.io/0x90d/vdf-web: C2: docker.io/jlesage/video-duplicate-finder rests on hub alone
+- ghcr.io/11notes/adguard: C2: ghcr.io/11notes/adguard rests on readme alone
+- ghcr.io/2franix/cron-docker: C4: newest tag 3.7.1 is not on the line of the newest release 3.6.1
+- ghcr.io/abusoww/tuxmate: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/abusoww/tuxmate
+- ghcr.io/ace-step/ace-step-1.5: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/ace-step/ace-step-1.5
+- ghcr.io/ad-on-is/odin: C2: ghcr.io/ad-on-is/odin rests on readme alone
+- ghcr.io/aerya/gluetun-companion: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/aerya/gluetun-companion
+- ghcr.io/akarys42/cloudflare-ddns-docker: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/akarys42/cloudflare-ddns-docker
+- ghcr.io/aldendana/ha-baby-monitor: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/aldendana/ha-baby-monitor
+- ghcr.io/aleksilassila/reiverr: C4: newest tag 2.2.1 is not on the line of the newest release 1.1.1
+- ghcr.io/alexanderschubert/rackview: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/alexanderschubert/rackview
+- ghcr.io/alexindigo/globnotes: C2: docker.io/alexindigo/globnotes rests on readme alone
+- ghcr.io/alexindigo/localsend-nas: C2: docker.io/alexindigo/localsend-nas rests on readme alone
+- ghcr.io/alexjsp/slipmat: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/alexjsp/slipmat
+- ghcr.io/alien4u/travelarr: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/alien4u/travelarr
+- ghcr.io/almulder/sonos_panel: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/almulder/sonos_panel
+- ghcr.io/analogj/scrutiny: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/analogj/scrutiny
+- ghcr.io/andrebrait/protonvpn-cli-docker: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/andrebrait/protonvpn-cli-docker
+- ghcr.io/appwrite/autogravity: C2: docker.io/appwrite/browser rests on readme alone
+- ghcr.io/appwrite/exiftool: C2: docker.io/appwrite/browser rests on readme alone
+- ghcr.io/appwrite/hansi: C2: docker.io/appwrite/browser rests on readme alone
+- ghcr.io/articwone/mario-leaderboard: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/articwone/mario-leaderboard
+- ghcr.io/asalimonov/authelia-admin: C4: newest tag 0.0.3 is not on the line of the newest release 1.1.2
+- ghcr.io/asherflynt/media-curator: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/asherflynt/media-curator
+- ghcr.io/au12/shelflife: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/au12/shelflife
+- ghcr.io/avpnusr/torprivoxy: C2: docker.io/avpnusr/torprivoxy rests on hub alone
+- ghcr.io/bambanah/deemix: C3: no template matches at least 3 release tags and no floating tag of ghcr.io/bambanah/deemix
+- ghcr.io/breadlysm/speedflux: C2: ghcr.io/breadlysm/speedflux rests on readme alone
+- ghcr.io/c4illin/convertx: C2: docker.io/c4illin/convertx rests on hub alone
+- ghcr.io/cookiesncache/openclaw: C2: ghcr.io/cookiesncache/openclaw rests on readme alone
+- ghcr.io/cplieger/docker-fclones-scheduler: C2: docker.io/cplieger/docker-fclones-scheduler rests on hub alone
+- ghcr.io/cplieger/plex-exporter: C2: docker.io/cplieger/plex-exporter rests on hub alone
+- ghcr.io/cplieger/plex-language-sync: C2: docker.io/cplieger/plex-language-sync rests on hub alone
+- ghcr.io/cplieger/seadex-scout: C2: docker.io/cplieger/seadex-scout rests on hub alone
+- ghcr.io/debridmediamanager/zurg: C2: ghcr.io/debridmediamanager/zurg rests on readme alone
+- ghcr.io/debridmediamanager/zurg-public: C2: ghcr.io/debridmediamanager/zurg rests on readme alone
+- ghcr.io/dictionarry-hub/profilarr: C2: docker.io/santiagosayshey/profilarr rests on hub alone
+- ghcr.io/dictionarry-hub/profilarr-parser: C2: docker.io/santiagosayshey/profilarr rests on hub alone
+- ghcr.io/docker-mailserver/docker-mailserver: C2: docker.io/mailserver/docker-mailserver rests on hub alone
+- ghcr.io/esanchezm/prometheus-qbittorrent-exporter: C2: docker.io/esanchezm/prometheus-qbittorrent-exporter rests on hub alone
+- ghcr.io/felddy/foundryvtt: C2: docker.io/felddy/foundryvtt rests on hub alone
+- ghcr.io/felddy/weewx: C2: docker.io/felddy/weewx rests on hub alone
+- ghcr.io/flaresolverr/flaresolverr: C2: docker.io/flaresolverr/flaresolverr rests on hub alone
+- ghcr.io/fletchto99/preview-maid: C2: docker.io/fletchto99/preview-maid rests on hub alone
+- ghcr.io/foxxmd/tautuilli-notification-digest: C2: ghcr.io/foxxmd/tautuilli-notification-digest rests on readme alone
+- ghcr.io/freeskier93/apcupsd2influx2.x: C2: docker.io/freeskier93/apcupsd2influx2.x rests on readme alone
+- ghcr.io/garethgeorge/backrest: C2: docker.io/garethgeorge/backrest rests on hub alone
+- ghcr.io/gcarstoiu/glance-editor: C2: ghcr.io/gcarstoiu/glance-editor rests on readme alone
+- ghcr.io/gradium-ai/ptts-openai-server: C2: ghcr.io/gradium-ai/ptts-openai-server rests on readme alone
+- ghcr.io/hacdias/webdav: C2: docker.io/hacdias/webdav rests on readme alone
+- ghcr.io/hargata/lubelogger: C2: ghcr.io/hargata/lubelogger rests on readme alone
+- ghcr.io/hascheksolutions/pictshare: C2: docker.io/hascheksolutions/pictshare rests on hub alone
+- ghcr.io/jellman86/wamf-backend: C2: ghcr.io/jellman86/wamf-backend rests on readme alone
+- ghcr.io/jellman86/wamf-frontend: C2: ghcr.io/jellman86/wamf-backend rests on readme alone
+- ghcr.io/junkerderprovinz/rustdesk: C2: docker.io/junkerderprovinz/rustdesk rests on hub alone
+- ghcr.io/kx1t/screenshot: C2: ghcr.io/kx1t/screenshot rests on readme alone
+- ghcr.io/l4stidi0t/arr-tools/main: C2: ghcr.io/l4stidi0t/arr-tools/main rests on readme alone
+- ghcr.io/lucifix/model-workshop-manager: C2: docker.io/lucifix/model-workshop-manager rests on hub alone
+- ghcr.io/lucifix/newsnest: C2: docker.io/lucifix/newsnest rests on hub alone
+- ghcr.io/mainfrezzer/wg-bridge: C2: ghcr.io/mainfrezzer/wg-bridge rests on readme alone
+- ghcr.io/make-ware/video-ware: C2: docker.io/dastron/video-ware rests on hub alone
+- ghcr.io/matrix-org/synapse-service: C2: ghcr.io/matrix-org/synapse-service rests on readme alone
+- ghcr.io/mscrnt/patreon-credits: C2: docker.io/mscrnt/patreon-credits rests on readme alone
+- ghcr.io/mudler/mcps/localrecall: C2: quay.io/mudler/localrecall rests on readme alone
+- ghcr.io/mxpv/podsync: C2: docker.io/mxpv/podsync rests on readme alone
+- ghcr.io/nebula-codes/hytale-server-manager: C2: ghcr.io/nebula-codes/hytale-server-manager rests on readme alone
+- ghcr.io/nichtlegacy/mediawatch: C2: ghcr.io/nichtlegacy/mediawatch rests on readme alone
+- ghcr.io/ohmzi/immaculaterr: C2: docker.io/ohmzii/immaculaterr rests on hub alone
+- ghcr.io/openhands/agent-canvas: C2: ghcr.io/openhands/agent-canvas rests on readme alone
+- ghcr.io/oxtyped/gpodder2go: C2: docker.io/oxtyped/gpodder2go rests on readme alone
+- ghcr.io/p6g9yhk6/googlefindmytools: C2: ghcr.io/p6g9yhk6/googlefindmytools rests on readme alone
+- ghcr.io/pacnpal/compressatorium: C2: docker.io/pacnpal/compressatorium rests on readme alone
+- ghcr.io/patrickstigler/youtube-transcript-to-article: C2: docker.io/patrickstigler/youtube-transcript-to-article rests on readme alone
+- ghcr.io/pipe-bomb/frontend: C2: ghcr.io/pipe-bomb/frontend rests on readme alone
+- ghcr.io/pipe-bomb/pipe-bomb: C2: ghcr.io/pipe-bomb/frontend rests on readme alone
+- ghcr.io/pipe-bomb/proxy: C2: ghcr.io/pipe-bomb/frontend rests on readme alone
+- ghcr.io/pipe-bomb/server: C2: ghcr.io/pipe-bomb/frontend rests on readme alone
+- ghcr.io/plankanban/planka: C2: docker.io/meltyshev/planka rests on hub alone
+- ghcr.io/qdm12/ddns-updater: C2: docker.io/qmcgaw/ddns-updater rests on hub alone
+- ghcr.io/raccommode/open-easyx: C2: ghcr.io/raccommode/open-easyx rests on readme alone
+- ghcr.io/rfsbraz/deleterr: C2: docker.io/rfsbraz/deleterr rests on hub alone
+- ghcr.io/rix1337/magazarr: C2: ghcr.io/rix1337/magazarr rests on readme alone
+- ghcr.io/rix1337/quasarr: C2: ghcr.io/rix1337/magazarr rests on readme alone
+- ghcr.io/rix1337/sponsors-helper: C2: ghcr.io/rix1337/magazarr rests on readme alone
+- ghcr.io/roonlabs/roonserver: C2: ghcr.io/roonlabs/roonserver rests on readme alone
+- ghcr.io/rtuszik/photon-docker: C2: docker.io/rtuszik/photon-docker rests on readme alone
+- ghcr.io/sassanix/warracker/main: C2: ghcr.io/sassanix/warracker/main rests on readme alone
+- ghcr.io/scanopy/scanopy/daemon: C2: ghcr.io/scanopy/scanopy/daemon rests on readme alone
+- ghcr.io/scanopy/scanopy/server: C2: ghcr.io/scanopy/scanopy/daemon rests on readme alone
+- ghcr.io/simojenki/bonob: C2: docker.io/simojenki/bonob rests on readme alone
+- ghcr.io/spaceinvaderone/hailfrequency: C2: ghcr.io/spaceinvaderone/hailfrequency rests on readme alone
+- ghcr.io/stoatworks-labs/simple-rta: C2: ghcr.io/stoatworks-labs/simple-rta rests on readme alone
+- ghcr.io/tarahome/taraassistant: C2: ghcr.io/tarahome/taraassistant rests on readme alone
+- ghcr.io/tatertotterson/microwakeword: C2: ghcr.io/tatertotterson/microwakeword rests on readme alone
+- ghcr.io/tda90/spoolease-bambustudio: C2: ghcr.io/tda90/spoolease-bambustudio rests on readme alone
+- ghcr.io/tensorchord/vchord-postgres: C2: docker.io/tensorchord/vchord-postgres rests on hub alone
+- ghcr.io/thedinz/spotifybu: C2: ghcr.io/thedinz/spotifybu rests on readme alone
+- ghcr.io/theodorecharles/just-blame-cloudflare: C2: ghcr.io/theodorecharles/just-blame-cloudflare rests on readme alone
+- ghcr.io/tommythehuman/meeplestats/backend: C2: ghcr.io/tommythehuman/meeplestats/backend rests on readme alone
+- ghcr.io/tommythehuman/meeplestats/frontend: C2: ghcr.io/tommythehuman/meeplestats/backend rests on readme alone
+- ghcr.io/umami-software/umami: C2: docker.umami.is/umami-software/umami rests on readme alone
+- ghcr.io/windmill-labs/caddy-l4: C2: ghcr.io/windmill-labs/caddy-l4 rests on readme alone
+- ghcr.io/windmill-labs/windmill-extra: C2: ghcr.io/windmill-labs/caddy-l4 rests on readme alone
+- ghcr.io/xexsolutions/unraid-stats: C2: docker.io/xexsolutions/unraid-stats rests on readme alone
+- ghcr.io/zarskie/postarr: C2: ghcr.io/zarskie/postarr rests on readme alone
+- lscr.io/linuxserver/chromium: C2: lscr.io/linuxserver/chromium rests on readme alone
+- lscr.io/linuxserver/kali-linux: C2: lscr.io/linuxserver/kali-linux rests on readme alone
+- lscr.io/linuxserver/obsidian: C2: lscr.io/linuxserver/obsidian rests on readme alone
+- lscr.io/linuxserver/webstation: C2: lscr.io/linuxserver/webstation rests on readme alone
+- lscr.io/linuxserver/webtop: C2: lscr.io/linuxserver/webtop rests on readme alone
+- quay.io/11notes/adguard: C2: ghcr.io/11notes/adguard rests on readme alone
+- quay.io/docling-project/docling-serve: C2: quay.io/docling-project/docling-serve rests on readme alone
+- quay.io/docling-project/docling-serve-cu130: C2: quay.io/docling-project/docling-serve rests on readme alone
+- quay.io/mudler/localrecall: C2: quay.io/mudler/localrecall rests on readme alone
+- quay.io/prometheus/alertmanager: C2: docker.io/prom/alertmanager rests on hub alone
+- quay.io/prometheus/node-exporter: C2: quay.io/prometheus/node-exporter rests on readme alone
+- quay.io/vouch/vouch-proxy: C2: quay.io/vouch/vouch-proxy rests on readme alone
