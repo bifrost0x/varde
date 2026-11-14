@@ -38,12 +38,12 @@
 <section class="panel" aria-labelledby="apps-title">
   <h2 id="apps-title">Apps</h2>
   <table class="table">
-    <thead><tr><th scope="col">App</th><th scope="col">Version</th><th scope="col">Where the version comes from</th><th scope="col">Findings</th></tr></thead>
+    <thead><tr><th scope="col">App</th><th scope="col">Version</th><th scope="col">Where the version comes from</th><th scope="col">Open flaws</th></tr></thead>
     <tbody>{{range $d.Apps}}
     <tr><td data-label="App">{{.AppName}}<span class="cell-sub mono">{{.Image}}</span></td>
       <td data-label="Version">{{if .Version}}<span class="mono">{{.Version}}</span>{{if eq .Trust "conflict"}} <span class="badge badge--unverified">sources disagree</span>{{else if eq .Trust "reported"}} <span class="badge badge--muted">reported</span>{{end}}{{else if .Distro}}<span class="mono">{{.PackageVersion}}</span> <span class="badge badge--muted">{{.Distro}}</span>{{else}}<span class="badge badge--unverified">unknown</span>{{end}}</td>
       <td data-label="Source">{{if .Doubt}}{{.Doubt}}{{else if .VersionSource}}{{.VersionSource}}{{else}}<span class="muted">{{truncate .Note 160}}</span>{{end}}</td>
-      <td data-label="Findings">{{template "findingscell" .}}</td></tr>
+      <td data-label="Open flaws">{{template "findingscell" .}}</td></tr>
     {{end}}</tbody>
   </table>
 </section>

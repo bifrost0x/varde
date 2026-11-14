@@ -590,3 +590,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 
 .approws--plain { border: 0; background: transparent; margin-bottom: 12px; }
 .approws--plain .approw { padding-left: 0; padding-right: 0; }
+
+/* The foot of the front page: what Varde covers and how fresh its data is. */
+.statusbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 32px; }
+.statusbar h2 { font-size: var(--fs-md); }
+.statusbar p { margin-bottom: 6px; }

@@ -53,11 +53,11 @@ anything on your hosts, automatic updates, traffic analysis, or anything that ne
 account.
 
 <p align="center">
-  <img src="docs/screenshots/overview-clear.png" alt="Varde overview in the all clear state: the beacon is unlit, no open findings" width="720">
+  <img src="docs/screenshots/overview-clear.png" alt="Varde front page in the all clear state: the beacon is unlit and every app is listed with nothing to do" width="720">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/overview-p1.png" alt="Varde overview with urgent findings: the beacon is lit and the most important findings are listed with the version that fixes them" width="720">
+  <img src="docs/screenshots/overview-p1.png" alt="Varde front page with apps that need an update now: the beacon is lit and each app has a card with the version to install and the image line to copy" width="720">
 </p>
 
 ## Quick start

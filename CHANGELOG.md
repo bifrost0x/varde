@@ -15,6 +15,11 @@ All notable changes to this project are documented here. The format follows
   Setup; every earlier page keeps its address. Priorities read "Update now", "Update soon",
   "Next update" and "Check yourself" on the pages; P1 to P3 stay the names in notifications,
   the policy and the API.
+- The list of updates, a flaw's page, the machine pages and the settings follow the same
+  design: cards with one update each, evidence in plain words with the long parts folded,
+  settings ordered by what people come for with the rest under "Advanced".
+- The reminder that the connection is not encrypted appears in the Setup area and among the
+  setup steps, no longer above every page. An untrusted TLS proxy is still named everywhere.
 
 ### Added
 

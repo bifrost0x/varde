@@ -1,7 +1,6 @@
 # 0043 An interface that starts from apps
 
-Status: Accepted (the front page, the app pages, the three areas and the wording are built; the
-pages below them keep their content)
+Status: Accepted (built for every page)
 
 ## Context
 The interface was built from Varde's own objects: findings, priorities P1 to P3, attack paths,
@@ -37,6 +36,13 @@ and in a vocabulary that had to be learned first.
 ## Consequences
 - The update of a card is chosen for the whole app: the version that fixes every finding of
   its highest priority, with what a newer major version would fix beyond it said beside it.
-- Pages below the front page still speak of findings; their wording follows where it is
-  touched. The screenshots in `docs/screenshots` show the earlier overview until they are taken
-  again on a real installation.
+- The list of updates shows the same cards, with what is affected folding out of each and the
+  filters folded away. A flaw's page leads with what the flaw is and folds attack paths,
+  history and the advisory text; a machine's page lists apps to update, not advisory IDs.
+- Settings open with what people come for and fold thresholds, uplink, API tokens and the
+  audit log under "Advanced"; a link to a folded section opens it.
+- The reminder that the connection is not encrypted is shown in the Setup area and among the
+  setup steps of the front page, no longer above every page: plain http in the LAN is how
+  Varde starts. A TLS proxy Varde does not trust is still named on every page.
+- "Finding" stays the word of the API, the notifications and the documentation; the pages say
+  "flaw" for what an advisory describes and "update" for what to do about it.

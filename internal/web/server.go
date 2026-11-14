@@ -324,7 +324,15 @@ func (a *app) page(w http.ResponseWriter, r *http.Request, cur *auth.Current, st
 		v.Banners = append(v.Banners, Banner{"alert", "alert", "The Docker socket is mounted directly. A compromise of Varde gives root on this host. Use a read-only socket proxy."})
 	}
 	if !a.d.Sessions.Secure(r) && !v.OwnSecurityNote {
-		v.Banners = append(v.Banners, Banner{"warn", "lock", insecureText(a.d.Sessions.UntrustedTLSProxy(r))})
+		// Plain http in the LAN is how Varde starts, and the front page
+		// lists HTTPS among the setup steps: the reminder belongs where it
+		// can be acted on, not above every page. A proxy that terminates
+		// TLS but is not trusted is a mistake in the setup, and is said
+		// everywhere.
+		proxy := a.d.Sessions.UntrustedTLSProxy(r)
+		if proxy != "" || v.Nav == "connections" || v.Nav == "settings" {
+			v.Banners = append(v.Banners, Banner{"warn", "lock", insecureText(proxy)})
+		}
 	}
 	if a.d.CatchingUp != nil {
 		// What the pages show is not final while the sources are still

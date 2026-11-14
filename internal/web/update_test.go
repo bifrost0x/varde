@@ -57,7 +57,7 @@ func TestFindingUpdate(t *testing.T) {
 			Target: &match.Target{Version: "2.0.0", Fixes: 5, Total: 5, NewLine: true, Line: &match.Target{Version: "1.121.1", Fixes: 3, Total: 5}},
 			Step:   &match.Step{Version: "1.121.1", Fixes: 3, Total: 5, Advisory: "1.120.1", All: &match.Target{Version: "2.0.0", Fixes: 5, Total: 5, NewLine: true}}}}}, now)
 	body = strings.Join(strings.Fields(page()), " ")
-	for _, want := range []string{"Update immich_server to 1.121.1.", "This advisory is fixed from 1.120.1 on", "fixes it together with 3 of the 5 advisories",
+	for _, want := range []string{"Update immich_server to 1.121.1.", "This flaw is fixed from 1.120.1 on", "fixes it together with 3 of the 5 flaws",
 		"The rest need 2.0.0, a new major version that fixes all 5", "image: ghcr.io/immich-app/immich-server:v1.121.1"} {
 		if !strings.Contains(stripTags(body), want) {
 			t.Errorf("step: missing %q", want)

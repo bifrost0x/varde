@@ -40,7 +40,7 @@
     {{else if $f.FixedIn}}
       {{with $m.Step}}
       <p>Update <strong>{{$.Data.WorkloadName}}</strong> to <span class="mono">{{.Version}}</span>{{if not .Advisory}} or later{{end}}.{{if .NewLine}} It is a new major version; read the upgrade notes first.{{end}}</p>
-      <p class="small">{{if .Advisory}}This advisory is fixed from <span class="mono">{{.Advisory}}</span> on{{if gt .Total 1}}; <span class="mono">{{.Version}}</span> fixes it together with {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of the {{.Total}}{{end}} advisories of the version running here{{else}}, and <span class="mono">{{.Version}}</span> is the release that brings the fix{{end}}.{{else if gt .Total 1}}It fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of the {{.Total}}{{end}} advisories of the version running here.{{end}}{{with .All}} The rest need <span class="mono">{{.Version}}</span>, a new major version that fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of {{.Total}}{{end}}; read its upgrade notes before you go there.{{end}}</p>
+      <p class="small">{{if .Advisory}}This flaw is fixed from <span class="mono">{{.Advisory}}</span> on{{if gt .Total 1}}; <span class="mono">{{.Version}}</span> fixes it together with {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of the {{.Total}}{{end}} flaws of the version running here{{else}}, and <span class="mono">{{.Version}}</span> is the release that brings the fix{{end}}.{{else if gt .Total 1}}It fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of the {{.Total}}{{end}} flaws of the version running here.{{end}}{{with .All}} The rest need <span class="mono">{{.Version}}</span>, a new major version that fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of {{.Total}}{{end}}; read its upgrade notes before you go there.{{end}}</p>
       {{else}}
       <p>Update <strong>{{.Data.WorkloadName}}</strong> to <span class="mono">{{$f.FixedIn}}</span> or later.</p>
       {{end}}
@@ -85,7 +85,7 @@
     </div>
     {{if ne $f.State "suppressed"}}
     <details class="small">
-      <summary>Suppress this advisory</summary>
+      <summary>Never show this flaw again</summary>
       <form class="form" method="post" action="/findings/{{$f.ID}}/suppress" data-confirm="Suppressed findings never notify. Continue?">
         {{template "csrf" $csrf}}
         <div class="field"><label for="reason">Reason (required, kept in the audit log)</label><input id="reason" name="reason" type="text" required maxlength="512"></div>
