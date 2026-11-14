@@ -76,7 +76,7 @@ func TestAttackPathsPage(t *testing.T) {
 	}
 	// The finding shows the path through it and its place.
 	_, body = h.do(t, "GET", "/findings/"+onPath, nil, nil)
-	if !strings.Contains(body, "Attack paths through this finding") || !strings.Contains(body, "opens an attack path from the internet") {
+	if !strings.Contains(body, "Attack paths through this flaw") || !strings.Contains(body, "opens an attack path from the internet") {
 		t.Errorf("finding page lacks its path")
 	}
 	// The filter separates both.
@@ -186,7 +186,7 @@ func TestImagePackageFindingSpeaksOfTheContainer(t *testing.T) {
 	_, body := h.do(t, "GET", "/findings/"+store.FindingID(wid, "ALPINE-CVE-2026-1"), nil, nil)
 	body = html.UnescapeString(body)
 	for _, want := range []string{
-		"cyberchef-1: ", "Affected: yes.", "mpepping/cyberchef:latest", "That is a version of the package, not of the app",
+		"a package inside the image of cyberchef-1", "Affected: yes.", "mpepping/cyberchef:latest", "That is a version of the package, not of the app",
 		"pull the image again and recreate the container", "closes this finding by itself", "docker compose pull 'cyber-chef'", "Package version",
 	} {
 		if !strings.Contains(body, want) {

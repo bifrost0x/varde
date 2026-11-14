@@ -74,6 +74,11 @@ type appCard struct {
 	Newer string
 	// Note says what "nothing found" rests on, when that needs saying.
 	Note string
+	// Release says which flaws in the image's packages the newest release
+	// of the app fixes, Groups are the app and package versions behind
+	// the card; both are set on the list of updates only.
+	Release *releaseView
+	Groups  []findingGroup
 }
 
 // appLabels are the states in the words of the pages.
@@ -104,45 +109,15 @@ func (a *app) appCards(s *snapshot) []appCard {
 			open = append(open, f)
 		}
 	}
-	hostNames := map[string]string{}
-	for _, h := range s.hosts {
-		hostNames[h.ID] = h.Name
-	}
-	byWorkload := map[string][]store.Finding{}
-	for _, f := range open {
-		byWorkload[f.WorkloadID] = append(byWorkload[f.WorkloadID], f)
-	}
-	var out []appCard
+	out := a.updateCards(s, a.todoGroups(s, open), open)
 	seen := map[string]bool{}
-	for _, g := range a.todoGroups(s, open) {
-		seen[g.Key] = true
-		c := appCard{Key: g.Key, Name: g.Name, Count: g.Count, State: stateOfPriority(g.Priority)}
-		if id, ok := strings.CutPrefix(g.Key, "w:"); ok {
-			wl := s.byID[id]
-			c.Key, c.Href = id, "/apps/"+id
-			a.describe(&c, s, wl, hostNames)
-			// The exposure the findings were prioritised with, so the
-			// card gives the reason the priority has.
-			for _, f := range byWorkload[id] {
-				if f.Exposure == "public" || (f.Exposure == "lan" && c.Exposure != "public") {
-					c.Exposure = f.Exposure
-				}
-			}
-			a.plan(&c, s, wl, byWorkload[id], g)
-		} else {
-			// The packages of a system: its page lists them.
-			host := strings.TrimPrefix(g.Key, "h:")
-			c.Href, c.Sub = "/findings?host="+host, "packages of the system"
-			if m := s.hostOf[host]; m != nil {
-				c.Href = "/systems/" + m.ID + "#packages"
-			}
-			c.Action, c.Command = g.Action, g.Command
-			c.Fixes = plural(g.Count, "flaw") + " in installed packages"
-		}
-		c.Label = appLabels[c.State]
-		c.Why = why(c, g)
-		out = append(out, c)
+	for i := range out {
+		seen["w:"+out[i].Key] = true
+		// The front page is a card and its action; what is behind it
+		// is on the app's page and on the list of updates.
+		out[i].Groups = nil
 	}
+	hostNames := hostNamesOf(s)
 	for _, wl := range s.workloads {
 		if seen["w:"+wl.ID] || identify.IsSystem(wl) {
 			continue
@@ -175,6 +150,56 @@ func (a *app) appCards(s *snapshot) []appCard {
 		}
 		return strings.ToLower(x.Name) < strings.ToLower(y.Name)
 	})
+	return out
+}
+
+// hostNamesOf maps host IDs to names.
+func hostNamesOf(s *snapshot) map[string]string {
+	names := map[string]string{}
+	for _, h := range s.hosts {
+		names[h.ID] = h.Name
+	}
+	return names
+}
+
+// updateCards are the cards of the updates to do: one per group of
+// findings that one update fixes, in the groups' order. fs are the
+// findings the groups were made of.
+func (a *app) updateCards(s *snapshot, groups []todoGroup, fs []store.Finding) []appCard {
+	hostNames := hostNamesOf(s)
+	byWorkload := map[string][]store.Finding{}
+	for _, f := range fs {
+		byWorkload[f.WorkloadID] = append(byWorkload[f.WorkloadID], f)
+	}
+	var out []appCard
+	for _, g := range groups {
+		c := appCard{Key: g.Key, Name: g.Name, Count: g.Count, State: stateOfPriority(g.Priority), Release: g.Release, Groups: g.Groups}
+		if id, ok := strings.CutPrefix(g.Key, "w:"); ok {
+			wl := s.byID[id]
+			c.Key, c.Href = id, "/apps/"+id
+			a.describe(&c, s, wl, hostNames)
+			// The exposure the findings were prioritised with, so the
+			// card gives the reason the priority has.
+			for _, f := range byWorkload[id] {
+				if f.Exposure == "public" || (f.Exposure == "lan" && c.Exposure != "public") {
+					c.Exposure = f.Exposure
+				}
+			}
+			a.plan(&c, s, wl, byWorkload[id], g)
+		} else {
+			// The packages of a system: its page lists them.
+			host := strings.TrimPrefix(g.Key, "h:")
+			c.Href, c.Sub = "/findings?view=package", "packages of the system"
+			if m := s.hostOf[host]; m != nil {
+				c.Href = "/systems/" + m.ID + "#packages"
+			}
+			c.Action, c.Command = g.Action, g.Command
+			c.Fixes = plural(g.Count, "flaw") + " in installed packages"
+		}
+		c.Label = appLabels[c.State]
+		c.Why = why(c, g)
+		out = append(out, c)
+	}
 	return out
 }
 
@@ -513,4 +538,13 @@ func appFlaws(fs []store.Finding, max int) (flaws []appFlaw, hidden int) {
 			State: state, Severity: m.SeverityLabel, Exploited: m.KEV})
 	}
 	return flaws, hidden
+}
+
+// appHref is the page of the app a workload is; "" for a system package,
+// which belongs to its machine's page.
+func appHref(wl inventory.Workload) string {
+	if wl.ID == "" || identify.IsSystem(wl) {
+		return ""
+	}
+	return "/apps/" + wl.ID
 }

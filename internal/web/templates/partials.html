@@ -1,15 +1,15 @@
 {{/* SPDX-License-Identifier: Apache-2.0 */}}
 {{define "findingtable"}}
 <table class="table">
-  <thead><tr><th scope="col">Priority</th><th scope="col">App</th><th scope="col">Advisory</th><th scope="col">Fix</th><th scope="col">Exposure</th></tr></thead>
+  <thead><tr><th scope="col">Urgency</th><th scope="col">App</th><th scope="col">Flaw</th><th scope="col">Fixed in</th><th scope="col">Reachable</th></tr></thead>
   <tbody>
   {{range .}}
   <tr>
-    <td data-label="Priority">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</td>
+    <td data-label="Urgency">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</td>
     <td data-label="App"><a href="/findings/{{.ID}}">{{.AppName}}</a><span class="cell-sub">{{.WorkloadName}}{{if .Version}} · <span class="mono">{{.Version}}</span>{{end}}</span></td>
-    <td data-label="Advisory"><span class="mono">{{.AdvisoryID}}</span><span class="cell-sub">{{truncate .Summary 110}}</span></td>
-    <td data-label="Fix">{{if .FixedIn}}<span class="mono">≥ {{.FixedIn}}</span>{{else}}<span class="muted">no fix yet</span>{{end}}</td>
-    <td data-label="Exposure">{{template "exposure" .Exposure}}</td>
+    <td data-label="Flaw">{{if .Summary}}{{truncate .Summary 110}}{{else}}<span class="mono">{{.AdvisoryID}}</span>{{end}}<span class="cell-sub mono">{{.AdvisoryID}}</span></td>
+    <td data-label="Fixed in">{{if .FixedIn}}<span class="mono">{{.FixedIn}}</span>{{else}}<span class="muted">no fix yet</span>{{end}}</td>
+    <td data-label="Reachable">{{template "exposure" .Exposure}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -165,7 +165,12 @@
   {{if .Why}}<p class="app__why">{{.Why}}</p>{{end}}
   <p class="app__action"><strong>{{.Action}}</strong>{{if .Fixes}} <span class="muted">· {{.Fixes}}</span>{{end}}</p>
   {{if .Line}}<div class="secret"><pre id="line-{{.Key}}" class="mono install">{{.Line}}</pre><button class="btn btn--ghost" type="button" data-copy="#line-{{.Key}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>{{end}}
+  {{with .Release}}<p class="small">{{if .Fixes}}{{if .Fixed}}<strong>Release <span class="mono">{{.Tag}}</span> fixes {{len .Fixed}} of {{.Total}}</strong> flaws in the image's packages.{{else if .Open}}<strong>Release <span class="mono">{{.Tag}}</span> does not fix these yet:</strong> none of the {{.Total}} flaws in the image's packages.{{else}}Varde cannot tell which of the {{.Total}} flaws in the image's packages release <span class="mono">{{.Tag}}</span> fixes.{{end}}{{if .OpenShown}} Not fixed in any release yet: {{range $i, $id := .OpenShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .OpenMore}} and {{.OpenMore}} more{{end}}.{{end}}{{if .UnknownShown}} Varde cannot tell for: {{range $i, $id := .UnknownShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .UnknownMore}} and {{.UnknownMore}} more{{end}}.{{end}}{{else if .Newest}}Already runs the newest release (<span class="mono">{{.Tag}}</span>).{{else}}Newest release: <span class="mono">{{.Tag}}</span>.{{end}} <span class="muted">Read {{date .Read}}.</span></p>{{end}}
   <footer class="app__foot"><span class="small muted">{{if .Rest}}{{.Rest}}{{else}}{{plural .Count "open finding"}}{{end}}</span><a class="btn" href="{{.Href}}">How to update</a></footer>
+  {{if .Groups}}<details class="todo__details">
+    <summary class="small">What is affected ({{len .Groups}} {{if eq (len .Groups) 1}}package or app{{else}}packages and apps{{end}})</summary>
+    {{template "findinggroups" .Groups}}
+  </details>{{end}}
 </article>{{end}}
 
 {{define "approw"}}<li class="approw approw--{{.State}}">{{template "appicon" .State}}<a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span><span class="approw__state">{{.Label}}{{if .Newer}} · newest release <span class="mono">{{.Newer}}</span>{{end}}</span>{{if .Note}}<span class="cell-sub">{{.Note}}</span>{{end}}</li>{{end}}

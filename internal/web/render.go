@@ -178,7 +178,9 @@ var funcs = template.FuncMap{
 		}
 		return tm.Local().Format("15:04")
 	},
-	"plural":     plural,
+	"plural": plural,
+	// pct turns a probability into percent.
+	"pct":        func(p float64) float64 { return p * 100 },
 	"add":        func(a, b int) int { return a + b },
 	"noticeLink": noticeLink,
 	"machineKind": func(kind string) string {

@@ -470,7 +470,11 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	}
 	sort.Slice(apps, func(i, j int) bool { return apps[i].Name < apps[j].Name })
 	filtered := f != (findingsFilter{})
-	a.page(w, r, cur, http.StatusOK, "findings", view{Title: "Findings", Nav: "findings", Tabs: tabs("findings", "/findings"), Data: struct {
+	// The updates to do as the cards of the front page, each under what
+	// it asks for.
+	sections := appSections(a.updateCards(s, todo, selected))
+	a.page(w, r, cur, http.StatusOK, "findings", view{Title: "Updates", Nav: "findings", Tabs: tabs("findings", "/findings"), Data: struct {
+		Sections []appSection
 		Findings []findingRow
 		Groups   []findingGroup
 		Todo     []todoGroup
@@ -481,7 +485,7 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		Apps     []appOption
 		Filtered bool
 		Query    string
-	}{rows, groups, todo, len(selected), list, mode, f, apps, filtered, filterQuery(f)}})
+	}{sections, rows, groups, todo, len(selected), list, mode, f, apps, filtered, filterQuery(f)}})
 }
 
 // filterQuery keeps the filters when switching between the grouped and the
@@ -534,8 +538,11 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		History                         []historyEntry
 		// Image is set for a flaw in a package of the container's image.
 		Image *imageFinding
+		// AppHref is the page of the app the flaw belongs to; empty for
+		// a package of a system, which has none.
+		AppHref string
 	}{f, m, a.appName(f.AppID), wl.Name, host, details, a.update(r.Context(), f, m, wl), a.d.Settings.Get().RegistryTags, a.findingPaths(r, f.ID),
-		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl)}})
+		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl), appHref(wl)}})
 }
 
 // imageFinding is what the page says about a flaw in a package of a

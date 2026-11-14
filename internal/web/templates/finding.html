@@ -1,13 +1,13 @@
 {{/* SPDX-License-Identifier: Apache-2.0 */}}
 {{define "content"}}
 {{$f := .Data.Finding}}{{$m := .Data.Match}}{{$csrf := .CSRF}}
+<p class="crumb">{{if .Data.AppHref}}<a href="{{.Data.AppHref}}">{{.Data.WorkloadName}}</a>{{else}}<a href="/findings">Updates</a>{{end}}</p>
 <div class="page-head">
   <div>
-    <p class="small"><a href="/findings">Findings</a></p>
-    <h1>{{if .Data.Image}}{{.Data.WorkloadName}}: {{end}}{{.Data.AppName}}: <span class="mono">{{$f.AdvisoryID}}</span></h1>
-    <p>{{if $m.Summary}}{{$m.Summary}}{{else}}No summary published.{{end}}</p>
+    <h1>{{if $m.Summary}}{{$m.Summary}}{{else}}{{.Data.AppName}}: a flaw without a published summary{{end}}</h1>
+    <p>A flaw in {{.Data.AppName}}{{if .Data.Image}}, a package inside the image of {{.Data.WorkloadName}}{{end}} · <span class="mono">{{$f.AdvisoryID}}</span></p>
   </div>
-  <div class="actions">{{template "prio" $f.Priority}}{{if $m.KEV}}<span class="badge badge--kev">known exploited</span>{{end}}{{template "pathclass" $f.PathClass}}{{template "exposure" $f.Exposure}}<span class="badge badge--muted">{{$f.State}}</span></div>
+  <div class="actions">{{template "prio" $f.Priority}}{{if $m.KEV}}<span class="badge badge--kev">known exploited</span>{{end}}{{template "pathclass" $f.PathClass}}{{template "exposure" $f.Exposure}}{{if ne $f.State "open"}}<span class="badge badge--muted">{{$f.State}}</span>{{end}}</div>
 </div>
 
 <div class="grid-2">
@@ -67,6 +67,8 @@
     {{if $f.PriorityReason}}<p class="small muted">Priority: {{$f.PriorityReason}}.</p>{{end}}
 
     {{if ne $f.State "resolved"}}
+    <h3 class="small">Does not apply to you, or dealt with?</h3>
+    <p class="small muted">Acknowledged and snoozed flaws stay listed but stop notifying. They close by themselves once the update is installed.</p>
     <div class="actions">
       {{if or (eq $f.State "open") (eq $f.State "snoozed")}}
       <form method="post" action="/findings/{{$f.ID}}/ack">{{template "csrf" $csrf}}<button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>Acknowledge</button></form>
@@ -98,38 +100,40 @@
   </section>
 
   <section class="panel" aria-labelledby="evidence-title">
-    <h2 id="evidence-title">Evidence</h2>
+    <h2 id="evidence-title">How Varde knows</h2>
     <dl class="evidence">
-      <dt>Workload</dt><dd><a href="/systems/apps#w-{{$f.WorkloadID}}">{{.Data.WorkloadName}}</a>{{if .Data.HostName}} on {{.Data.HostName}}{{end}}</dd>
+      <dt>Runs as</dt><dd><a href="/systems/apps#w-{{$f.WorkloadID}}">{{.Data.WorkloadName}}</a>{{if .Data.HostName}} on {{.Data.HostName}}{{end}}</dd>
       {{with .Data.Image}}<dt>Image</dt><dd class="mono">{{.Ref}}</dd>
       {{if .App}}<dt>App in it</dt><dd>{{.App}}{{if .AppVersion}} <span class="mono">{{.AppVersion}}</span>{{else}} <span class="muted">(version unknown)</span>{{end}}</dd>{{end}}{{end}}
-      <dt>{{if .Data.Image}}Package version{{else}}Running version{{end}}</dt><dd>{{if $m.Evidence.Version}}<span class="mono">{{$m.Evidence.Version}}</span>{{if $m.Evidence.VersionSource}} <span class="muted">({{$m.Evidence.VersionSource}})</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}</dd>
-      <dt>Affected range</dt><dd class="mono">{{if $m.Evidence.Range}}{{$m.Evidence.Range}}{{else}}not machine-readable{{end}}</dd>
+      <dt>{{if .Data.Image}}Package version{{else}}Your version{{end}}</dt><dd>{{if $m.Evidence.Version}}<span class="mono">{{$m.Evidence.Version}}</span>{{if $m.Evidence.VersionSource}} <span class="muted">({{$m.Evidence.VersionSource}})</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}</dd>
+      <dt>Affected versions</dt><dd class="mono">{{if $m.Evidence.Range}}{{$m.Evidence.Range}}{{else}}not machine-readable{{end}}</dd>
       {{if $m.Evidence.Package}}<dt>Package</dt><dd class="mono">{{$m.Evidence.Package}}</dd>{{end}}
       {{with $m.Evidence.CompletedBy}}<dt>Fixed version</dt><dd>from <span class="mono">{{.}}</span> <span class="muted">(the project's advisory names where the flaw starts, not where it ends)</span></dd>{{end}}
       <dt>Source</dt><dd>{{join $m.Sources ", "}} <span class="muted">(record {{$m.Evidence.RecordID}}{{with $m.Evidence.Origin}}, read from {{.}}{{end}})</span></dd>
       {{if $m.Aliases}}<dt>Also known as</dt><dd class="mono">{{join $m.Aliases ", "}}</dd>{{end}}
       <dt>Severity</dt><dd>{{if $m.CVSS}}CVSS {{printf "%.1f" $m.CVSS}}{{end}}{{if $m.SeverityLabel}} {{$m.SeverityLabel}}{{end}}{{if not (or $m.CVSS $m.SeverityLabel)}}<span class="muted">not rated</span>{{end}}</dd>
-      <dt>Exploitation</dt><dd>{{if $m.KEV}}listed in CISA KEV{{else}}not in CISA KEV{{end}}{{if $m.EPSS}}, EPSS {{printf "%.3f" $m.EPSS}}{{end}}</dd>
-      <dt>Exposure</dt><dd>{{$f.Exposure}}{{range $f.ExposureEvidence}}<span class="cell-sub">{{.}}</span>{{end}}</dd>
-      <dt>Attack paths</dt><dd>{{if $f.PathReason}}{{$f.PathReason}}{{else}}<span class="muted">not placed yet</span>{{end}}{{if $m.Vector}}<span class="cell-sub mono">{{$m.Vector}}</span>{{end}}</dd>
+      <dt>Being exploited</dt><dd>{{if $m.KEV}}yes, attackers use it (CISA KEV list){{else}}not known to be (not on the CISA KEV list){{end}}{{if $m.EPSS}}<span class="cell-sub">Chance of exploitation in the next 30 days: {{printf "%.1f" (pct $m.EPSS)}} % (EPSS)</span>{{end}}</dd>
+      <dt>Reachable</dt><dd>{{$f.Exposure}}{{range $f.ExposureEvidence}}<span class="cell-sub">{{.}}</span>{{end}}</dd>
+      <dt>Attack path</dt><dd>{{if $f.PathReason}}{{$f.PathReason}}{{else}}<span class="muted">not placed yet</span>{{end}}{{if $m.Vector}}<span class="cell-sub mono">{{$m.Vector}}</span>{{end}}</dd>
       <dt>First seen</dt><dd>{{date $f.FirstSeen}}</dd>
       {{if $f.NotifiedAt}}<dt>Notified</dt><dd>{{date $f.NotifiedAt}} ({{$f.LastNotifiedPriority}})</dd>{{end}}
     </dl>
   </section>
 </div>
 {{if .Data.Paths}}
-<section class="panel" aria-labelledby="paths-title">
-  <div class="panel__head"><h2 id="paths-title">Attack paths through this finding</h2><a class="small" href="/findings/paths">All attack paths</a></div>
+<details class="panel fold">
+  <summary><h2 id="paths-title">Attack paths through this flaw <span class="muted">({{len .Data.Paths}})</span></h2></summary>
+  <p class="small"><a href="/findings/paths">All attack paths</a></p>
   {{range .Data.Paths}}
   <h3 class="small">{{if eq .Entry "internet"}}From the internet{{else}}From the LAN{{end}}: {{.Impact}}</h3>
   <ol class="path">{{range .Steps}}<li class="path__step path__step--{{.Kind}}">{{.Label}}{{if .Indirect}} <span class="badge badge--unverified">indirect</span>{{end}}</li>{{end}}</ol>
   {{end}}
-</section>
+</details>
 {{end}}
 {{if .Data.History}}
-<section class="panel" aria-labelledby="history-title">
-  <div class="panel__head"><h2 id="history-title">History</h2><a class="small" href="/findings/history">All history</a></div>
+<details class="panel fold">
+  <summary><h2 id="history-title">History <span class="muted">({{len .Data.History}})</span></h2></summary>
+  <p class="small"><a href="/findings/history">All history</a></p>
   <ol class="history">
   {{range .Data.History}}
     <li class="history__entry history__entry--{{.Kind}}">
@@ -139,13 +143,13 @@
     </li>
   {{end}}
   </ol>
-</section>
+</details>
 {{end}}
 {{if .Data.Details}}
-<section class="panel" aria-labelledby="details-title">
-  <h2 id="details-title">Advisory text</h2>
+<details class="panel fold">
+  <summary><h2 id="details-title">Advisory text</h2></summary>
   <p class="small muted">Shown as plain text, as published upstream.</p>
   <div class="details-text">{{.Data.Details}}</div>
-</section>
+</details>
 {{end}}
 {{end}}

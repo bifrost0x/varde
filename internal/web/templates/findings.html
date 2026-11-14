@@ -2,67 +2,82 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>Findings</h1><p>Advisories that apply to an app you run or a package installed on your systems, in the version you run{{if eq $d.View ""}}, grouped by what fixes them: one update per container or system, most urgent first{{else if eq $d.View "package"}}, grouped by app or package and version with the update that fixes them{{end}}.</p></div>
-  <nav class="segmented" aria-label="Group findings">
-    <a href="/findings{{if $d.Query}}?{{$d.Query}}{{end}}"{{if eq $d.View ""}} aria-current="page"{{end}}>By system</a>
-    <a href="/findings?view=package{{if $d.Query}}&amp;{{$d.Query}}{{end}}"{{if eq $d.View "package"}} aria-current="page"{{end}}>By package</a>
-    <a href="/findings?view=list{{if $d.Query}}&amp;{{$d.Query}}{{end}}"{{if eq $d.View "list"}} aria-current="page"{{end}}>One row per advisory</a>
+  <div><h1>Updates</h1><p>{{if eq $d.View ""}}What to update, most pressing first. One card is one app; its update fixes all of its flaws at once.{{else if eq $d.View "package"}}The same flaws by app and version, with the update that fixes each.{{else}}Every flaw on its own row.{{end}}</p></div>
+  <nav class="segmented" aria-label="Group by">
+    <a href="/findings{{if $d.Query}}?{{$d.Query}}{{end}}"{{if eq $d.View ""}} aria-current="page"{{end}}>By app</a>
+    <a href="/findings?view=package{{if $d.Query}}&amp;{{$d.Query}}{{end}}"{{if eq $d.View "package"}} aria-current="page"{{end}}>By version</a>
+    <a href="/findings?view=list{{if $d.Query}}&amp;{{$d.Query}}{{end}}"{{if eq $d.View "list"}} aria-current="page"{{end}}>Every flaw</a>
   </nav>
 </div>
-<form class="filters" method="get" action="/findings">
-  {{if $d.View}}<input type="hidden" name="view" value="{{$d.View}}">{{end}}
-  <div class="field"><label for="f-priority">Priority</label>
-    <select id="f-priority" name="priority">
-      <option value="">Any</option>
-      {{range $p := list "P1" "P2" "P3"}}<option value="{{$p}}" {{if eq $d.Filter.Priority $p}}selected{{end}}>{{$p}}</option>{{end}}
-    </select></div>
-  <div class="field"><label for="f-match">Check</label>
-    <select id="f-match" name="match">
-      <option value="">Any</option>
-      <option value="affected" {{if eq $d.Filter.Match "affected"}}selected{{end}}>Confirmed</option>
-      <option value="unverified" {{if eq $d.Filter.Match "unverified"}}selected{{end}}>Needs a check</option>
-    </select></div>
-  <div class="field"><label for="f-state">State</label>
-    <select id="f-state" name="state">
-      <option value="">All open</option>
-      <option value="open" {{if eq $d.Filter.State "open"}}selected{{end}}>New</option>
-      {{range $s := list "acknowledged" "snoozed" "suppressed" "resolved" "all"}}<option value="{{$s}}" {{if eq $d.Filter.State $s}}selected{{end}}>{{title $s}}</option>{{end}}
-    </select></div>
-  <div class="field"><label for="f-app">App</label>
-    <select id="f-app" name="app">
-      <option value="">Any</option>
-      {{range $d.Apps}}<option value="{{.ID}}" {{if eq $d.Filter.App .ID}}selected{{end}}>{{.Name}}</option>{{end}}
-    </select></div>
-  <div class="field"><label for="f-exposure">Exposure</label>
-    <select id="f-exposure" name="exposure">
-      <option value="">Any</option>
-      {{range $e := list "public" "lan" "internal" "unknown"}}<option value="{{$e}}" {{if eq $d.Filter.Exposure $e}}selected{{end}}>{{$e}}</option>{{end}}
-    </select></div>
-  <div class="field"><label for="f-path">Attack paths</label>
-    <select id="f-path" name="path">
-      <option value="">Any</option>
-      <option value="path" {{if eq $d.Filter.Path "path"}}selected{{end}}>On an attack path</option>
-      <option value="path-internet" {{if eq $d.Filter.Path "path-internet"}}selected{{end}}>From the internet</option>
-      <option value="noise" {{if eq $d.Filter.Path "noise"}}selected{{end}}>Background noise</option>
-      <option value="unclear" {{if eq $d.Filter.Path "unclear"}}selected{{end}}>Not placed</option>
-    </select></div>
-  <button class="btn" type="submit">Filter</button>
-</form>
+<details class="filterbox"{{if $d.Filtered}} open{{end}}>
+  <summary>{{if $d.Filtered}}Filtered{{else}}Filter{{end}}</summary>
+  <form class="filters" method="get" action="/findings">
+    {{if $d.View}}<input type="hidden" name="view" value="{{$d.View}}">{{end}}
+    <div class="field"><label for="f-priority">Urgency</label>
+      <select id="f-priority" name="priority">
+        <option value="">Any</option>
+        <option value="P1" {{if eq $d.Filter.Priority "P1"}}selected{{end}}>Update now (P1)</option>
+        <option value="P2" {{if eq $d.Filter.Priority "P2"}}selected{{end}}>Update soon (P2)</option>
+        <option value="P3" {{if eq $d.Filter.Priority "P3"}}selected{{end}}>Next update (P3)</option>
+      </select></div>
+    <div class="field"><label for="f-match">Confirmed</label>
+      <select id="f-match" name="match">
+        <option value="">Any</option>
+        <option value="affected" {{if eq $d.Filter.Match "affected"}}selected{{end}}>Applies to my version</option>
+        <option value="unverified" {{if eq $d.Filter.Match "unverified"}}selected{{end}}>To check myself</option>
+      </select></div>
+    <div class="field"><label for="f-state">State</label>
+      <select id="f-state" name="state">
+        <option value="">All open</option>
+        <option value="open" {{if eq $d.Filter.State "open"}}selected{{end}}>New</option>
+        {{range $s := list "acknowledged" "snoozed" "suppressed" "resolved" "all"}}<option value="{{$s}}" {{if eq $d.Filter.State $s}}selected{{end}}>{{title $s}}</option>{{end}}
+      </select></div>
+    <div class="field"><label for="f-app">App</label>
+      <select id="f-app" name="app">
+        <option value="">Any</option>
+        {{range $d.Apps}}<option value="{{.ID}}" {{if eq $d.Filter.App .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select></div>
+    <div class="field"><label for="f-exposure">Reachable from</label>
+      <select id="f-exposure" name="exposure">
+        <option value="">Anywhere</option>
+        <option value="public" {{if eq $d.Filter.Exposure "public"}}selected{{end}}>The internet</option>
+        <option value="lan" {{if eq $d.Filter.Exposure "lan"}}selected{{end}}>My network</option>
+        <option value="internal" {{if eq $d.Filter.Exposure "internal"}}selected{{end}}>Other containers only</option>
+        <option value="unknown" {{if eq $d.Filter.Exposure "unknown"}}selected{{end}}>Unknown</option>
+      </select></div>
+    <div class="field"><label for="f-path">Attack paths</label>
+      <select id="f-path" name="path">
+        <option value="">Any</option>
+        <option value="path" {{if eq $d.Filter.Path "path"}}selected{{end}}>On an attack path</option>
+        <option value="path-internet" {{if eq $d.Filter.Path "path-internet"}}selected{{end}}>From the internet</option>
+        <option value="noise" {{if eq $d.Filter.Path "noise"}}selected{{end}}>Background noise</option>
+        <option value="unclear" {{if eq $d.Filter.Path "unclear"}}selected{{end}}>Not placed</option>
+      </select></div>
+    <button class="btn" type="submit">Apply</button>{{if $d.Filtered}} <a class="btn btn--ghost" href="/findings{{if $d.View}}?view={{$d.View}}{{end}}">Clear</a>{{end}}
+  </form>
+</details>
 {{if $d.Count}}
 {{if $d.List}}
+<p class="small muted">{{plural $d.Count "flaw"}}.</p>
 <section class="panel">{{template "findingtable" $d.Findings}}</section>
 {{else if eq $d.View ""}}
-<p class="small muted">{{plural (len $d.Todo) "update"}} to do, {{plural $d.Count "finding"}}. For a container the packages are part of its image: updating them inside the container does not last. Pull the image again (with a tag such as <code>latest</code> too) and recreate the container; Varde sees the new image at the host's next report, with an agent within a minute.</p>
-{{template "todogroups" $d.Todo}}
+<p class="small muted">{{plural (len $d.Todo) "update"}} to do, {{plural $d.Count "flaw"}} behind {{if eq (len $d.Todo) 1}}it{{else}}them{{end}}.</p>
+{{range $d.Sections}}
+<section class="appsection" id="{{.State}}" aria-labelledby="sec-{{.State}}">
+  <div class="appsection__head"><h2 id="sec-{{.State}}">{{.Title}} <span class="muted">({{len .Cards}})</span></h2>{{if .Text}}<p class="small muted">{{.Text}}</p>{{end}}</div>
+  <div class="apps">{{range .Cards}}{{template "appcard" .}}{{end}}</div>
+</section>
+{{end}}
+<p class="small muted">A container's packages are part of its image: update the image, not the packages inside it. Varde sees the new image at the host's next report.</p>
 {{else}}
-<p class="small muted">{{len $d.Groups}} {{if eq (len $d.Groups) 1}}app or package version{{else}}app and package versions{{end}}, {{plural $d.Count "finding"}}.</p>
+<p class="small muted">{{len $d.Groups}} {{if eq (len $d.Groups) 1}}app or package version{{else}}app and package versions{{end}}, {{plural $d.Count "flaw"}}.</p>
 {{template "findinggroups" $d.Groups}}
 {{end}}
 {{else}}
 <div class="empty panel">
   <img src="/static/brand/mark-unlit.svg" alt="">
-  <h2>Nothing here</h2>
-  <p>{{if $d.Filtered}}No findings match these filters.{{else}}No open findings. Varde stays silent until something applies to you.{{end}}</p>
+  <h2>Nothing to update</h2>
+  <p>{{if $d.Filtered}}Nothing matches these filters.{{else}}No open flaw in what Varde can check. It stays silent until something applies to you.{{end}}</p>
 </div>
 {{end}}
 {{end}}

@@ -363,7 +363,7 @@ func TestPagesRenderForSignedInUser(t *testing.T) {
 	// By default one card per update to do on a system, with the app
 	// versions behind it.
 	_, body = h.do(t, "GET", "/findings", nil, nil)
-	if !strings.Contains(body, `class="todo todo--p1"`) || !strings.Contains(body, "1 update to do") || !strings.Contains(body, "Pull a newer image and recreate the container") || !strings.Contains(body, "docker compose pull") ||
+	if !strings.Contains(body, `class="app app--now"`) || !strings.Contains(body, "1 update to do") || !strings.Contains(body, "Update to 1.121.0") || !strings.Contains(body, "What is affected") ||
 		!strings.Contains(body, `class="group group--p1"`) {
 		t.Error("findings not grouped by what fixes them")
 	}
