@@ -726,9 +726,14 @@ func verify(ctx context.Context, dir string, rootData []byte, root *feed.Root, n
 
 // registry is the registry client of the generator and the release reads,
 // with the Docker Hub credentials when both are set.
+// builderTagPages bounds a tag list of the builder: a hundred thousand
+// tags. The largest repositories of the catalog list some forty thousand.
+const builderTagPages = 100
+
 func (c config) registry(env func(string) string) *registry.Client {
 	return registry.New(httpx.New(httpx.Options{Timeout: registryTimeout}),
-		registry.WithCredentials("docker.io", env("VARDE_DOCKERHUB_USER"), env("VARDE_DOCKERHUB_TOKEN")))
+		registry.WithCredentials("docker.io", env("VARDE_DOCKERHUB_USER"), env("VARDE_DOCKERHUB_TOKEN")),
+		registry.WithTagPages(builderTagPages))
 }
 
 // manifests is the manifest budget of the release reads.

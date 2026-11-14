@@ -122,6 +122,11 @@ func TestAllTagsReportsACutList(t *testing.T) {
 	if err != nil || complete || len(tags) != maxPages {
 		t.Fatalf("%d tags, complete %v, %v", len(tags), complete, err)
 	}
+	// The builder's client reads further before it gives up.
+	long := New(httpx.New(httpx.Options{RootCAs: pool, Timeout: 5 * time.Second}), WithTagPages(25))
+	if tags, complete, err := long.AllTags(t.Context(), strings.TrimPrefix(srv.URL, "https://")+"/org/app"); err != nil || complete || len(tags) != 25 {
+		t.Fatalf("with 25 pages: %d tags, complete %v, %v", len(tags), complete, err)
+	}
 	// Tags keeps its behaviour: the cut list, no error.
 	if tags, err := c.Tags(t.Context(), strings.TrimPrefix(srv.URL, "https://")+"/org/app"); err != nil || len(tags) != maxPages {
 		t.Fatalf("Tags: %d %v", len(tags), err)

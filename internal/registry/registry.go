@@ -48,6 +48,8 @@ type Client struct {
 	http *httpx.Client
 
 	credHost, credUser, credToken string
+	// tagPages bounds a tag list in pages of pageSize (maxPages when 0).
+	tagPages int
 
 	mu    sync.Mutex
 	usage Usage
@@ -67,6 +69,20 @@ func WithCredentials(host, user, token string) Option {
 			return
 		}
 		c.credHost, c.credUser, c.credToken = registryHost(host), user, token
+	}
+}
+
+// WithTagPages lets a tag list run to n pages of a thousand tags instead
+// of maxPages. A registry lists tags in no order a client can choose:
+// ghcr.io gives them oldest first, so the newest releases of a repository
+// with tens of thousands of build tags are on its last pages, and only
+// the whole list names them. The package builder reads it; an installation
+// keeps the short bound and gets such lists with the data package.
+func WithTagPages(n int) Option {
+	return func(c *Client) {
+		if n > 0 {
+			c.tagPages = n
+		}
 	}
 }
 
@@ -299,7 +315,11 @@ func (c *Client) AllTags(ctx context.Context, repository string) ([]string, bool
 func (s *session) tags(ctx context.Context) ([]string, bool, error) {
 	var out []string
 	path := "/v2/" + s.name + "/tags/list?n=" + fmt.Sprint(pageSize)
-	for i := 0; i < maxPages && path != ""; i++ {
+	pages := s.c.tagPages
+	if pages <= 0 {
+		pages = maxPages
+	}
+	for i := 0; i < pages && path != ""; i++ {
 		resp, err := s.do(ctx, http.MethodGet, path, nil, 8<<20)
 		if err != nil {
 			return out, false, err

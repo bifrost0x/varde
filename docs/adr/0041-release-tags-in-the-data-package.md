@@ -51,7 +51,10 @@ of the release package lists, which reaches a few dozen images a day.
 ## Consequences
 - Update suggestions name a tag the registry lists without registry versions switched on, for
   every image of the catalog.
-- A registry that lists more than ten thousand tags is cut short by the registry client and
-  gets no list; the release reads have the same limit.
+- A registry lists tags in no order a client can choose (ghcr.io: oldest first), so the newest
+  releases of a repository with tens of thousands of build tags are on the last pages. The
+  builder therefore reads a tag list to its end, up to a hundred thousand tags, and keeps the
+  newest 600 releases; the release package lists use the same client and reach those images
+  too. An installation's own registry reads keep the bound of ten thousand.
 - The lists are the base for further checks that need to know which versions exist, such as
   doubting an advisory whose fixed versions were never releases of the app.
