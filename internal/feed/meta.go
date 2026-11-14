@@ -313,6 +313,9 @@ const (
 	// MediaReleases holds the package lists of the newest release of
 	// catalog apps (ReleaseLine).
 	MediaReleases = "application/vnd.varde.releases.v1+jsonl"
+	// MediaTags holds the release tags of the images of catalog apps
+	// (TagLine).
+	MediaTags = "application/vnd.varde.tags.v1+jsonl"
 )
 
 // Size limits.
@@ -329,7 +332,7 @@ var (
 	// this version reads. A well-formed name it does not know is skipped,
 	// so the package can grow without breaking older installations.
 	blobName  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$`)
-	knownName = regexp.MustCompile(`^(catalog|generated|releases|index|advisories/[a-z0-9-]{1,64}|enrichment/(kev|epss))$`)
+	knownName = regexp.MustCompile(`^(catalog|generated|releases|tags|index|advisories/[a-z0-9-]{1,64}|enrichment/(kev|epss))$`)
 	hexHash   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
@@ -396,7 +399,7 @@ func VerifyManifest(root *Root, data, sigData []byte, now time.Time, maxUnpacked
 		if b.Compression == "none" && b.Size != b.UncompressedSize {
 			return nil, fmt.Errorf("manifest: blob %s: size mismatch", b.Name)
 		}
-		want := map[string]string{"catalog": MediaCatalog, "generated": MediaGenerated, "releases": MediaReleases,
+		want := map[string]string{"catalog": MediaCatalog, "generated": MediaGenerated, "releases": MediaReleases, "tags": MediaTags,
 			"index": MediaIndex, "enrichment/kev": MediaKEV, "enrichment/epss": MediaEPSS}[b.Name]
 		if want == "" {
 			want = MediaAdvisories

@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The data package carries the release tags of every catalog image (ADR 0041). Update
+  suggestions name a tag the registry lists without registry versions switched on, and the
+  version to update to is a release that exists: a fixed version an advisory names that was
+  never published gives way to the next release that was.
+
 ### Fixed
 
 - An advisory that names only a package of another project (a runner beside the server, a

@@ -252,7 +252,11 @@ func Priority(cat *catalog.Catalog, weight map[string]int64) []string {
 // whose version chain reads tags. A generated app's images are only those
 // the generator checked; one it joined or knows by label only is read as
 // the derived entry would read it, which no release read stands behind.
-func (r *Reader) jobs(cat *catalog.Catalog, order []string) []job {
+func (r *Reader) jobs(cat *catalog.Catalog, order []string) []job { return jobsOf(cat, order) }
+
+// jobsOf lists the images of catalog apps whose tags name releases, in the
+// order of Priority.
+func jobsOf(cat *catalog.Catalog, order []string) []job {
 	rank := map[string]int{}
 	for i, id := range order {
 		if _, ok := rank[id]; !ok {

@@ -172,3 +172,42 @@ func TestSameLine(t *testing.T) {
 		}
 	}
 }
+
+// With the releases of the image known, the target is a release that
+// exists: a fixed version that was never published gives way to the next
+// one that was, and a fix newer than the list stays as the advisory names
+// it.
+func TestTargetIsAnExistingRelease(t *testing.T) {
+	a := app(version.SemVer)
+	advs := []Advisory{
+		ghsa("GHSA-1", nil, "< 1.2.3", "1.2.3"), // 1.2.3 was never tagged
+		ghsa("GHSA-2", nil, "< 1.2.1", "1.2.1"),
+	}
+	in := Input{App: a, Version: "1.2.0", Releases: []string{"1.3.0", "1.2.4", "1.2.4-rc1", "1.2.1", "1.2.0", "1.1.0"}}
+	fs := Match(in, advs, Enrichment{})
+	if len(fs) != 2 || fs[0].Target == nil {
+		t.Fatalf("findings: %v", fs)
+	}
+	if tg := fs[0].Target; tg.Version != "1.2.4" || tg.Fixes != 2 || tg.NewLine {
+		t.Errorf("target = %+v, want 1.2.4 fixing both", tg)
+	}
+	// What the advisory itself says stays what it says.
+	if fs[0].FixedIn != "1.2.3" {
+		t.Errorf("fixed in = %q", fs[0].FixedIn)
+	}
+
+	// Without a list, and with a list that ends below the fix, the
+	// advisory's version stands.
+	for _, rel := range [][]string{nil, {"1.2.1", "1.2.0"}} {
+		in.Releases = rel
+		if tg := Match(in, advs, Enrichment{})[0].Target; tg == nil || tg.Version != "1.2.3" {
+			t.Errorf("releases %v: target = %+v, want 1.2.3", rel, tg)
+		}
+	}
+
+	// A pre-release is an update only for a running pre-release.
+	in.Version, in.Releases = "1.2.0-rc1", []string{"1.3.0", "1.2.4-rc1"}
+	if tg := Match(in, advs, Enrichment{})[0].Target; tg == nil || tg.Version != "1.2.4-rc1" {
+		t.Errorf("pre-release target = %+v", tg)
+	}
+}

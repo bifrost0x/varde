@@ -79,7 +79,11 @@ type config struct {
 	// reads on; generateFor and releasesUntil bound them from the start of
 	// the build, maxManifests the manifest requests of the release reads
 	// (0: by whether Docker Hub credentials are set).
-	generate, releases         bool
+	generate, releases bool
+	// tags switches the tag lists on: the release tags of every catalog
+	// image, read before the release package lists and bounded by the
+	// same releasesUntil.
+	tags                       bool
 	generateFor, releasesUntil time.Duration
 	maxManifests               int
 	// storeLimit, releasesBudget and layerCache override the size bounds
@@ -94,6 +98,8 @@ type config struct {
 	sources *genSources
 	// readReleases reads the release package lists (releases.Reader.Run).
 	readReleases func(ctx context.Context, cat *catalog.Catalog, order []string) ([]feed.ReleaseLine, releases.Stats, error)
+	// readTags reads the release tags (releases.TagReader.Run).
+	readTags func(ctx context.Context, cat *catalog.Catalog, order []string) ([]feed.TagLine, releases.TagStats, error)
 }
 
 // genSources are what the generator asks; nil fields are left unset.
@@ -142,6 +148,7 @@ func main() {
 	flag.StringVar(&c.kevURL, "kev-url", "", "KEV endpoint (tests)")
 	flag.StringVar(&c.epssURL, "epss-url", "", "EPSS endpoint (tests)")
 	flag.BoolVar(&c.generate, "generate", true, "generate and check catalog entries for index images without a reviewed entry")
+	flag.BoolVar(&c.tags, "tags", true, "read the release tags of the images of every catalog app")
 	flag.BoolVar(&c.releases, "releases", true, "read the package lists of the newest release of every catalog app")
 	flag.DurationVar(&c.generateFor, "generate-time", defaultGenerateFor, "the generator starts no project this long after the start of the build")
 	flag.DurationVar(&c.releasesUntil, "releases-until", defaultReleasesUntil, "the release reads start no image this long after the start of the build")
@@ -311,10 +318,15 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		return err
 	}
 	var (
-		lines    []feed.ReleaseLine
-		relStats releases.Stats
+		lines          []feed.ReleaseLine
+		relStats       releases.Stats
+		releaseCatalog *catalog.Catalog
 	)
-	if c.releases {
+	var (
+		tagLines []feed.TagLine
+		tagStats releases.TagStats
+	)
+	if c.tags || c.releases {
 		layered, err := catalog.BuildLayered(entries, catalog.OriginBuiltin, generated, nil)
 		if err != nil {
 			return fmt.Errorf("catalog with generated entries: %w", err)
@@ -322,6 +334,26 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		for _, d := range layered.DroppedGenerated() {
 			logger.Warn("generated entry left out beside the reviewed ones", "entry", d)
 		}
+		order := releases.Priority(layered, appWeights(candidates))
+		if c.tags {
+			// Before the package lists: a tag list costs one request and
+			// no pull, so every image gets one whatever the lists cost.
+			read := c.readTags
+			if read == nil {
+				r := &releases.TagReader{Store: st, Registry: reg, Now: c.now,
+					Deadline: now.Add(orDefault(c.releasesUntil, defaultReleasesUntil)), Log: logger}
+				read = r.Run
+			}
+			if tagLines, tagStats, err = read(ctx, layered, order); err != nil {
+				return fmt.Errorf("tag lists: %w", err)
+			}
+			// Not nil: a package without tag lists says so.
+			tagLines = append([]feed.TagLine{}, tagLines...)
+		}
+		releaseCatalog = layered
+	}
+	if c.releases {
+		layered := releaseCatalog
 		read := c.readReleases
 		if read == nil {
 			r := &releases.Reader{Store: st, Registry: reg, Now: c.now, MaxManifests: c.manifests(env),
@@ -352,6 +384,9 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		return err
 	}
 	snap.Generated = generated
+	if c.tags {
+		snap.Tags = tagLines
+	}
 	var (
 		fitted int
 		pruned store.PruneStats
@@ -478,6 +513,12 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		if _, err := fmt.Fprintf(out, "releases: %d lines, %d bytes compressed, %d unpacked (%d images: %d read, %d unchanged, %d failed, %d not started, %d too large; %d partial, %d stale; %d lines over the size budget); %d manifest requests\n",
 			counts.Releases, counts.ReleasesBytes, releasesUnpacked, relStats.Images, relStats.Read, relStats.Unchanged, relStats.Failed, relStats.NotStarted,
 			relStats.TooLarge, relStats.Partial, relStats.Stale, fitted, relStats.Manifests); err != nil {
+			return err
+		}
+	}
+	if c.tags {
+		if _, err := fmt.Fprintf(out, "tags: %d images with release tags (%d images: %d read, %d fresh, %d failed, %d not started, %d without a release tag; %d stale)\n",
+			len(tagLines), tagStats.Images, tagStats.Read, tagStats.Fresh, tagStats.Failed, tagStats.NotStarted, tagStats.NoRelease, tagStats.Stale); err != nil {
 			return err
 		}
 	}

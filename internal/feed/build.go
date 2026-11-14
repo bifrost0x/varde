@@ -135,6 +135,9 @@ type Snapshot struct {
 	// Releases are the package lists of the newest releases; nil leaves
 	// the blob out.
 	Releases []ReleaseLine
+	// Tags are the release tags of the images of catalog apps; nil leaves
+	// the blob out.
+	Tags []TagLine
 	// Index is the first-party index table (applists.Table.Marshal);
 	// empty leaves the blob out.
 	Index []byte
@@ -178,6 +181,13 @@ func (s Snapshot) blobs() (map[string]blobData, error) {
 			return nil, err
 		}
 		blobs["releases"] = blobData{MediaReleases, data}
+	}
+	if s.Tags != nil {
+		data, err := marshalTags(s.Tags)
+		if err != nil {
+			return nil, err
+		}
+		blobs["tags"] = blobData{MediaTags, data}
 	}
 	shards := map[int][]AdvisoryLine{}
 	for _, a := range s.Advisories {

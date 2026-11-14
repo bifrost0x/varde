@@ -57,6 +57,10 @@ type Input struct {
 	// the distribution's records with the package manager's version order
 	// instead of upstream ranges (ADR 0028).
 	Distro *distro.Package
+	// Releases, when known, are the canonical versions released for what
+	// runs here (the release tags of a container's image). The update
+	// target is then a version among them where one fixes as much.
+	Releases []string
 }
 
 // Finding is one advisory (alias group) that applies to the input.
@@ -156,7 +160,7 @@ func Match(in Input, advs []Advisory, enr Enrichment) []Finding {
 		}
 		findings = append(findings, finding(in, group, best, enr))
 	}
-	if t := target(in.App, running, affected); t != nil {
+	if t := target(in.App, running, affected, in.Releases); t != nil {
 		for _, i := range affectedIdx {
 			findings[i].Target = t
 		}

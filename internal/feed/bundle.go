@@ -73,6 +73,9 @@ type Content struct {
 	// Releases are the package lists of the newest releases, nil when the
 	// package has none.
 	Releases []ReleaseLine
+	// Tags are the release tags of the images of catalog apps, nil when
+	// the package has none.
+	Tags []TagLine
 }
 
 // maxIndexBytes bounds the unpacked index blob.
@@ -140,6 +143,12 @@ func (c *Content) parse(b Blob, data []byte) error {
 			return err
 		}
 		c.Releases = lines
+	case b.Name == "tags":
+		lines, err := parseTags(data)
+		if err != nil {
+			return err
+		}
+		c.Tags = lines
 	case b.Name == "index":
 		if len(data) > maxIndexBytes {
 			return errors.New("index: larger than allowed")

@@ -78,3 +78,45 @@ func (s *Store) RecordRepositoryTags(ctx context.Context, t RepositoryTags) erro
 	}
 	return nil
 }
+
+// MergeRepositoryTags keeps tag lists that come with the data package. A
+// list replaces what is stored for its repository only when it is newer,
+// or when the stored answer is a failed read: where the installation
+// asks the registry itself, the fresher of the two stands.
+func (s *Store) MergeRepositoryTags(ctx context.Context, lists []RepositoryTags) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("merge repository tags: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, t := range lists {
+		tags := t.Tags
+		if len(tags) > maxRepositoryTags {
+			tags = tags[:maxRepositoryTags]
+		}
+		clean := make([]string, 0, len(tags))
+		for _, tag := range tags {
+			if tag != "" && len(tag) <= 128 {
+				clean = append(clean, tag)
+			}
+		}
+		if t.Repository == "" || len(t.Repository) > 512 || len(clean) == 0 {
+			continue
+		}
+		raw, err := json.Marshal(clean)
+		if err != nil {
+			return fmt.Errorf("encode tags: %w", err)
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO repository_tags (repository, tags, checked_at, error) VALUES (?, ?, ?, '')
+			ON CONFLICT (repository) DO UPDATE SET tags = excluded.tags, checked_at = excluded.checked_at, error = ''
+			WHERE excluded.checked_at > repository_tags.checked_at OR repository_tags.error != ''`,
+			t.Repository, string(raw), millis(t.Checked))
+		if err != nil {
+			return fmt.Errorf("merge repository tags: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("merge repository tags: %w", err)
+	}
+	return nil
+}
