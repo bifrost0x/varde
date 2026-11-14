@@ -124,34 +124,7 @@
 {{end}}
 {{end}}{{end}}
 
-{{define "guiderest"}}{{if ge .Next 0}}<section class="panel" id="get-started" aria-labelledby="rest-title">
-  <h2 id="rest-title">Left to set up</h2>
-  <ul class="notice-list">{{range .Steps}}{{if not .Done}}<li>{{if .Link}}<a href="{{.Link}}"><strong>{{.Title}}</strong></a>{{else}}<strong>{{.Title}}</strong>{{end}}<span class="cell-sub">{{.Text}}</span></li>{{end}}{{end}}</ul>
-</section>{{end}}{{end}}
-
-{{/* One card per thing to do on one system; the packages behind it fold out. */}}
-{{define "todogroups"}}
-{{range .}}
-<article class="todo{{if eq .Priority "P1"}} todo--p1{{else if eq .Priority "P2"}} todo--p2{{end}}">
-  <div class="todo__head">
-    <div class="todo__badges">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</div>
-    <div class="todo__what">
-      <h3>{{.Name}}</h3>
-      <span class="cell-sub">{{.Where}}</span>
-    </div>
-    <div class="todo__count"><strong>{{.Count}}</strong><span class="cell-sub">{{if .Urgent}}{{.Urgent}} urgent{{else}}{{if eq .Count 1}}finding{{else}}findings{{end}}{{end}}{{if .New}} · {{.New}} new{{end}}</span></div>
-  </div>
-  <p class="todo__action"><strong>{{.Action}}</strong></p>
-  {{if .Note}}<p class="small">{{.Note}}</p>{{end}}
-  {{if .Command}}<p class="small muted">For example <code>{{.Command}}</code></p>{{end}}
-  {{with .Release}}<p class="small">{{if .Fixes}}{{if .Fixed}}<strong>Release <span class="mono">{{.Tag}}</span> fixes {{len .Fixed}} of {{.Total}}</strong> flaws in the image's packages.{{else if .Open}}<strong>Release <span class="mono">{{.Tag}}</span> does not fix these yet:</strong> none of the {{.Total}} flaws in the image's packages.{{else}}Varde cannot tell which of the {{.Total}} flaws in the image's packages release <span class="mono">{{.Tag}}</span> fixes.{{end}}{{if .OpenShown}} Not fixed in any release yet: {{range $i, $id := .OpenShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .OpenMore}} and {{.OpenMore}} more{{end}}.{{end}}{{if .UnknownShown}} Varde cannot tell for: {{range $i, $id := .UnknownShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .UnknownMore}} and {{.UnknownMore}} more{{end}}.{{end}}{{else if .Newest}}Already runs the newest release (<span class="mono">{{.Tag}}</span>).{{else}}Newest release: <span class="mono">{{.Tag}}</span>.{{end}} <span class="muted">Read {{date .Read}}.</span></p>{{end}}
-  <details class="todo__details">
-    <summary class="small">What is affected ({{len .Groups}} {{if eq (len .Groups) 1}}package or app{{else}}packages and apps{{end}})</summary>
-    {{template "findinggroups" .Groups}}
-  </details>
-</article>
-{{end}}
-{{end}}
+{{/* What a workload without open findings was checked against. */}}
 {{define "findingscell"}}{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else if eq .Checked "not"}}<span class="badge badge--unverified">not checked</span>{{else if eq .Checked "limited"}}<span class="muted">none known</span>{{else}}<span class="muted">none found</span>{{end}}{{if .CheckNote}}<span class="cell-sub">{{.CheckNote}}</span>{{end}}{{end}}
 
 {{define "appicon"}}<span class="app__dot app__dot--{{.}}" aria-hidden="true"></span>{{end}}

@@ -232,7 +232,7 @@ func TestStep(t *testing.T) {
 		{"target below its fix", "3.0.0", &Target{Version: "2.5.0", Fixes: 4, Total: 5}, Step{Version: "3.0.0", Fixes: 1, Total: 5}},
 	}
 	for _, c := range cases {
-		got := step(version.SemVer, c.fixedIn, c.target)
+		got := step(version.SemVer, c.fixedIn, c.target, nil)
 		if got == nil {
 			t.Errorf("%s: no step", c.name)
 			continue
@@ -246,7 +246,7 @@ func TestStep(t *testing.T) {
 			t.Errorf("%s: all = %+v, want %+v", c.name, gotAll, wantAll)
 		}
 	}
-	if s := step(version.SemVer, "", tg); s != nil {
+	if s := step(version.SemVer, "", tg, nil); s != nil {
 		t.Errorf("a finding nothing fixes got a step: %+v", s)
 	}
 	// Through Match: every affected finding of a version carries it.
@@ -259,5 +259,45 @@ func TestStep(t *testing.T) {
 	}
 	if fs[1].Step.Advisory != "1.2.1" || fs[0].Step.Advisory != "" {
 		t.Errorf("advisory versions: %q %q", fs[0].Step.Advisory, fs[1].Step.Advisory)
+	}
+}
+
+// A flaw fixed in 1.1.0 and affected again from 1.2.0 to 2.0.0: an update
+// chosen for the other findings that lies in the second range is not this
+// finding's update, although it is above its fixed version.
+func TestStepStaysOutOfALaterAffectedRange(t *testing.T) {
+	a := app(version.SemVer)
+	twice := Advisory{Source: "github", CVSS: 7.5, Vuln: advisory.Vulnerability{ID: "GHSA-twice",
+		Affected: []advisory.Affected{{Package: advisory.Package{Name: "app"}, Ranges: []advisory.Range{
+			{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "0"}, {Fixed: "1.1.0"}}},
+			{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "1.2.0"}, {Fixed: "2.0.0"}}},
+		}}}}}
+	advs := []Advisory{twice, ghsa("GHSA-b", nil, "< 1.2.1", "1.2.1"), ghsa("GHSA-c", nil, "< 1.2.1", "1.2.1")}
+	var got Finding
+	for _, f := range Match(Input{App: a, Version: "1.0.0"}, advs, Enrichment{}) {
+		if f.AdvisoryID == "GHSA-twice" {
+			got = f
+		}
+	}
+	if got.Step == nil || got.FixedIn != "1.1.0" {
+		t.Fatalf("finding: fixed %q step %+v", got.FixedIn, got.Step)
+	}
+	// 2.0.0 fixes all three; on the running line 1.2.1 fixes the two
+	// others, but this flaw affects it again.
+	tg := got.Target
+	if tg == nil || tg.Version != "2.0.0" || tg.Fixes != 3 || tg.Line == nil || tg.Line.Version != "1.2.1" || tg.Line.Fixes != 2 {
+		t.Fatalf("target = %+v (line %+v), want 2.0.0 fixing 3 with 1.2.1 on the line", tg, tg.Line)
+	}
+	if got.Step.Version == "1.2.1" {
+		t.Fatalf("the step names a version the flaw affects: %+v", got.Step)
+	}
+	if got.Step.Version != "2.0.0" || !got.Step.NewLine || got.Step.Fixes != 3 {
+		t.Errorf("step = %+v, want 2.0.0 on the new line", got.Step)
+	}
+	// The two others stay on the line, where their fix is.
+	for _, f := range Match(Input{App: a, Version: "1.0.0"}, advs, Enrichment{}) {
+		if f.AdvisoryID != "GHSA-twice" && (f.Step == nil || f.Step.Version != "1.2.1") {
+			t.Errorf("%s: step %+v, want 1.2.1", f.AdvisoryID, f.Step)
+		}
 	}
 }

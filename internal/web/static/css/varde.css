@@ -441,23 +441,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .segmented a:last-child { border-right: 0; }
 .segmented a:hover { color: var(--text); background: var(--surface-2); }
 .segmented a[aria-current="page"] { color: var(--text); background: var(--surface-2); font-weight: 600; }
-.todo { background: var(--surface-1); border: 1px solid var(--border); border-left: 4px solid var(--border-strong); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
-.todo--p1 { border-left-color: var(--ember); }
-.todo--p2 { border-left-color: var(--amber); }
-.todo__head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
-.todo__badges { display: flex; flex-wrap: wrap; gap: 4px; }
-.todo__what h3 { margin: 0; font-size: var(--fs-md); overflow-wrap: anywhere; }
-.todo__count { text-align: right; }
-.todo__count strong { font-size: var(--fs-lg); }
-.todo__action { margin: 10px 0 4px; }
-.todo__action code { margin-left: 6px; }
 .todo__details { margin-top: 8px; }
 .todo__details > summary { cursor: pointer; color: var(--text-muted); }
 .todo__details[open] > summary { margin-bottom: 8px; }
-@media (max-width: 720px) {
-  .todo__head { grid-template-columns: 1fr auto; }
-  .todo__badges { grid-column: 1 / -1; }
-}
 
 /* Setup reminder on the overview: one line until it is opened. */
 .setup { padding: 12px 18px; }

@@ -198,7 +198,12 @@ type Step struct {
 
 // step chooses the update for one affected finding from its own fixed
 // version and the target of its app version.
-func step(scheme version.Scheme, fixedIn string, t *Target) *Step {
+//
+// fixes, when set, says whether a version is free of this finding's flaw.
+// Being at or above the fixed version is not enough: an advisory can name
+// several affected ranges (fixed in 1.1.0, affected again from 1.2.0), and
+// a target chosen for the other findings can lie in a later one.
+func step(scheme version.Scheme, fixedIn string, t *Target, fixes func(v string) bool) *Step {
 	if fixedIn == "" {
 		return nil // nothing fixes this finding yet
 	}
@@ -207,7 +212,9 @@ func step(scheme version.Scheme, fixedIn string, t *Target) *Step {
 		return s
 	}
 	s.Total = t.Total
-	covers := func(v string) bool { return atLeast(scheme, v, fixedIn) }
+	covers := func(v string) bool {
+		return atLeast(scheme, v, fixedIn) && (fixes == nil || fixes(v))
+	}
 	switch {
 	case t.NewLine && t.Line != nil && t.Line.Version != "" && covers(t.Line.Version):
 		// The running line fixes this one: stay on it, and say what

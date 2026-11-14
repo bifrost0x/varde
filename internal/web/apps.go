@@ -129,7 +129,7 @@ func (a *app) appCards(s *snapshot) []appCard {
 		if kind, skip := coverage.NotAnApp(wl, id, s.marked); skip {
 			row.NotApp = kind
 		}
-		switch kind, note := a.checked(wl, id, row); kind {
+		switch kind, note := a.checked(id, row); kind {
 		case CheckedFull:
 			c.State = appOK
 		case CheckedLimited:
@@ -255,8 +255,10 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 	}
 	var target string
 	type fix struct {
-		fixedIn string
-		top     bool
+		// fixedIn is what the advisory names, step the version the
+		// analysis chose for the finding (a release that exists).
+		fixedIn, step string
+		top           bool
 	}
 	var fixes []fix
 	open, noFix, image := 0, 0, 0
@@ -289,7 +291,7 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 			if m.Step != nil {
 				step = m.Step.Version
 			}
-			fixes = append(fixes, fix{f.FixedIn, top})
+			fixes = append(fixes, fix{f.FixedIn, step, top})
 			if top && (target == "" || !match.AtLeast(scheme, target, step)) {
 				target = step
 			}
@@ -298,9 +300,11 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 	if target == "" {
 		// Nothing of the top priority has a fix: the update that fixes
 		// the most of the rest.
+		// Each finding's step, not its advisory's version: the card must
+		// name what the image line carries.
 		for _, f := range fixes {
-			if target == "" || !match.AtLeast(scheme, target, f.fixedIn) {
-				target = f.fixedIn
+			if target == "" || !match.AtLeast(scheme, target, f.step) {
+				target = f.step
 			}
 		}
 	}
@@ -373,10 +377,10 @@ func why(c appCard, g todoGroup) string {
 	if g.KEV {
 		parts = append(parts, "a flaw is known to be exploited")
 	}
-	switch {
-	case c.Exposure == "public":
+	switch c.Exposure {
+	case "public":
 		parts = append(parts, "reachable from the internet")
-	case c.Exposure == "lan":
+	case "lan":
 		parts = append(parts, "reachable in your network")
 	}
 	if len(parts) == 0 {

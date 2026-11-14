@@ -23,12 +23,12 @@ type todoGroup struct {
 	Key string
 	// Kind is image, packages or app.
 	Kind string
-	// Name is the container, host or app; Where says where it runs.
-	Name, Where string
-	// Action is what to do, Note what it fixes when that needs saying,
-	// Command an example of how.
-	Action, Note, Command string
-	Priority              string
+	// Name is the container, host or app.
+	Name string
+	// Action is what to do, Command an example of how; the cards use
+	// them for the packages of a system (updateCards).
+	Action, Command string
+	Priority        string
 	// NewPriority is the highest priority among its new confirmed
 	// findings: what makes the update urgent now, not what was
 	// acknowledged.
@@ -68,14 +68,11 @@ func (a *app) todoGroups(s *snapshot, fs []store.Finding) []todoGroup {
 			g := todoGroup{Key: key, Kind: kind}
 			switch kind {
 			case "packages":
-				g.Name, g.Where = hostNames[w.HostID], "system packages"
+				g.Name = hostNames[w.HostID]
 			case "image":
-				g.Name, g.Where = w.Name, "container on "+hostNames[w.HostID]
-				if w.Container != nil && w.Container.ImageRef != "" {
-					g.Where += " · " + w.Container.ImageRef
-				}
+				g.Name = w.Name
 			default:
-				g.Name, g.Where = a.appName(f.AppID), w.Name+" on "+hostNames[w.HostID]
+				g.Name = a.appName(f.AppID)
 			}
 			if g.Name == "" {
 				g.Name = w.Name
@@ -114,7 +111,7 @@ func (a *app) todoGroups(s *snapshot, fs []store.Finding) []todoGroup {
 				g.PathClass = fg.PathClass
 			}
 		}
-		g.Action, g.Note, g.Command = todoAction(*g, members[i])
+		g.Action, g.Command = todoAction(*g, members[i])
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -160,18 +157,13 @@ func (a *app) withReleases(ctx context.Context, s *snapshot, groups []todoGroup)
 	}
 }
 
-// todoAction says what fixes a group's findings, what needs saying about
-// it, and how.
-func todoAction(g todoGroup, fs []store.Finding) (action, note, command string) {
+// todoAction says what fixes a group's findings and how. The cards of
+// containers and apps name a version of their own (app.plan); this is what
+// they say for the packages of a system.
+func todoAction(g todoGroup, fs []store.Finding) (action, command string) {
 	switch g.Kind {
 	case "image":
-		for _, fg := range g.Groups {
-			if !fg.Image && fg.Target != nil && fg.Target.Version != "" {
-				note = "The image should bring " + fg.AppName + " " + fg.Target.Version + " or later, which fixes " + plural(fg.Target.Fixes, "finding") + " of the app itself; the rest are packages inside the image."
-				break
-			}
-		}
-		return "Pull a newer image and recreate the container", note, "docker compose pull && docker compose up -d"
+		return "Pull a newer image and recreate the container", "docker compose pull && docker compose up -d"
 	case "packages":
 		eco := ""
 		for _, f := range fs {
@@ -180,14 +172,14 @@ func todoAction(g todoGroup, fs []store.Finding) (action, note, command string) 
 				break
 			}
 		}
-		return "Install the package updates", "", upgradeCommand(eco)
+		return "Install the package updates", upgradeCommand(eco)
 	}
 	for _, fg := range g.Groups {
 		if fg.Target != nil && fg.Target.Version != "" {
-			return "Update to " + fg.Target.Version + " or later", "", ""
+			return "Update to " + fg.Target.Version + " or later", ""
 		}
 	}
-	return "No fixed version yet: see the advisories", "", ""
+	return "No fixed version yet: see the advisories", ""
 }
 
 // upgradeCommand is how a distribution installs its updates.
@@ -213,32 +205,11 @@ type updateCounts struct {
 	// P1, P2 and P3 count the updates by the highest priority of their new
 	// confirmed findings.
 	P1, P2, P3 int
-	// NoFix counts updates whose findings have no fixed version published
-	// yet: there is nothing to install.
-	NoFix int
-	// Unconfirmed counts the containers and systems with findings Varde
-	// cannot confirm: the version that runs is unknown, or the advisory
-	// does not say which versions it affects.
-	Unconfirmed int
-	// Findings is the number of open findings behind them, for the link
-	// to the full list.
-	Findings int
 }
 
 func countUpdates(groups []todoGroup) updateCounts {
 	var c updateCounts
 	for _, g := range groups {
-		c.Findings += g.Count
-		fixable, unverified := false, false
-		for _, fg := range g.Groups {
-			unverified = unverified || fg.Unverified > 0
-			for _, r := range fg.Rows {
-				fixable = fixable || (r.FixedIn != "" && r.MatchState != string(match.Unverified))
-			}
-		}
-		if unverified {
-			c.Unconfirmed++
-		}
 		if g.New == 0 {
 			continue
 		}
@@ -249,11 +220,6 @@ func countUpdates(groups []todoGroup) updateCounts {
 			c.P2++
 		case "P3":
 			c.P3++
-		default:
-			continue
-		}
-		if !fixable {
-			c.NoFix++
 		}
 	}
 	return c

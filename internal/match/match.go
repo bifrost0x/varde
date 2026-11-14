@@ -168,9 +168,16 @@ func Match(in Input, advs []Advisory, enr Enrichment) []Finding {
 		findings = append(findings, finding(in, group, best, enr))
 	}
 	t := target(in.App, running, affected, in.Releases)
-	for _, i := range affectedIdx {
+	for k, i := range affectedIdx {
+		group := affected[k]
+		// The step must be free of this flaw by its own ranges, as the
+		// target's count is (affectsAny).
+		fixes := func(v string) bool {
+			pv, err := version.Parse(in.App.Version.Scheme, v)
+			return err == nil && !affectsAny(in.App, pv, group)
+		}
 		findings[i].Target = t
-		findings[i].Step = step(in.App.Version.Scheme, findings[i].FixedIn, t)
+		findings[i].Step = step(in.App.Version.Scheme, findings[i].FixedIn, t, fixes)
 	}
 	sort.Slice(findings, func(i, j int) bool { return findings[i].AdvisoryID < findings[j].AdvisoryID })
 	return findings

@@ -199,15 +199,9 @@ func sortRows(rows []findingRow) {
 type overviewData struct {
 	Findings status.Findings
 	State    string
-	// UrgentApps is the number of app versions with a new P1 finding.
-	UrgentApps int
-	// Todo are the updates to do first: one per container or system with
-	// new P1 or P2 findings; UrgentTodo counts those with new P1 ones.
-	Todo       []todoGroup
-	UrgentTodo int
-	// Urgent lists app versions with new P1 or P2 findings; Quiet those
-	// whose P1 or P2 findings are all acknowledged.
-	Urgent, Quiet []findingGroup
+	// Quiet lists the app versions whose P1 or P2 findings are all
+	// acknowledged.
+	Quiet []findingGroup
 	// LastInventory is the newest report of any source that reads
 	// workloads.
 	LastInventory time.Time
@@ -308,33 +302,9 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		}
 		if g.New == 0 {
 			d.Quiet = append(d.Quiet, g)
-			continue
 		}
-		if g.Priority == "P1" {
-			d.UrgentApps++
-		}
-		d.Urgent = append(d.Urgent, g)
 	}
-	if len(d.Urgent) > 5 {
-		d.Urgent = d.Urgent[:5]
-	}
-	todo := a.todoGroups(s, open)
-	d.Updates = countUpdates(todo)
-	for _, g := range todo {
-		if g.NewPriority != "P1" && g.NewPriority != "P2" {
-			continue
-		}
-		if g.NewPriority == "P1" {
-			d.UrgentTodo++
-		}
-		d.Todo = append(d.Todo, g)
-	}
-	// The urgent ones first, also when an acknowledged finding ranks
-	// another update higher.
-	sort.SliceStable(d.Todo, func(i, j int) bool { return priorityRank[d.Todo[i].NewPriority] < priorityRank[d.Todo[j].NewPriority] })
-	if len(d.Todo) > 5 {
-		d.Todo = d.Todo[:5]
-	}
+	d.Updates = countUpdates(a.todoGroups(s, open))
 	if len(d.Quiet) > 5 {
 		d.Quiet = d.Quiet[:5]
 	}
@@ -686,7 +656,7 @@ const (
 // checked says how far a workload was compared with advisories. "None" in
 // a list must not look the same for an app with complete data, one whose
 // project publishes little, and one Varde could not compare at all.
-func (a *app) checked(wl inventory.Workload, id identify.Result, row workloadRow) (kind, note string) {
+func (a *app) checked(id identify.Result, row workloadRow) (kind, note string) {
 	app, known := a.d.Catalog.Current().App(id.AppID)
 	switch {
 	case row.NotApp != "":
@@ -764,7 +734,7 @@ func (a *app) inventory(w http.ResponseWriter, r *http.Request, cur *auth.Curren
 		apps = append(apps, appOption{ap.ID, ap.Name})
 	}
 	sort.Slice(apps, func(i, j int) bool { return strings.ToLower(apps[i].Name) < strings.ToLower(apps[j].Name) })
-	a.page(w, r, cur, http.StatusOK, "inventory", view{Title: "Apps and containers", Nav: "systems", Tabs: tabs("systems", "/systems/apps"), Data: struct {
+	a.page(w, r, cur, http.StatusOK, "inventory", view{Title: "All containers", Nav: "systems", Tabs: tabs("systems", "/systems/apps"), Data: struct {
 		Hosts         []hostGroup
 		Apps          []appOption
 		WithoutReads  int
@@ -1148,7 +1118,7 @@ func (a *app) workloadRow(s *snapshot, wl inventory.Workload, open map[string]in
 		row.NotApp = kind
 	}
 	row.EOL = eolNote(a.d.Catalog.Current(), eol, id)
-	row.Checked, row.CheckNote = a.checked(wl, id, row)
+	row.Checked, row.CheckNote = a.checked(id, row)
 	switch {
 	case wl.Container != nil:
 		row.Image, row.Stack = wl.Container.ImageRef, wl.Container.ComposeProject

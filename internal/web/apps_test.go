@@ -96,3 +96,36 @@ func TestAppsFrontPage(t *testing.T) {
 		t.Errorf("unknown app: %d", resp.StatusCode)
 	}
 }
+
+// When nothing of the highest priority has a fix, the card names the step
+// the analysis chose for the rest (a release that exists), not the version
+// an advisory names: the card and its image line must agree.
+func TestAppCardFallbackUsesTheStep(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "photos", Name: "photos", Container: &inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.2.0"}},
+	}, now)
+	photos := inventory.WorkloadID("local", inventory.KindContainer, "photos")
+	_ = h.store.ReplaceIdentifications(ctx, []identify.Result{{WorkloadID: photos, AppID: "immich", Confidence: identify.Exact, Version: "1.2.0", Trust: identify.Confirmed}}, now)
+	_, _ = h.store.SyncFindings(ctx, []store.FindingInput{
+		{WorkloadID: photos, AppID: "immich", AdvisoryID: "GHSA-nofix", MatchState: "affected", Detail: match.Finding{AdvisoryID: "GHSA-nofix"}},
+		// The advisory names 1.2.3, which was never published; the step is 1.2.4.
+		{WorkloadID: photos, AppID: "immich", AdvisoryID: "GHSA-later", MatchState: "affected", FixedIn: "1.2.3",
+			Detail: match.Finding{AdvisoryID: "GHSA-later", FixedIn: "1.2.3", Step: &match.Step{Version: "1.2.4", Fixes: 1, Total: 2, Advisory: "1.2.3"}}},
+	}, now)
+	_ = h.store.SetAssessments(ctx, []store.Assessment{
+		{ID: store.FindingID(photos, "GHSA-nofix"), Priority: "P1", Exposure: "lan"},
+		{ID: store.FindingID(photos, "GHSA-later"), Priority: "P2", Exposure: "lan"},
+	})
+	_, body := h.do(t, "GET", "/", nil, nil)
+	text := stripTags(html.UnescapeString(body))
+	if !strings.Contains(text, "Update to 1.2.4") || !strings.Contains(text, "image: ghcr.io/immich-app/immich-server:v1.2.4") {
+		t.Errorf("the card does not name the step:\n%s", text)
+	}
+	if strings.Contains(text, "Update to 1.2.3") || strings.Contains(text, "immich-server:v1.2.3") {
+		t.Error("the card names the advisory's unpublished version")
+	}
+}
