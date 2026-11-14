@@ -44,7 +44,7 @@ func TestSystemsList(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	nas := rowOf(t, body, "nas")
-	for _, want := range []string{"2 packages", "1 container", "1 urgent", "Docker on this server"} {
+	for _, want := range []string{"2 packages", "1 container", "1 to fix now", "Docker on this server"} {
 		if !strings.Contains(nas, want) {
 			t.Errorf("nas row lacks %q:\n%s", want, nas)
 		}
@@ -253,7 +253,7 @@ func TestSystemPackageFindingsShown(t *testing.T) {
 	}
 	_ = h.store.SetAssessments(ctx, []store.Assessment{{ID: store.FindingID(wid, "DEBIAN-CVE-2026-1"), Priority: "P3", Exposure: "unknown"}})
 	_, body := h.do(t, "GET", "/systems", nil, nil)
-	if row := rowOf(t, html.UnescapeString(body), "web"); !strings.Contains(row, "1 P3") {
+	if row := rowOf(t, html.UnescapeString(body), "web"); !strings.Contains(row, "1 later") {
 		t.Errorf("system row does not count the package finding:\n%s", row)
 	}
 	_, body = h.do(t, "GET", "/findings", nil, nil)

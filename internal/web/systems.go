@@ -165,10 +165,27 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 		}
 	}
 	v.Blind = blindSpots(m, total, len(v.Containers), nodeKey, a.agentInstallReady())
-	a.page(w, r, cur, http.StatusOK, "system", view{Title: m.Name, Nav: "systems", Data: struct {
+	// What needs doing on this machine, as on the front page: one row
+	// per app with its update, not one per advisory.
+	var updates []appCard
+	for _, c := range a.appCards(s) {
+		host := s.byID[c.Key].HostID
+		if h, ok := strings.CutPrefix(c.Key, "h:"); ok {
+			host = h
+		}
+		if on := s.hostOf[host]; on == nil || on.ID != m.ID {
+			continue
+		}
+		switch c.State {
+		case appNow, appSoon, appLater, appCheck:
+			updates = append(updates, c)
+		}
+	}
+	a.page(w, r, cur, http.StatusOK, "system", view{Title: m.Name, Nav: "systems", Tabs: tabs("systems", "/systems"), Data: struct {
 		systemView
 		Total int
-	}{v, total}})
+		ToDo  []appCard
+	}{v, total, updates}})
 }
 
 // blindSpots says what Varde does not read on a machine and how to change

@@ -126,4 +126,16 @@
   if (toast) {
     setTimeout(function () { toast.classList.add("toast--hidden"); }, 6000);
   }
+  // A link to a section that is folded away opens it: a fragment that
+  // names a closed <details>, or something inside one.
+  function openTarget() {
+    var id = window.location.hash.slice(1);
+    if (!id) { return; }
+    var el = document.getElementById(id);
+    for (; el; el = el.parentElement) {
+      if (el.tagName === "DETAILS") { el.open = true; }
+    }
+  }
+  window.addEventListener("hashchange", openTarget);
+  openTarget();
 })();

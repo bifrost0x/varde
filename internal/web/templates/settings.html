@@ -2,7 +2,7 @@
 {{define "locked"}}{{if .}}<span class="badge badge--muted"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#lock"></use></svg>set by environment</span>{{end}}{{end}}
 {{define "content"}}
 {{$d := .Data}}{{$csrf := .CSRF}}
-<div class="page-head"><div><h1>Settings</h1><p>Values set by environment variables are locked here.</p></div></div>
+<div class="page-head"><div><h1>Settings</h1><p>How Varde behaves. A value set in its environment is shown locked.</p></div></div>
 
 {{if $d.NewToken}}
 <div class="banner banner--ok" role="status"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>
@@ -11,8 +11,34 @@
 {{end}}
 {{if $d.Error}}<div class="banner banner--warn" role="alert"><p>{{$d.Error}}</p></div>{{end}}
 
+<nav class="chips" aria-label="Sections">
+  <a class="chip" href="#notifications">Notifications</a>
+  <a class="chip" href="#exposure">Internet</a>
+  <a class="chip" href="#networks">Networks</a>
+  <a class="chip" href="#registry">Versions</a>
+  <a class="chip" href="#package">Advisory data</a>
+  <a class="chip" href="#users">Users</a>
+  <a class="chip" href="#advanced">Advanced</a>
+</nav>
+
+<section class="panel" id="notifications" aria-labelledby="n-title">
+  <h2 id="n-title">Notifications</h2>
+  <p class="small muted">"Update now" is sent at once, "update soon" in the daily digest, the rest in the weekly one.</p>
+  {{if $d.Channels}}<p class="small">Configured: {{join $d.Channels ", "}}. Channels are configured with environment variables, so secrets never pass through the browser.</p>
+  <form method="post" action="/settings/notifications/test">{{template "csrf" $csrf}}<button class="btn" type="submit">Send test notification</button></form>
+  {{else}}<p class="small">No channel configured. Set <code>VARDE_NTFY_URL</code>, <code>VARDE_GOTIFY_URL</code>, <code>VARDE_WEBHOOK_URL</code> or <code>VARDE_SMTP_HOST</code>; see the configuration guide.</p>{{end}}
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="dh">Digest hour (0-23, local time) {{template "locked" (index $d.Locked "DIGEST_HOUR")}}</label><input id="dh" name="DIGEST_HOUR" type="number" min="0" max="23" value="{{$d.DigestHour}}" {{if index $d.Locked "DIGEST_HOUR"}}disabled{{end}}></div>
+    <div class="field"><label for="dw">Weekly digest day {{template "locked" (index $d.Locked "DIGEST_WEEKDAY")}}</label>
+      <select id="dw" name="DIGEST_WEEKDAY" {{if index $d.Locked "DIGEST_WEEKDAY"}}disabled{{end}}>{{range $w := list "monday" "tuesday" "wednesday" "thursday" "friday" "saturday" "sunday"}}<option value="{{$w}}" {{if eq $d.DigestWeekday $w}}selected{{end}}>{{title $w}}</option>{{end}}</select></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
 <section class="panel" id="exposure" aria-labelledby="exp-title">
-  <h2 id="exp-title">Exposure</h2>
+  <h2 id="exp-title">What is reachable from the internet</h2>
+  <p class="small muted">An app reachable from the internet is more urgent. Tell Varde which of your domains are public; it reads the routes of your reverse proxy.</p>
   <form class="form" method="post" action="/settings">
     {{template "csrf" $csrf}}
     <div class="field"><label for="pd">Public domains {{template "locked" (index $d.Locked "PUBLIC_DOMAINS")}}</label>
@@ -25,7 +51,7 @@
 </section>
 
 <section class="panel" id="networks" aria-labelledby="net-title">
-  <h2 id="net-title">Networks</h2>
+  <h2 id="net-title">Networks Varde may look at</h2>
   <form class="form" method="post" action="/settings">
     {{template "csrf" $csrf}}
     <div class="field"><label for="nets">Ranges Varde may contact</label>
@@ -39,7 +65,8 @@
 </section>
 
 <section class="panel" id="registry" aria-labelledby="reg-title">
-  <h2 id="reg-title">Versions of floating tags</h2>
+  <h2 id="reg-title">Versions and releases</h2>
+  <p class="small muted">Each switch says who learns what before you turn it on. All are off by default.</p>
   <form class="form" method="post" action="/settings">
     {{template "csrf" $csrf}}<input type="hidden" name="REGISTRY_TAGS" value="false">
     <label class="check"><input type="checkbox" name="REGISTRY_TAGS" value="true" {{if $d.RegistryTags}}checked{{end}}> Ask the registries which version tag points to a running image</label>
@@ -60,47 +87,8 @@
   </form>
 </section>
 
-<section class="panel" id="priorities" aria-labelledby="prio-title">
-  <h2 id="prio-title">Priorities</h2>
-  <p class="small muted">Known exploited (KEV) is always P1. Unverified findings never notify.</p>
-  <form class="form" method="post" action="/settings">
-    {{template "csrf" $csrf}}
-    <div class="field"><label for="p1c">P1: CVSS at or above, when public</label><input id="p1c" name="P1_CVSS_PUBLIC" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P1CVSSPublic}}"></div>
-    <div class="field"><label for="p1ce">P1: CVSS at or above, when public and EPSS high</label><input id="p1ce" name="P1_CVSS_PUBLIC_EPSS" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P1CVSSPublicEPSS}}"></div>
-    <div class="field"><label for="p1e">P1: EPSS at or above (0 to 1)</label><input id="p1e" name="P1_EPSS" type="number" step="0.01" min="0" max="1" value="{{$d.Policy.P1EPSS}}"></div>
-    <div class="field"><label for="p2c">P2: CVSS at or above</label><input id="p2c" name="P2_CVSS" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P2CVSS}}"></div>
-    <div class="field"><label for="p2ce">P2: CVSS at or above, when public or LAN</label><input id="p2ce" name="P2_CVSS_EXPOSED" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P2CVSSExposed}}"></div>
-    <button class="btn btn--primary" type="submit">Save</button>
-  </form>
-</section>
-
-<section class="panel" id="notifications" aria-labelledby="n-title">
-  <h2 id="n-title">Notifications</h2>
-  {{if $d.Channels}}<p class="small">Configured: {{join $d.Channels ", "}}. Channels are configured with environment variables, so secrets never pass through the browser.</p>
-  <form method="post" action="/settings/notifications/test">{{template "csrf" $csrf}}<button class="btn" type="submit">Send test notification</button></form>
-  {{else}}<p class="small">No channel configured. Set <code>VARDE_NTFY_URL</code>, <code>VARDE_GOTIFY_URL</code>, <code>VARDE_WEBHOOK_URL</code> or <code>VARDE_SMTP_HOST</code>; see the configuration guide.</p>{{end}}
-  <form class="form" method="post" action="/settings">
-    {{template "csrf" $csrf}}
-    <div class="field"><label for="dh">Digest hour (0-23, local time) {{template "locked" (index $d.Locked "DIGEST_HOUR")}}</label><input id="dh" name="DIGEST_HOUR" type="number" min="0" max="23" value="{{$d.DigestHour}}" {{if index $d.Locked "DIGEST_HOUR"}}disabled{{end}}></div>
-    <div class="field"><label for="dw">Weekly digest day {{template "locked" (index $d.Locked "DIGEST_WEEKDAY")}}</label>
-      <select id="dw" name="DIGEST_WEEKDAY" {{if index $d.Locked "DIGEST_WEEKDAY"}}disabled{{end}}>{{range $w := list "monday" "tuesday" "wednesday" "thursday" "friday" "saturday" "sunday"}}<option value="{{$w}}" {{if eq $d.DigestWeekday $w}}selected{{end}}>{{title $w}}</option>{{end}}</select></div>
-    <button class="btn btn--primary" type="submit">Save</button>
-  </form>
-</section>
-
-<section class="panel" id="sources" aria-labelledby="src-title">
-  <h2 id="src-title">Optional advisory sources</h2>
-  <form class="form" method="post" action="/settings">
-    {{template "csrf" $csrf}}
-    <input type="hidden" name="DIRECT_OSV" value="false"><input type="hidden" name="DIRECT_NVD" value="false">
-    <label class="check"><input type="checkbox" name="DIRECT_OSV" value="true" {{if $d.OSV}}checked{{end}} {{if index $d.Locked "DIRECT_OSV"}}disabled{{end}}><span>Query osv.dev {{template "locked" (index $d.Locked "DIRECT_OSV")}}<span class="cell-sub">Reveals the package names of apps you run to osv.dev. Also checks every installed package of your systems (Debian, Ubuntu, Alpine, AlmaLinux, Rocky Linux, openSUSE Leap) against its distribution's security data, which knows backported fixes, and reports each update that fixes one; this reveals the names, versions and releases of those packages to osv.dev.</span></span></label>
-    <label class="check"><input type="checkbox" name="DIRECT_NVD" value="true" {{if $d.NVD}}checked{{end}} {{if index $d.Locked "DIRECT_NVD"}}disabled{{end}}><span>Query the NVD by product {{template "locked" (index $d.Locked "DIRECT_NVD")}}<span class="cell-sub">Reveals which products you run to NIST. Helps apps without structured advisories.</span></span></label>
-    <button class="btn btn--primary" type="submit">Save</button>
-  </form>
-</section>
-
 <section class="panel" id="package" aria-labelledby="pkg-title">
-  <h2 id="pkg-title">Data package</h2>
+  <h2 id="pkg-title">Advisory data</h2>
   {{with $d.Package}}
   {{if not .Available}}
   <p class="hint">The data package is not available in this installation{{if .Reason}}: {{.Reason}}{{else}}.{{end}} Varde asks the public sources itself.</p>
@@ -122,8 +110,61 @@
   {{end}}
 </section>
 
-<section class="panel" id="uplink" aria-labelledby="up-title">
-  <h2 id="up-title">Uplink</h2>
+<section class="panel" id="sources" aria-labelledby="src-title">
+  <h2 id="src-title">Ask more sources yourself</h2>
+  <p class="small muted">Not needed for the apps the data package covers. Each source learns what you run.</p>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <input type="hidden" name="DIRECT_OSV" value="false"><input type="hidden" name="DIRECT_NVD" value="false">
+    <label class="check"><input type="checkbox" name="DIRECT_OSV" value="true" {{if $d.OSV}}checked{{end}} {{if index $d.Locked "DIRECT_OSV"}}disabled{{end}}><span>Query osv.dev {{template "locked" (index $d.Locked "DIRECT_OSV")}}<span class="cell-sub">Reveals the package names of apps you run to osv.dev. Also checks every installed package of your systems (Debian, Ubuntu, Alpine, AlmaLinux, Rocky Linux, openSUSE Leap) against its distribution's security data, which knows backported fixes, and reports each update that fixes one; this reveals the names, versions and releases of those packages to osv.dev.</span></span></label>
+    <label class="check"><input type="checkbox" name="DIRECT_NVD" value="true" {{if $d.NVD}}checked{{end}} {{if index $d.Locked "DIRECT_NVD"}}disabled{{end}}><span>Query the NVD by product {{template "locked" (index $d.Locked "DIRECT_NVD")}}<span class="cell-sub">Reveals which products you run to NIST. Helps apps without structured advisories.</span></span></label>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel" id="users" aria-labelledby="u-title">
+  <h2 id="u-title">Users and password</h2>
+  <table class="table"><thead><tr><th scope="col">User</th><th scope="col">Created</th><th scope="col">Last sign-in</th><th scope="col"></th></tr></thead><tbody>
+  {{range $d.Users}}<tr><td data-label="User">{{.Username}}</td><td data-label="Created">{{date .CreatedAt}}</td><td data-label="Last sign-in">{{if .LastLogin}}{{since .LastLogin}}{{else}}<span class="muted">never</span>{{end}}</td>
+    <td>{{if ne .ID $d.Me}}<form method="post" action="/settings/users/{{.ID}}/delete" data-confirm="Delete the user {{.Username}}?">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Delete</button></form>{{end}}</td></tr>{{end}}
+  </tbody></table>
+  <div class="grid-2">
+    <form class="form" method="post" action="/settings/users">
+      {{template "csrf" $csrf}}
+      <h3>Add user</h3>
+      <div class="field"><label for="nu">Username</label><input id="nu" name="username" type="text" required maxlength="64" autocomplete="off"></div>
+      <div class="field"><label for="np">Password</label><input id="np" name="password" type="password" required minlength="12" autocomplete="new-password"></div>
+      <button class="btn" type="submit">Add user</button>
+    </form>
+    <form class="form" method="post" action="/settings/password">
+      {{template "csrf" $csrf}}
+      <h3>Change your password</h3>
+      <div class="field"><label for="cp">Current password</label><input id="cp" name="current" type="password" required autocomplete="current-password"></div>
+      <div class="field"><label for="pp">New password</label><input id="pp" name="password" type="password" required minlength="12" autocomplete="new-password"></div>
+      <button class="btn" type="submit">Change password</button>
+    </form>
+  </div>
+</section>
+
+<h2 id="advanced" class="section-title">Advanced</h2>
+<p class="small muted">Nothing here is needed to run Varde.</p>
+
+<details class="panel fold" id="priorities">
+  <summary><h2 id="prio-title">When an update counts as urgent</h2></summary>
+  <p class="small muted">The thresholds behind "update now" (P1) and "update soon" (P2). A flaw known to be exploited is always "update now"; what Varde cannot confirm never notifies. The defaults suit most homelabs.</p>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="p1c">P1: CVSS at or above, when public</label><input id="p1c" name="P1_CVSS_PUBLIC" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P1CVSSPublic}}"></div>
+    <div class="field"><label for="p1ce">P1: CVSS at or above, when public and EPSS high</label><input id="p1ce" name="P1_CVSS_PUBLIC_EPSS" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P1CVSSPublicEPSS}}"></div>
+    <div class="field"><label for="p1e">P1: EPSS at or above (0 to 1)</label><input id="p1e" name="P1_EPSS" type="number" step="0.01" min="0" max="1" value="{{$d.Policy.P1EPSS}}"></div>
+    <div class="field"><label for="p2c">P2: CVSS at or above</label><input id="p2c" name="P2_CVSS" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P2CVSS}}"></div>
+    <div class="field"><label for="p2ce">P2: CVSS at or above, when public or LAN</label><input id="p2ce" name="P2_CVSS_EXPOSED" type="number" step="0.1" min="0" max="10" value="{{$d.Policy.P2CVSSExposed}}"></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</details>
+
+<details class="panel fold" id="uplink">
+  <summary><h2 id="up-title">Uplink</h2></summary>
   {{with $d.Uplink}}
   {{if .Locked}}
   <p class="hint">Set by VARDE_MODE in the environment.</p>
@@ -153,10 +194,10 @@
   {{if .LicenseID}}<form method="post" action="/settings/uplink/remove" data-confirm="Remove the stored license?">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Remove license</button></form>{{end}}
   {{end}}
   {{end}}
-</section>
+</details>
 
-<section class="panel" id="tokens" aria-labelledby="tok-title">
-  <h2 id="tok-title">API tokens</h2>
+<details class="panel fold" id="tokens">
+  <summary><h2 id="tok-title">API tokens</h2></summary>
   {{if $d.Tokens}}
   <table class="table"><thead><tr><th scope="col">Name</th><th scope="col">Scope</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col"></th></tr></thead><tbody>
   {{range $d.Tokens}}<tr><td data-label="Name">{{.Name}}</td><td data-label="Scope">{{.Scope}}</td><td data-label="Created">{{date .CreatedAt}}{{if .ExpiresAt}}<span class="cell-sub">expires {{date .ExpiresAt}}</span>{{end}}</td><td data-label="Last used">{{if .LastUsed}}{{since .LastUsed}}{{else}}<span class="muted">never</span>{{end}}</td>
@@ -170,38 +211,15 @@
     <div class="field"><label for="te">Expires (days)</label><input id="te" name="days" type="number" min="1" max="3650" placeholder="never"></div>
     <button class="btn" type="submit">Create token</button>
   </form>
-</section>
+</details>
 
-<section class="panel" id="users" aria-labelledby="u-title">
-  <h2 id="u-title">Users</h2>
-  <table class="table"><thead><tr><th scope="col">User</th><th scope="col">Created</th><th scope="col">Last sign-in</th><th scope="col"></th></tr></thead><tbody>
-  {{range $d.Users}}<tr><td data-label="User">{{.Username}}</td><td data-label="Created">{{date .CreatedAt}}</td><td data-label="Last sign-in">{{if .LastLogin}}{{since .LastLogin}}{{else}}<span class="muted">never</span>{{end}}</td>
-    <td>{{if ne .ID $d.Me}}<form method="post" action="/settings/users/{{.ID}}/delete" data-confirm="Delete the user {{.Username}}?">{{template "csrf" $csrf}}<button class="btn btn--danger" type="submit">Delete</button></form>{{end}}</td></tr>{{end}}
-  </tbody></table>
-  <div class="grid-2">
-    <form class="form" method="post" action="/settings/users">
-      {{template "csrf" $csrf}}
-      <h3>Add user</h3>
-      <div class="field"><label for="nu">Username</label><input id="nu" name="username" type="text" required maxlength="64" autocomplete="off"></div>
-      <div class="field"><label for="np">Password</label><input id="np" name="password" type="password" required minlength="12" autocomplete="new-password"></div>
-      <button class="btn" type="submit">Add user</button>
-    </form>
-    <form class="form" method="post" action="/settings/password">
-      {{template "csrf" $csrf}}
-      <h3>Change your password</h3>
-      <div class="field"><label for="cp">Current password</label><input id="cp" name="current" type="password" required autocomplete="current-password"></div>
-      <div class="field"><label for="pp">New password</label><input id="pp" name="password" type="password" required minlength="12" autocomplete="new-password"></div>
-      <button class="btn" type="submit">Change password</button>
-    </form>
-  </div>
-</section>
-
-<section class="panel" id="audit" aria-labelledby="a-title">
-  <h2 id="a-title">Audit log</h2>
+<details class="panel fold" id="audit">
+  <summary><h2 id="a-title">Audit log</h2></summary>
   {{if $d.Audit}}
   <table class="table"><thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Detail</th></tr></thead><tbody>
   {{range $d.Audit}}<tr><td data-label="When" class="nowrap">{{date .At}}</td><td data-label="Who">{{.Actor}}</td><td data-label="Action" class="mono">{{.Action}}</td><td data-label="Detail" class="small">{{truncate .Detail 160}}</td></tr>{{end}}
   </tbody></table>
   {{else}}<p class="small muted">No entries.</p>{{end}}
-</section>
+</details>
+
 {{end}}

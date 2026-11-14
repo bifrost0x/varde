@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>History</h1><p>What was fixed, when and how, what came in new, and what you did about it. To keep a report, print this page or save it as PDF from your browser, or download the entries as CSV.</p></div>
+  <div><h1>History</h1><p>What was fixed and when, what came in new, and what you did about it. Print the page or download the entries as CSV to keep a report.</p></div>
   <div class="actions no-print"><a class="btn btn--ghost" href="/findings/history.csv?days={{$d.Days}}{{if $d.HostID}}&amp;host={{$d.HostID}}{{end}}">Download CSV</a></div>
 </div>
 <form class="filters no-print" method="get" action="/findings/history">
@@ -43,7 +43,7 @@
 
 {{if $d.Oldest}}
 <section class="panel" aria-labelledby="h-oldest">
-  <div class="panel__head"><h2 id="h-oldest">Waiting longest</h2><a class="small no-print" href="/findings">All open findings</a></div>
+  <div class="panel__head"><h2 id="h-oldest">Waiting longest</h2><a class="small no-print" href="/findings">All updates to do</a></div>
   {{template "findingtable" $d.Oldest}}
 </section>
 {{end}}

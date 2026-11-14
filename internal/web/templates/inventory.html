@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}{{$csrf := .CSRF}}
 <div class="page-head">
-  <div><h1>Apps and containers</h1><p>Every container and every app Varde recognised among the installed packages, grouped by system, with the version and where it comes from. The full package list of a system is on its page.</p></div>
+  <div><h1>All containers</h1><p>Every container and installed app by machine, with its version and where Varde reads it from.</p></div>
 </div>
 {{if $d.WithoutReads}}<p class="small muted">{{plural $d.WithoutReads "further system"}} without containers or recognised apps are listed under <a href="/systems">Systems</a>, with their packages and what Varde cannot read yet.</p>{{end}}
 {{range $d.Hosts}}

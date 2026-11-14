@@ -173,4 +173,4 @@
   </details>{{end}}
 </article>{{end}}
 
-{{define "approw"}}<li class="approw approw--{{.State}}">{{template "appicon" .State}}<a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span><span class="approw__state">{{.Label}}{{if .Newer}} · newest release <span class="mono">{{.Newer}}</span>{{end}}</span>{{if .Note}}<span class="cell-sub">{{.Note}}</span>{{end}}</li>{{end}}
+{{define "approw"}}<li class="approw approw--{{.State}}">{{template "appicon" .State}}<a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span><span class="approw__state">{{.Label}}{{if .Newer}} · newest release <span class="mono">{{.Newer}}</span>{{end}}</span>{{if .Action}}<span class="cell-sub">{{.Action}}{{if .Fixes}} · {{.Fixes}}{{end}}</span>{{end}}{{if .Note}}<span class="cell-sub">{{.Note}}</span>{{end}}</li>{{end}}

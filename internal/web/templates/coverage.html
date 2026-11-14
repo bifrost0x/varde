@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>Gaps</h1><p>What Varde cannot assess yet: apps it does not recognise, versions it cannot read, routes it cannot check. Every gap comes with the step that closes it.</p></div>
+  <div><h1>Gaps</h1><p>What Varde cannot check yet, and the step that closes each gap.</p></div>
 </div>
 <section class="panel">
   <p>Of {{plural $d.Summary.Total "app"}} on your systems, Varde recognises {{$d.Summary.Identified}} and compares {{$d.Summary.Assessable}} with advisories · {{len $d.Summary.VersionUnknown}} with unknown version · {{plural (len $d.Summary.PublicRoutes) "public route"}} Varde cannot check</p>

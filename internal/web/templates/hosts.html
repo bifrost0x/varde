@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>Systems</h1><p>Every machine Varde knows: what is installed on it, what is affected, and where Varde knows it from. A machine several sources report (a Proxmox guest that also runs the agent, for example) is one system. Open one for its full inventory.</p></div>
+  <div><h1>Machines</h1><p>Every machine Varde knows, with what runs on it and what needs an update. Open one for everything installed on it.</p></div>
   <div class="actions"><a class="btn" href="/connections">Connect more</a></div>
 </div>
 {{range $d.Notices}}
@@ -17,13 +17,13 @@
     <p>A machine is listed once Varde can read something on it. That happens in four ways: Docker on this server; the agent on a host (every package and container); a platform you connect, such as Proxmox, UniFi or a NAS (its guests and its own version); or an app that tells its version to anyone who asks, the way Nextcloud does. The last one needs nothing from you, which is why a machine can appear after a scan alone while others do not.</p>
   </details>
   <table class="table">
-    <thead><tr><th scope="col">System</th><th scope="col">Installed</th><th scope="col">Affected</th><th scope="col">Known through</th><th scope="col">Last report</th></tr></thead>
+    <thead><tr><th scope="col">System</th><th scope="col">Installed</th><th scope="col">Open flaws</th><th scope="col">Known through</th><th scope="col">Last report</th></tr></thead>
     <tbody>
     {{range $d.Systems}}{{$m := .Machine}}
     <tr{{if .Guest}} class="row--guest"{{end}}>
       <td data-label="System"><a href="/systems/{{$m.ID}}">{{$m.Name}}</a>{{if $m.Self}} <span class="badge badge--muted">this server</span>{{end}}<span class="cell-sub">{{machineKind $m.Kind}}{{if $m.ParentName}} on {{$m.ParentName}}{{end}}{{if $m.OS}} · {{$m.OS}}{{end}}{{if $m.Addresses}} · <span class="mono">{{join $m.Addresses ", "}}</span>{{end}}</span></td>
       <td data-label="Installed">{{if .Read}}<a href="/systems/{{$m.ID}}#packages">{{if .Packages}}{{plural .Packages "package"}}{{end}}{{if and .Packages .Containers}} · {{end}}{{if .Containers}}{{plural .Containers "container"}}{{end}}{{if and (not .Packages) (not .Containers)}}{{plural .Apps "app"}}{{end}}</a>{{if and .Apps (or .Packages .Containers)}}<span class="cell-sub">{{plural .Apps "app"}} recognised</span>{{end}}{{if .Reboot}} <span class="badge badge--p2" title="{{.Reboot}}">restart needed</span>{{end}}{{else if eq $m.State "stale"}}<span class="badge badge--p2">not reporting</span>{{else if eq $m.State "paused"}}<span class="badge badge--muted">switched off</span>{{else}}<span class="badge badge--muted">unknown</span><span class="cell-sub"><a href="/systems/{{$m.ID}}">How to read it</a></span>{{end}}</td>
-      <td data-label="Affected">{{if .Open}}<a href="/systems/{{$m.ID}}">{{if .P1}}<span class="badge badge--p1">{{.P1}} urgent</span> {{end}}{{if .P2}}<span class="badge badge--p2">{{.P2}} P2</span> {{end}}{{if .P3}}<span class="badge badge--p3">{{.P3}} P3</span> {{end}}{{if .Unverified}}<span class="badge badge--unverified">{{.Unverified}} to check</span>{{end}}</a>{{else if .Read}}<span class="muted">nothing open</span>{{else}}<span class="muted">–</span>{{end}}</td>
+      <td data-label="Open flaws">{{if .Open}}<a href="/systems/{{$m.ID}}">{{if .P1}}<span class="badge badge--p1" title="Priority P1">{{.P1}} to fix now</span> {{end}}{{if .P2}}<span class="badge badge--p2" title="Priority P2">{{.P2}} soon</span> {{end}}{{if .P3}}<span class="badge badge--p3" title="Priority P3">{{.P3}} later</span> {{end}}{{if .Unverified}}<span class="badge badge--unverified">{{.Unverified}} to check</span>{{end}}</a>{{else if .Read}}<span class="muted">nothing open</span>{{else}}<span class="muted">–</span>{{end}}</td>
       <td data-label="Known through"><ul class="source-list">{{range $m.Evidence}}<li>{{evidenceLabel .Source}}{{if eq .State "stale"}} <span class="badge badge--p2">not reporting</span>{{else if eq .State "paused"}} <span class="badge badge--muted">off</span>{{end}}</li>{{end}}</ul></td>
       <td data-label="Last report">{{since $m.LastSeen}}</td>
     </tr>

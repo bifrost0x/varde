@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>Attack paths</h1><p>How an attacker gets from the internet or your LAN to a foothold on your systems, built from what Varde knows: the services that answer, the proxy routes, the findings and how containers and guests run. Fixing the first flaw on a path cuts it.</p></div>
+  <div><h1>Attack paths</h1><p>How an attacker could get from the internet or your network into your systems, from what Varde knows. Fixing the first flaw of a path closes it.</p></div>
 </div>
 <div class="stats">
   <div class="stat{{if $d.InternetCount}} stat--p1{{end}}"><span class="stat__label">Paths from the internet</span><span class="stat__value">{{$d.InternetCount}}</span></div>

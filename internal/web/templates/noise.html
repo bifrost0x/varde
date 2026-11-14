@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>Background noise</h1><p>Findings no attack path uses, each with the reason. They stay listed and are fixed with the next regular update, but they never wake you: Varde keeps them at P3, or P2 when the flaw is known to be exploited.</p></div>
+  <div><h1>Background noise</h1><p>Flaws no attack path uses, each with the reason. They are fixed with the next regular update and never wake you; one that is known to be exploited still goes into the daily digest.</p></div>
 </div>
 {{if $d.Count}}
 <p class="small muted">{{plural $d.Count "finding"}} in {{len $d.Groups}} {{if eq (len $d.Groups) 1}}group{{else}}groups{{end}}.</p>

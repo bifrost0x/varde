@@ -584,3 +584,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .fold > summary h2 { margin: 0; font-size: var(--fs-md); }
 .fold[open] > summary { margin-bottom: 12px; }
 @media (prefers-reduced-motion: reduce) { .fold > summary::before { transition: none; } }
+
+.section-title { margin: 28px 0 4px; }
+.panel[id], .fold[id], .section-title { scroll-margin-top: 72px; }
+
+.approws--plain { border: 0; background: transparent; margin-bottom: 12px; }
+.approws--plain .approw { padding-left: 0; padding-right: 0; }
