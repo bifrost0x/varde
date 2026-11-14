@@ -211,3 +211,53 @@ func TestTargetIsAnExistingRelease(t *testing.T) {
 		t.Errorf("pre-release target = %+v", tg)
 	}
 }
+
+// One version per finding: the fix on the running line when the line
+// fixes this finding, the newer line otherwise, and the finding's own fix
+// when the target does not reach it.
+func TestStep(t *testing.T) {
+	line := &Target{Version: "1.27.3", Fixes: 96, Total: 152}
+	tg := &Target{Version: "28.3.0", Fixes: 151, Total: 152, NewLine: true, Line: line}
+	cases := []struct {
+		name    string
+		fixedIn string
+		target  *Target
+		want    Step
+	}{
+		{"line fixes it", "1.26.3", tg, Step{Version: "1.27.3", Fixes: 96, Total: 152, Advisory: "1.26.3",
+			All: &Target{Version: "28.3.0", Fixes: 151, Total: 152, NewLine: true}}},
+		{"only the new line fixes it", "28.0.0", tg, Step{Version: "28.3.0", Fixes: 151, Total: 152, NewLine: true, Advisory: "28.0.0"}},
+		{"the fix is the target", "1.2.4", &Target{Version: "1.2.4", Fixes: 2, Total: 2}, Step{Version: "1.2.4", Fixes: 2, Total: 2}},
+		{"no target", "1.2.4", nil, Step{Version: "1.2.4", Fixes: 1, Total: 1}},
+		{"target below its fix", "3.0.0", &Target{Version: "2.5.0", Fixes: 4, Total: 5}, Step{Version: "3.0.0", Fixes: 1, Total: 5}},
+	}
+	for _, c := range cases {
+		got := step(version.SemVer, c.fixedIn, c.target)
+		if got == nil {
+			t.Errorf("%s: no step", c.name)
+			continue
+		}
+		gotAll, wantAll := got.All, c.want.All
+		got.All, c.want.All = nil, nil
+		if *got != c.want {
+			t.Errorf("%s: %+v, want %+v", c.name, *got, c.want)
+		}
+		if (gotAll == nil) != (wantAll == nil) || (gotAll != nil && *gotAll != *wantAll) {
+			t.Errorf("%s: all = %+v, want %+v", c.name, gotAll, wantAll)
+		}
+	}
+	if s := step(version.SemVer, "", tg); s != nil {
+		t.Errorf("a finding nothing fixes got a step: %+v", s)
+	}
+	// Through Match: every affected finding of a version carries it.
+	a := app(version.SemVer)
+	fs := Match(Input{App: a, Version: "1.2.0"}, []Advisory{ghsa("GHSA-1", nil, "< 1.2.3", "1.2.3"), ghsa("GHSA-2", nil, "< 1.2.1", "1.2.1")}, Enrichment{})
+	for _, f := range fs {
+		if f.Step == nil || f.Step.Version != "1.2.3" || f.Step.Fixes != 2 {
+			t.Errorf("%s: step %+v", f.AdvisoryID, f.Step)
+		}
+	}
+	if fs[1].Step.Advisory != "1.2.1" || fs[0].Step.Advisory != "" {
+		t.Errorf("advisory versions: %q %q", fs[0].Step.Advisory, fs[1].Step.Advisory)
+	}
+}

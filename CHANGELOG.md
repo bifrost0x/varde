@@ -19,6 +19,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A finding names one version to update to. Its page said "update to" the advisory's own fixed
+  version, a second version that fixes most advisories, and put a third into the image line.
+  The analysis now chooses one (the fix on the running release line when that line fixes the
+  finding, else the newer line), and the page, its image line and the notification name it;
+  the advisory's fixed version and what only a newer major version fixes are said beside it.
 - An advisory that names only a package of another project (a runner beside the server, a
   library the report blames, a sibling image of the same author) no longer counts as affected
   for apps without a reviewed package list: it is shown as "needs a check" with the package it

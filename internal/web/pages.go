@@ -581,12 +581,18 @@ func (a *app) update(ctx context.Context, f store.Finding, m match.Finding, wl i
 	if f.MatchState != string(match.Affected) || wl.Container == nil {
 		return nil
 	}
+	// The version the page names is the one the image line carries
+	// (match.Step). A finding stored before the step existed has only
+	// its own fixed version.
 	target := f.FixedIn
-	if m.Target != nil && m.Target.Version != "" {
+	switch {
+	case m.Step != nil:
+		target = m.Step.Version
+	case m.Target != nil && m.Target.Version != "":
+		// Stored before the step: the target, or the running line's when
+		// the target leaves the line. The next analysis replaces it.
 		target = m.Target.Version
 		if m.Target.NewLine && m.Target.Line != nil && m.Target.Line.Version != "" {
-			// Stay on the running release line when it fixes something;
-			// a new major version needs upgrade steps first.
 			target = m.Target.Line.Version
 		}
 	}

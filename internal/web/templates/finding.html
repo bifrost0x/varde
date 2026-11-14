@@ -38,8 +38,12 @@
       </div>
       {{end}}
     {{else if $f.FixedIn}}
+      {{with $m.Step}}
+      <p>Update <strong>{{$.Data.WorkloadName}}</strong> to <span class="mono">{{.Version}}</span>{{if not .Advisory}} or later{{end}}.{{if .NewLine}} It is a new major version; read the upgrade notes first.{{end}}</p>
+      <p class="small">{{if .Advisory}}This advisory is fixed from <span class="mono">{{.Advisory}}</span> on{{if gt .Total 1}}; <span class="mono">{{.Version}}</span> fixes it together with {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of the {{.Total}}{{end}} advisories of the version running here{{else}}, and <span class="mono">{{.Version}}</span> is the release that brings the fix{{end}}.{{else if gt .Total 1}}It fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of the {{.Total}}{{end}} advisories of the version running here.{{end}}{{with .All}} The rest need <span class="mono">{{.Version}}</span>, a new major version that fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of {{.Total}}{{end}}; read its upgrade notes before you go there.{{end}}</p>
+      {{else}}
       <p>Update <strong>{{.Data.WorkloadName}}</strong> to <span class="mono">{{$f.FixedIn}}</span> or later.</p>
-      {{with $m.Target}}{{if and .Version (gt .Total 1)}}<p class="small">Updating to <span class="mono">{{.Version}}</span> fixes {{if eq .Fixes .Total}}all {{.Total}}{{else}}{{.Fixes}} of {{.Total}}{{end}} advisories of this version together.{{if .NewLine}} It is a new major version; read the upgrade notes first.{{end}}</p>{{end}}{{end}}
+      {{end}}
     {{else}}
       <p>No fixed version is published yet. Limit who can reach <strong>{{.Data.WorkloadName}}</strong> until one is available.</p>
     {{end}}

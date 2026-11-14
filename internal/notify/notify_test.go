@@ -627,3 +627,25 @@ func TestUpdatesCountContainersAndHosts(t *testing.T) {
 		t.Errorf("updates = %d, want 3 (container a, container b, the host's packages)", n)
 	}
 }
+
+// A message names the version the finding's page names: the update, with
+// the advisory's own fixed version beside it when the two differ, and one
+// update for findings that share it.
+func TestMessageNamesTheUpdate(t *testing.T) {
+	one := item("1", policy.P1)
+	one.FixedIn, one.Update = "1.120.1", "1.121.1"
+	if text := Immediate([]Item{one}).Body; !strings.Contains(text, "Action: update to 1.121.1 (this advisory is fixed from 1.120.1 on)") {
+		t.Errorf("single finding:\n%s", text)
+	}
+	same := item("2", policy.P1)
+	same.Update = "1.121.0" // equals its fixed version
+	if text := Immediate([]Item{same}).Body; !strings.Contains(text, "Action: update to 1.121.0 or later") {
+		t.Errorf("update equal to the fix:\n%s", text)
+	}
+	a, b := item("3", policy.P1), item("4", policy.P1)
+	a.FixedIn, b.FixedIn = "1.120.1", "1.121.0"
+	a.Update, b.Update = "1.121.1", "1.121.1"
+	if fixes, target := groupTarget([]Item{a, b}); fixes != 2 || target != "1.121.1" {
+		t.Errorf("group target = %d %q", fixes, target)
+	}
+}

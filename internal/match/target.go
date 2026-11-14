@@ -161,3 +161,70 @@ func affectsAny(app *catalog.App, v version.Version, group []Advisory) bool {
 	}
 	return false
 }
+
+// Step is the one update to name for a finding: the version to install so
+// that this finding is fixed, chosen so that it fixes as many of the other
+// findings of the running version as it can without leaving the release
+// line when the line has a fix for this one. Every place that tells a user
+// what to install (the finding's page, its image line, a notification)
+// names this version, so they never disagree.
+type Step struct {
+	Version string `json:"version"`
+	// Fixes of Total affected advisories of the running version are fixed
+	// by Version, this one among them.
+	Fixes int `json:"fixes"`
+	Total int `json:"total"`
+	// NewLine is set when Version leaves the running release line.
+	NewLine bool `json:"new_line,omitempty"`
+	// Advisory is the version this finding's advisory names as fixed,
+	// when it differs from Version.
+	Advisory string `json:"advisory,omitempty"`
+	// All is the update that fixes more than Version does, on a newer
+	// release line; nil when Version already is that update.
+	All *Target `json:"all,omitempty"`
+}
+
+// step chooses the update for one affected finding from its own fixed
+// version and the target of its app version.
+func step(scheme version.Scheme, fixedIn string, t *Target) *Step {
+	if fixedIn == "" {
+		return nil // nothing fixes this finding yet
+	}
+	s := &Step{Version: fixedIn, Fixes: 1, Total: 1}
+	if t == nil || t.Version == "" {
+		return s
+	}
+	s.Total = t.Total
+	covers := func(v string) bool { return atLeast(scheme, v, fixedIn) }
+	switch {
+	case t.NewLine && t.Line != nil && t.Line.Version != "" && covers(t.Line.Version):
+		// The running line fixes this one: stay on it, and say what
+		// only the newer line fixes.
+		s.Version, s.Fixes = t.Line.Version, t.Line.Fixes
+		if t.Fixes > t.Line.Fixes {
+			s.All = &Target{Version: t.Version, Fixes: t.Fixes, Total: t.Total, NewLine: true}
+		}
+	case covers(t.Version):
+		s.Version, s.Fixes, s.NewLine = t.Version, t.Fixes, t.NewLine
+	default:
+		// The target does not reach this finding's fix (it was chosen
+		// for the others): its own fixed version stands.
+		s.Fixes = 1
+	}
+	if s.Version != fixedIn {
+		s.Advisory = fixedIn
+	}
+	return s
+}
+
+// atLeast reports whether v is at or above min; false when they cannot be
+// compared.
+func atLeast(scheme version.Scheme, v, min string) bool {
+	a, errA := version.Parse(scheme, v)
+	b, errB := version.Parse(scheme, min)
+	if errA != nil || errB != nil {
+		return false
+	}
+	c, ok := a.Compare(b)
+	return ok && c >= 0
+}

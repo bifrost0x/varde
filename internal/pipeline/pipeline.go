@@ -393,6 +393,9 @@ func (p *Pipeline) Candidates(ctx context.Context) ([]notify.Candidate, error) {
 			Priority: policy.Priority(f.Priority), PriorityReason: f.PriorityReason, MatchState: f.MatchState,
 			Image: m.Image, PathClass: f.PathClass, PathReason: f.PathReason,
 		}
+		if m.Step != nil && !m.Image {
+			it.Update = m.Step.Version
+		}
 		if p.opts.BaseURL != "" {
 			it.FindingURL = strings.TrimRight(p.opts.BaseURL, "/") + "/findings/" + f.ID
 		}

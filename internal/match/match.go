@@ -86,6 +86,9 @@ type Finding struct {
 	// Target is the update that fixes the affected findings of this app
 	// version together; it is the same on every affected finding of a run.
 	Target *Target `json:"target,omitempty"`
+	// Step is the one update to name for this finding (see Step); nil
+	// when nothing fixes it yet or it is not confirmed.
+	Step *Step `json:"step,omitempty"`
 }
 
 // Evidence records why a finding exists.
@@ -174,10 +177,10 @@ func Match(in Input, advs []Advisory, enr Enrichment) []Finding {
 		}
 		findings = append(findings, finding(in, group, best, enr))
 	}
-	if t := target(in.App, running, affected, in.Releases); t != nil {
-		for _, i := range affectedIdx {
-			findings[i].Target = t
-		}
+	t := target(in.App, running, affected, in.Releases)
+	for _, i := range affectedIdx {
+		findings[i].Target = t
+		findings[i].Step = step(in.App.Version.Scheme, findings[i].FixedIn, t)
 	}
 	sort.Slice(findings, func(i, j int) bool { return findings[i].AdvisoryID < findings[j].AdvisoryID })
 	return findings

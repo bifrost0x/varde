@@ -28,27 +28,32 @@ const (
 
 // Item is one finding prepared for rendering.
 type Item struct {
-	FindingID        string          `json:"finding_id"`
-	AppID            string          `json:"app_id"`
-	AppName          string          `json:"app"`
-	WorkloadName     string          `json:"workload"`
-	HostName         string          `json:"host,omitempty"`
-	Version          string          `json:"version,omitempty"`
-	AdvisoryID       string          `json:"advisory_id"`
-	Aliases          []string        `json:"aliases,omitempty"`
-	Summary          string          `json:"summary,omitempty"`
-	Severity         string          `json:"severity,omitempty"`
-	CVSS             float64         `json:"cvss,omitempty"`
-	KEV              bool            `json:"kev"`
-	EPSS             float64         `json:"epss,omitempty"`
-	Exposure         string          `json:"exposure"`
-	ExposureEvidence []string        `json:"exposure_evidence,omitempty"`
-	FixedIn          string          `json:"fixed_in,omitempty"`
-	AdvisoryURL      string          `json:"advisory_url,omitempty"`
-	FindingURL       string          `json:"finding_url,omitempty"`
-	Priority         policy.Priority `json:"priority"`
-	PriorityReason   string          `json:"priority_reason,omitempty"`
-	MatchState       string          `json:"match_state"`
+	FindingID        string   `json:"finding_id"`
+	AppID            string   `json:"app_id"`
+	AppName          string   `json:"app"`
+	WorkloadName     string   `json:"workload"`
+	HostName         string   `json:"host,omitempty"`
+	Version          string   `json:"version,omitempty"`
+	AdvisoryID       string   `json:"advisory_id"`
+	Aliases          []string `json:"aliases,omitempty"`
+	Summary          string   `json:"summary,omitempty"`
+	Severity         string   `json:"severity,omitempty"`
+	CVSS             float64  `json:"cvss,omitempty"`
+	KEV              bool     `json:"kev"`
+	EPSS             float64  `json:"epss,omitempty"`
+	Exposure         string   `json:"exposure"`
+	ExposureEvidence []string `json:"exposure_evidence,omitempty"`
+	FixedIn          string   `json:"fixed_in,omitempty"`
+	// Update is the version to install (match.Step): the release that
+	// fixes this finding together with as many others of the running
+	// version as possible. Empty for image packages and for findings
+	// stored before it existed; FixedIn is then the version to name.
+	Update         string          `json:"update,omitempty"`
+	AdvisoryURL    string          `json:"advisory_url,omitempty"`
+	FindingURL     string          `json:"finding_url,omitempty"`
+	Priority       policy.Priority `json:"priority"`
+	PriorityReason string          `json:"priority_reason,omitempty"`
+	MatchState     string          `json:"match_state"`
 	// Image marks a package of a container's image: a newer image fixes
 	// it (ADR 0033).
 	Image bool `json:"image,omitempty"`
@@ -204,6 +209,8 @@ func writeItem(b *strings.Builder, it Item, verbose bool) {
 	switch {
 	case it.FixedIn != "" && it.Image:
 		fmt.Fprintf(b, "Action: pull a newer image whose %s is %s or later and recreate the container\n", clean(packageName(it), 128), clean(it.FixedIn, 64))
+	case it.Update != "" && it.Update != it.FixedIn:
+		fmt.Fprintf(b, "Action: update to %s (this advisory is fixed from %s on)\n", clean(it.Update, 64), clean(it.FixedIn, 64))
 	case it.FixedIn != "":
 		fmt.Fprintf(b, "Action: update to %s or later\n", clean(it.FixedIn, 64))
 	default:
@@ -422,6 +429,21 @@ func writeGroup(b *strings.Builder, g []Item) {
 // order, otherwise the fixed version all findings share, if any.
 func groupTarget(g []Item) (fixes int, target string) {
 	eco, _, system := distro.ParseSystemAppID(g[0].AppID)
+	// Findings of one app version that share their update name it, as
+	// their pages do.
+	if u := g[0].Update; u != "" && !system {
+		same := true
+		for _, it := range g {
+			if it.FixedIn != "" {
+				fixes++
+				same = same && it.Update == u
+			}
+		}
+		if same && fixes > 0 {
+			return fixes, u
+		}
+		fixes = 0
+	}
 	for _, it := range g {
 		if it.FixedIn == "" {
 			continue
