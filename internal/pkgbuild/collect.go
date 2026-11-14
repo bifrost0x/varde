@@ -64,10 +64,11 @@ type Stats struct {
 	OSVApps, NVDApps, OSVRequests, NVDRequests int
 	OSVError, NVDError                         string
 	// NotesRepos are the repositories whose release notes are read,
-	// NotesRequests the requests that took and NotesError why the reads
-	// stopped early; what earlier builds stored still ships.
-	NotesRepos, NotesRequests int
-	NotesError                string
+	// NotesRequests the requests that took, NotesFailed the repositories
+	// whose last read failed and NotesError why the reads stopped early;
+	// what earlier builds stored still ships.
+	NotesRepos, NotesRequests, NotesFailed int
+	NotesError                             string
 }
 
 // NVDApp reports whether the NVD is asked about app: every app with a CPE.
@@ -257,6 +258,12 @@ func collectNotes(ctx context.Context, repos []Repo, o Options, deps sources.Dep
 		}
 	}
 	stats.NotesRepos = len(apps)
+	asked := make(map[string]bool, len(apps))
+	for _, a := range apps {
+		for _, r := range a.Advisories.GitHubRepos {
+			asked[r] = true
+		}
+	}
 	n := &sources.ReleaseNotes{Deps: deps, Token: o.Token, BaseURL: o.GitHubURL, MinInterval: minInterval}
 	if o.Token != "" {
 		n.Pause = time.Millisecond
@@ -269,6 +276,18 @@ func collectNotes(ctx context.Context, repos []Repo, o Options, deps sources.Dep
 		}
 		stats.NotesError = err.Error()
 		o.Log.Warn("release notes not read completely; the package carries what earlier builds stored", "err", err)
+	}
+	// A repository that failed is skipped, not fatal: count it, so a
+	// degraded collection does not read as a complete one.
+	states, err := o.Store.SourceStates(ctx)
+	if err != nil {
+		return err
+	}
+	for _, st := range states {
+		if st.Source == sources.ReleaseNotesState && asked[st.Key] && st.LastError != "" {
+			stats.NotesFailed++
+			o.Log.Warn("release notes could not be read", "repository", st.Key, "err", st.LastError)
+		}
 	}
 	return nil
 }

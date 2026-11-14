@@ -37,9 +37,10 @@ type ReleaseNotes struct {
 	MinInterval time.Duration
 }
 
+// ReleaseNotesState is the source name of a repository's request state.
+const ReleaseNotesState = "release-notes"
+
 const (
-	// releaseNotesState is the source name of the request state.
-	releaseNotesState = "release-notes"
 	// releasesPerRepo is how many of the newest releases are read.
 	releasesPerRepo = 50
 	// maxMentionLines bounds the quoted lines of one release.
@@ -55,7 +56,7 @@ const (
 func ReleaseNotesSource(repo string) string { return "release:" + repo }
 
 // Name implements Source.
-func (*ReleaseNotes) Name() string { return releaseNotesState }
+func (*ReleaseNotes) Name() string { return ReleaseNotesState }
 
 func (n *ReleaseNotes) minInterval() time.Duration {
 	if n.MinInterval > 0 {
@@ -75,7 +76,7 @@ func (n *ReleaseNotes) Refresh(ctx context.Context, apps []*catalog.App) (Result
 	}
 	for _, app := range apps {
 		for _, repo := range app.Advisories.GitHubRepos {
-			st, err := n.Store.SourceState(ctx, releaseNotesState, repo)
+			st, err := n.Store.SourceState(ctx, ReleaseNotesState, repo)
 			if err != nil {
 				return res, err
 			}
@@ -314,10 +315,9 @@ func SecurityMentions(text string) Mentions {
 	for _, raw := range strings.Split(text, "\n") {
 		line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
 		if strings.HasPrefix(line, "#") {
+			// A heading opens or ends a security section; it still names
+			// a fix itself when it carries an ID or the wording.
 			section = securityHeading.MatchString(line)
-			if !section {
-				continue
-			}
 		}
 		if line == "" || dependencyBump.MatchString(line) || botAuthor.MatchString(line) {
 			continue

@@ -353,6 +353,12 @@ func evaluate(in Input, a *Advisory, running version.Version, versionErr string)
 		return e
 	}
 	e := evaluateEntries(in, a, entries, running, versionErr)
+	if a.Vuln.Origin() == advisory.OriginRelease && e.state == notAffected {
+		// A note says where one fix landed, not that a version is free
+		// of the flaw: it must not outvote another record of the flaw,
+		// nor a note of a fix on another release line.
+		return nil
+	}
 	if a.Vuln.Origin() == advisory.OriginRelease && e.state == Affected {
 		// The builder marks these ranges inferred; a record that lost
 		// the mark is still no more than a note.

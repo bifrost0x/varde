@@ -36,9 +36,12 @@ adds nothing the builder cannot ask once for everyone (ADR 0039).
   that fixes it; it is not prioritised and does not notify. Installations released before this
   decision already treat an inferred range so.
 - **Ranked last.** Within a flaw, the project's advisory, osv.dev and the NVD decide before a
-  release note; the note only stands where nothing else describes the flaw.
+  release note; the note only stands where nothing else describes the flaw. A version at or
+  above the release is not cleared by the note: it only says where one fix landed, so it never
+  outvotes another record that leaves the version uncertain, nor a note of a fix on another
+  release line.
 - **Never fatal.** A rate limit or an error stops the reads for this build and leaves what
-  earlier builds stored; the summary says so. The repositories not reached are read first by
+  earlier builds stored; the summary says so and counts the repositories whose read failed. The repositories not reached are read first by
   the next build.
 
 ## Alternatives

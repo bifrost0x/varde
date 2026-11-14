@@ -280,3 +280,24 @@ func TestReleaseNoteRanksLast(t *testing.T) {
 		t.Errorf("project's flaw: %+v", f)
 	}
 }
+
+// A note whose release the running version reached does not clear a flaw
+// another record leaves uncertain, nor one a note of another release line
+// names.
+func TestReleaseNoteDoesNotClear(t *testing.T) {
+	a := app(version.SemVer)
+	osv := Advisory{Source: "feed", Vuln: advisory.WithOrigin(advisory.Vulnerability{ID: "CVE-2026-0009",
+		Affected: []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeGit,
+			Events: []advisory.Event{{Introduced: "0"}, {Fixed: "abc123"}}}}}}}, "osv")}
+	note := releaseNote("VARDE-REL-3", "1.5.0", "CVE-2026-0009")
+	f := one(t, Match(Input{App: a, Version: "1.6.0"}, []Advisory{osv, note}, Enrichment{}))
+	if f.State != Unverified || f.AdvisoryID != "CVE-2026-0009" {
+		t.Errorf("uncertain record cleared by a note: %+v", f)
+	}
+	low := releaseNote("VARDE-REL-4", "1.4.5", "CVE-2026-0010")
+	high := releaseNote("VARDE-REL-5", "2.0.3", "CVE-2026-0010")
+	f = one(t, Match(Input{App: a, Version: "2.0.1"}, []Advisory{low, high}, Enrichment{}))
+	if f.State != Unverified || f.FixedIn != "2.0.3" {
+		t.Errorf("fix of another line cleared the note: %+v", f)
+	}
+}

@@ -54,7 +54,7 @@ what they have. Adding a blob needs nothing: older installations skip it.
    hour per repository, so the first build of about 1,700 repositories takes two of those hours.
    After the advisories it reads the release notes (ADR 0044), with conditional requests and
    the same interval. A rate limit or an error stops these reads without failing the build:
-   what earlier builds stored ships, the summary line `release notes:` says why they stopped,
+   what earlier builds stored ships, the summary line `release notes:` counts the repositories that failed and says why the reads stopped,
    and the repositories not reached are read first by the next build.
 3. Before the advisories, generates catalog entries and reads release package lists (ADR 0040).
    The generator checks at most 150 new candidates per build and starts no project after

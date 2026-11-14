@@ -35,6 +35,9 @@ func TestSecurityMentions(t *testing.T) {
 		{"bot line", "* build: update foo for vulnerability by @dependabot in #12", 0, nil},
 		{"force is not rce", "Force a refresh of the source list", 0, nil},
 		{"other heading ends section", "### Security\n- lock down admin\n### Other\n- new theme", 2, nil},
+		{"id in a heading", "### Fix CVE-2026-12345\nThanks to the reporter.", 1, []string{"CVE-2026-12345"}},
+		{"wording in a heading", "## Fix stored XSS\nDetails follow.", 1, nil},
+		{"plain heading", "## What's new\n- dark mode", 0, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := SecurityMentions(tc.text)

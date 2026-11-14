@@ -541,8 +541,8 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		}
 	}
 	if c.releaseNotes {
-		if _, err := fmt.Fprintf(out, "release notes: %d repositories, %d requests%s\n",
-			stats.NotesRepos, stats.NotesRequests, stopped(stats.NotesError)); err != nil {
+		if _, err := fmt.Fprintf(out, "release notes: %d repositories, %d requests, %d failed%s\n",
+			stats.NotesRepos, stats.NotesRequests, stats.NotesFailed, stopped(stats.NotesError)); err != nil {
 			return err
 		}
 	}

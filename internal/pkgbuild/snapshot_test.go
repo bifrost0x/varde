@@ -378,3 +378,15 @@ func TestCollectReleaseNotesLimitIsNotFatal(t *testing.T) {
 		t.Fatal("the enrichment did not run after the notes stopped")
 	}
 }
+
+// A repository whose release notes fail without a rate limit is counted,
+// so the summary does not read as a complete collection.
+func TestCollectReleaseNotesFailuresAreCounted(t *testing.T) {
+	f := newFixture(t)
+	f.up.releases["other/tool"] = "not json"
+	f.opts.ReleaseNotes = true
+	stats, err := Collect(context.Background(), f.repos, f.opts)
+	if err != nil || stats.NotesFailed != 1 || stats.NotesError != "" {
+		t.Fatalf("stats %+v, err %v", stats, err)
+	}
+}
