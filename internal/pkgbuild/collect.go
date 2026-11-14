@@ -62,13 +62,18 @@ type Stats struct {
 	OSVError, NVDError                         string
 }
 
-// NVDApp reports whether the NVD is asked about app: one with a CPE whose
-// project does not publish every flaw in a form a program can compare
+// NVDApp reports whether the NVD is asked about app: every app with a CPE.
+// What ships of the answer depends on the app (NVDAll).
+func NVDApp(app *catalog.App) bool { return len(app.Advisories.CPE) > 0 }
+
+// NVDAll reports whether every NVD record of app ships: for a project
+// that does not publish every flaw in a form a program can compare
 // (coverage partial or limited). Where a project's own advisories are
 // complete, CVE records derived from them add nothing but coarser ranges
-// (ADR 0017).
-func NVDApp(app *catalog.App) bool {
-	return len(app.Advisories.CPE) > 0 && app.Advisories.Coverage != catalog.CoverageFull
+// (ADR 0017); of those only the records ship that complete a project
+// advisory which names no end of its affected versions.
+func NVDAll(app *catalog.App) bool {
+	return NVDApp(app) && app.Advisories.Coverage != catalog.CoverageFull
 }
 
 // OSVApp reports whether osv.dev is asked about app.

@@ -20,7 +20,19 @@ when the builder asks: it asks about the whole catalog.
   the repository (ADR 0040).
 - **The NVD only where the project's own data is incomplete.** For an app with `coverage: full`
   the CVE records are derived from the advisories the package already carries and add coarser
-  ranges, not knowledge.
+  ranges, not knowledge. The NVD is asked about every app with a CPE; for an app with full
+  coverage only the records ship that belong to a flaw whose project advisory names no end of
+  the affected versions (no fixed version, no last affected one, no list of versions).
+- **An open range gets its end from the second record.** A project advisory that only says from
+  which version a flaw exists ("from 2.8 on", the fixes named in its text) kept every later
+  version affected and never named an update. When the deciding record of a flaw is such a
+  range and another record of the same flaw names fixed versions, the finding stays the
+  project's and takes its end from the other: the fixed version when the other record says
+  affected, and no finding when the running version is at or above a fix on its own minor line
+  or above every fix the other record names. A version in a gap of the other record's ranges
+  (a line it does not list) stays affected, with the next fix above it as the update: the
+  second record is trusted for what it states, not for what it leaves out. The finding names
+  the record that completed it.
 - **Under the catalog app, once.** A record ships under the app whose entry names the package or
   the CPE. A record the repository already published under that app is not repeated; among the
   second sources osv.dev comes first. A record stored for a CPE or package the entry no longer
@@ -50,5 +62,4 @@ when the builder asks: it asks about the whole catalog.
   NVD and are as precise as the NVD's CPE configurations.
 - The first build with the sources adds requests: one per app to osv.dev plus one per changed
   record, and one per CPE to the NVD at its published pace (seven seconds apart without a key).
-- Still open: when two records of one flaw disagree and the project's has no fixed version, the
-  project's stands. Taking the fixed version from the second record needs a rule of its own.
+- A project advisory with an end of its own is never overruled by a second record.

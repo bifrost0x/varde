@@ -147,6 +147,8 @@ func candidates(app *catalog.App, running version.Version, groups [][]Advisory) 
 // to v. Ambiguous ranges count as affected: a target must not be claimed to
 // fix something the data cannot confirm.
 func affectsAny(app *catalog.App, v version.Version, group []Advisory) bool {
+	in := Input{App: app}
+	var evs []*evaluation
 	for i := range group {
 		if len(group[i].Vuln.Affected) == 0 {
 			// A package filter cannot establish irrelevance when the
@@ -155,7 +157,17 @@ func affectsAny(app *catalog.App, v version.Version, group []Advisory) bool {
 		}
 		// Use the same three-state evaluation as matching: only an
 		// explicit notAffected result confirms that the update fixes it.
-		if e := evaluate(Input{App: app}, &group[i], v, ""); e != nil && e.state != notAffected {
+		if e := evaluate(in, &group[i], v, ""); e != nil {
+			evs = append(evs, e)
+		}
+	}
+	for _, e := range evs {
+		if e.state == Affected && e.open {
+			// A range without an end is closed by another record of
+			// the flaw, as in matching.
+			complete(app.Version.Scheme, e, evs, v)
+		}
+		if e.state != notAffected {
 			return true
 		}
 	}

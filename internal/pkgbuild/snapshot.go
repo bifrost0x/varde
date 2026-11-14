@@ -78,8 +78,27 @@ func Snapshot(ctx context.Context, st *store.Store, entries []catalog.Entry, ind
 		}
 	}
 	have := map[[2]string]bool{}
+	// open are the flaws (by ID and alias) of which the project's own
+	// record under an app names no end of the affected versions.
+	open := map[[2]string]bool{}
 	for _, a := range snap.Advisories {
 		have[[2]string{a.AppID, a.OSV.ID}] = true
+		if !a.OSV.NamesEnd() {
+			for _, id := range append([]string{a.OSV.ID}, a.OSV.Aliases...) {
+				open[[2]string{a.AppID, id}] = true
+			}
+		}
+	}
+	completes := func(appID string, v advisory.Vulnerability) bool {
+		if !v.NamesEnd() {
+			return false
+		}
+		for _, id := range append([]string{v.ID}, v.Aliases...) {
+			if open[[2]string{appID, id}] {
+				return true
+			}
+		}
+		return false
 	}
 	for _, app := range second {
 		recs, err := st.Advisories(ctx, app.ID)
@@ -91,6 +110,9 @@ func Snapshot(ctx context.Context, st *store.Store, entries []catalog.Entry, ind
 		sort.SliceStable(recs, func(i, j int) bool { return recs[i].Source == "osv" && recs[j].Source != "osv" })
 		for _, rec := range recs {
 			if !secondSource(app, rec.Source) || have[[2]string{app.ID, rec.Vuln.ID}] {
+				continue
+			}
+			if rec.Source != "osv" && !NVDAll(app) && !completes(app.ID, rec.Vuln) {
 				continue
 			}
 			have[[2]string{app.ID, rec.Vuln.ID}] = true

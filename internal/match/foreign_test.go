@@ -163,3 +163,74 @@ func TestOriginRanksBelowTheProject(t *testing.T) {
 		t.Errorf("alone = %s origin %q", f.AdvisoryID, f.Evidence.Origin)
 	}
 }
+
+// A project advisory that only says from which version a flaw exists is
+// given its end by a second record of the same flaw: patched versions are
+// no longer affected for ever, and the others get an update to name.
+func TestOpenRangeIsCompleted(t *testing.T) {
+	a := app(version.SemVer)
+	project := Advisory{Source: "feed", CVSS: 7, Vuln: advisory.Vulnerability{ID: "GHSA-open", Aliases: []string{"CVE-2026-0002"},
+		Affected: []advisory.Affected{{Package: advisory.Package{Name: "redis-server"},
+			Ranges: []advisory.Range{{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "2.8"}}}}}}}}
+	line := func(from, fixed string) advisory.Range {
+		return advisory.Range{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: from}, {Fixed: fixed}}}
+	}
+	second := func(ranges ...advisory.Range) Advisory {
+		v := advisory.Vulnerability{ID: "CVE-2026-0002", Affected: []advisory.Affected{{Package: advisory.Package{Name: "redis"}, Ranges: ranges}}}
+		return Advisory{Source: "feed", Vuln: advisory.WithOrigin(v, "nvd:cpe:2.3:a:redis:redis")}
+	}
+	nvd := second(line("2.8", "6.2.19"), line("7.2.0", "7.2.10"), line("7.4.0", "7.4.5"), line("8.0.0", "8.0.3"))
+
+	// Alone, the project's record keeps every version affected, without a fix.
+	f := one(t, Match(Input{App: a, Version: "8.2.2"}, []Advisory{project}, Enrichment{}))
+	if f.State != Affected || f.FixedIn != "" || f.Step != nil {
+		t.Fatalf("alone: %s fixed %q step %v", f.State, f.FixedIn, f.Step)
+	}
+
+	cases := []struct {
+		version, fixed string // fixed "" with affected false: no finding
+		affected       bool
+	}{
+		{"6.2.5", "6.2.19", true}, // in a range of the second record
+		{"7.0.0", "7.2.10", true}, // a line the second record does not list: the next fix
+		{"7.2.9", "7.2.10", true}, //
+		{"7.2.10", "", false},     // the fix of its own line
+		{"7.2.11", "", false},     //
+		{"7.4.2", "7.4.5", true},  // above 7.2.10, but its own line is fixed later
+		{"8.0.3", "", false},      //
+		{"8.2.2", "", false},      // above every fix
+	}
+	for _, c := range cases {
+		fs := Match(Input{App: a, Version: c.version}, []Advisory{nvd, project}, Enrichment{})
+		if !c.affected {
+			if len(fs) != 0 {
+				t.Errorf("%s: still reported: %v", c.version, fs)
+			}
+			continue
+		}
+		f := one(t, fs)
+		// The project's record stays the finding; the end comes from the other.
+		if f.AdvisoryID != "GHSA-open" || f.State != Affected || f.FixedIn != c.fixed || f.Evidence.CompletedBy != "CVE-2026-0002" {
+			t.Errorf("%s: %s %s fixed %q completed by %q, want fixed %q", c.version, f.AdvisoryID, f.State, f.FixedIn, f.Evidence.CompletedBy, c.fixed)
+		}
+		if f.Step == nil || f.Step.Version != c.fixed || f.Target == nil || f.Target.Fixes != 1 {
+			t.Errorf("%s: step %+v target %+v", c.version, f.Step, f.Target)
+		}
+	}
+
+	// What the second record leaves out is not read as fixed: without the
+	// 7.4 line, 7.4.2 stays affected until the next fix it does name.
+	gap := second(line("2.8", "6.2.19"), line("7.2.0", "7.2.10"), line("8.0.0", "8.0.3"))
+	f = one(t, Match(Input{App: a, Version: "7.4.2"}, []Advisory{gap, project}, Enrichment{}))
+	if f.State != Affected || f.FixedIn != "8.0.3" {
+		t.Errorf("gap: %s fixed %q", f.State, f.FixedIn)
+	}
+
+	// A project record with an end of its own is never overruled.
+	closed := ghsa("GHSA-closed", []string{"CVE-2026-0002"}, "< 9.0.0", "9.0.0")
+	closed.Source = "feed"
+	f = one(t, Match(Input{App: a, Version: "8.2.2"}, []Advisory{nvd, closed}, Enrichment{}))
+	if f.AdvisoryID != "GHSA-closed" || f.FixedIn != "9.0.0" || f.Evidence.CompletedBy != "" {
+		t.Errorf("closed: %s fixed %q completed by %q", f.AdvisoryID, f.FixedIn, f.Evidence.CompletedBy)
+	}
+}

@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- An advisory that only says from which version a flaw exists no longer keeps every later
+  version affected without an update to name. Another record of the same flaw gives it its
+  end: patched versions are cleared, the others get the fixed version, and the finding says
+  which record it came from (ADR 0042).
 - A finding names one version to update to. Its page said "update to" the advisory's own fixed
   version, a second version that fixes most advisories, and put a third into the image line.
   The analysis now chooses one (the fix on the running release line when that line fixes the

@@ -139,3 +139,23 @@ func WithOrigin(v Vulnerability, origin string) Vulnerability {
 	v.DatabaseSpecific = m
 	return v
 }
+
+// NamesEnd reports whether the record says where the affected versions
+// end: a fixed or last affected version, or an explicit list of versions.
+// A record that does not ("from 2.8 on", or a range no program could read)
+// cannot clear a patched version or name an update by itself.
+func (v Vulnerability) NamesEnd() bool {
+	for _, a := range v.Affected {
+		if len(a.Versions) > 0 {
+			return true
+		}
+		for _, r := range a.Ranges {
+			for _, ev := range r.Events {
+				if ev.Fixed != "" || ev.LastAffected != "" || ev.Limit != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

@@ -104,6 +104,9 @@ type Evidence struct {
 	Version       string `json:"version,omitempty"`
 	VersionSource string `json:"version_source,omitempty"`
 	Reason        string `json:"reason,omitempty"`
+	// CompletedBy names the record that gave the range its fixed version,
+	// when the deciding record names none (see complete).
+	CompletedBy string `json:"completed_by,omitempty"`
 }
 
 // sourceRank prefers project-published data over aggregated CVE data.
@@ -154,20 +157,7 @@ func Match(in Input, advs []Advisory, enr Enrichment) []Finding {
 	var affected [][]Advisory // alias groups of affected findings, by finding index
 	var affectedIdx []int
 	for _, group := range groupByAlias(advs) {
-		var best *evaluation
-		for i := range group {
-			a := &group[i]
-			e := evaluate(in, a, running, versionErr)
-			if e == nil {
-				continue // not relevant for this app (package filter)
-			}
-			if e.state == Affected && in.Doubt != "" {
-				e.state, e.reason = Unverified, "the version is in the affected range, but "+in.Doubt
-			}
-			if best == nil || better(e, best) {
-				best = e
-			}
-		}
+		best := verdict(in, group, running, versionErr)
 		if best == nil || best.state == notAffected {
 			continue
 		}
@@ -193,6 +183,133 @@ type evaluation struct {
 	pkg     string
 	rng     string
 	reason  string
+	// open is set when the version is affected by a range that names no
+	// end: no fixed version, no last affected one.
+	open bool
+	// entries are the affected packages the evaluation looked at.
+	entries []advisory.Affected
+	// completedBy is the record that gave an open range its end.
+	completedBy string
+}
+
+// verdict evaluates the records of one flaw (an alias group) and returns
+// the one that decides, nil when none concerns the app.
+func verdict(in Input, group []Advisory, running version.Version, versionErr string) *evaluation {
+	var evs []*evaluation
+	var best *evaluation
+	for i := range group {
+		e := evaluate(in, &group[i], running, versionErr)
+		if e == nil {
+			continue // not relevant for this app (package filter)
+		}
+		if e.state == Affected && in.Doubt != "" {
+			e.state, e.reason = Unverified, "the version is in the affected range, but "+in.Doubt
+		}
+		evs = append(evs, e)
+		if best == nil || better(e, best) {
+			best = e
+		}
+	}
+	if best != nil && best.state == Affected && best.open {
+		complete(in.App.Version.Scheme, best, evs, running)
+	}
+	return best
+}
+
+// complete gives an open range its end from another record of the same
+// flaw. Projects publish advisories that say from which version a flaw
+// exists and name the fixed versions only in their text; taken alone,
+// such a record keeps every later version affected for ever and never
+// names an update. A second record with fixed versions (the CVE as the
+// NVD or osv.dev carry it) knows the end.
+//
+// The second record is trusted for what it states, not for what it leaves
+// out: it clears the running version only at or above a fix on the
+// version's own minor line, or above every fix it names. A version in a
+// gap of its ranges (a line it does not list) stays affected, with the
+// next fix above it as the update.
+func complete(scheme version.Scheme, best *evaluation, evs []*evaluation, running version.Version) {
+	var other *evaluation
+	for _, e := range evs {
+		if e == best || e.state == Unverified || len(fixedVersions(scheme, e.entries)) == 0 {
+			continue
+		}
+		if other == nil || better(e, other) {
+			other = e
+		}
+	}
+	if other == nil {
+		return
+	}
+	best.completedBy = other.adv.Vuln.ID
+	if other.state == Affected {
+		best.fixedIn, best.open = other.fixedIn, false
+		return
+	}
+	fixes := fixedVersions(scheme, other.entries)
+	above := true
+	var next version.Version
+	for _, f := range fixes {
+		c, ok := running.Compare(f)
+		if !ok {
+			best.completedBy = ""
+			return // not comparable: the project's record stands as it is
+		}
+		if c >= 0 && sameMinor(running.String(), f.String()) {
+			best.state = notAffected
+			return
+		}
+		if c < 0 {
+			above = false
+			if next.IsZero() || less(f, next) {
+				next = f
+			}
+		}
+	}
+	if above {
+		best.state = notAffected
+		return
+	}
+	best.fixedIn, best.open = next.String(), false
+}
+
+// fixedVersions lists the fixed versions the entries name that parse under
+// the scheme.
+func fixedVersions(scheme version.Scheme, entries []advisory.Affected) []version.Version {
+	var out []version.Version
+	for _, aff := range entries {
+		for _, r := range aff.Ranges {
+			if r.Type == advisory.RangeGit || r.Inferred() {
+				continue
+			}
+			for _, ev := range r.Events {
+				if ev.Fixed == "" {
+					continue
+				}
+				if v, err := version.Parse(scheme, ev.Fixed); err == nil {
+					out = append(out, v)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// sameMinor reports whether two versions share their first two numbers
+// ("7.2.11" and "7.2.10"): the line a patch release belongs to.
+func sameMinor(a, b string) bool {
+	pa, pb := strings.SplitN(a, ".", 3), strings.SplitN(b, ".", 3)
+	return len(pa) >= 2 && len(pb) >= 2 && pa[0] == pb[0] && pa[1] == pb[1]
+}
+
+// hasEnd reports whether a range names where it ends.
+func hasEnd(r advisory.Range) bool {
+	for _, ev := range r.Events {
+		if ev.Fixed != "" || ev.LastAffected != "" || ev.Limit != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // better orders evaluations: definitive results before unverified ones,
@@ -238,7 +355,7 @@ func appName(app *catalog.App) string {
 }
 
 func evaluateEntries(in Input, a *Advisory, entries []advisory.Affected, running version.Version, versionErr string) *evaluation {
-	e := &evaluation{adv: a, state: notAffected}
+	e := &evaluation{adv: a, state: notAffected, entries: entries}
 	if len(entries) == 0 {
 		e.state, e.reason = Unverified, "advisory lists no affected versions"
 		return e
@@ -285,7 +402,8 @@ func evaluateEntries(in Input, a *Advisory, entries []advisory.Affected, running
 				e.pkg, e.rng = pkg, rng
 				e.fixedIn = lowestFixed(scheme, running, aff)
 			case in:
-				return &evaluation{adv: a, state: Affected, pkg: pkg, rng: rng, fixedIn: lowestFixed(scheme, running, aff)}
+				return &evaluation{adv: a, state: Affected, pkg: pkg, rng: rng, fixedIn: lowestFixed(scheme, running, aff),
+					open: !hasEnd(r), entries: entries}
 			}
 		}
 		if e.pkg == "" {
@@ -500,7 +618,7 @@ func finding(in Input, group []Advisory, best *evaluation, enr Enrichment) Findi
 		SeverityLabel: best.adv.SeverityLabel,
 		Evidence: Evidence{
 			Source: best.adv.Source, Origin: best.adv.Vuln.Origin(), RecordID: best.adv.Vuln.ID, Package: best.pkg, Range: best.rng,
-			Version: in.Version, VersionSource: in.VersionSource, Reason: best.reason,
+			Version: in.Version, VersionSource: in.VersionSource, Reason: best.reason, CompletedBy: best.completedBy,
 		},
 	}
 	ids := map[string]bool{}

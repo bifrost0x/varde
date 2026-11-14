@@ -261,9 +261,34 @@ func TestSnapshotSecondSources(t *testing.T) {
 		}
 	}
 
+	// For an app with complete advisories only the NVD records ship that
+	// give an end to a project advisory which names none.
+	var own []store.AdvisoryRecord
+	derived, err := f.st.Advisories(ctx, "gh-acme-widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range derived {
+		if r.Source == "github:acme/widget" {
+			own = append(own, r)
+		}
+	}
+	own = append(own, store.AdvisoryRecord{AppID: "gh-acme-widget", Source: "github:acme/widget", CVSS: 7, SeverityLabel: "high",
+		Vuln: advisory.Vulnerability{ID: "GHSA-open-0001", Aliases: []string{"CVE-2026-4444"}, Modified: f.now,
+			Affected: []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "2.8"}}}}}}}})
+	if err := f.st.ReplaceAdvisories(ctx, "gh-acme-widget", "github:acme/widget", own, f.now); err != nil {
+		t.Fatal(err)
+	}
+	closing := rec("nvd:"+cpe, "CVE-2026-4444")
+	closing.Vuln.Affected = []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "2.8"}, {Fixed: "6.2.19"}}}}}}
+	put("nvd:"+cpe, rec("nvd:"+cpe, "CVE-2026-2222"), closing)
+
 	full := snap(app(catalog.CoverageFull))
 	if _, ok := full["CVE-2026-2222"]; ok {
 		t.Error("NVD records shipped for an app with complete advisories")
+	}
+	if full["CVE-2026-4444"] != "nvd:"+cpe {
+		t.Errorf("the NVD record that completes an open project advisory was left out: %v", full)
 	}
 	if full["GO-2026-0001"] != "osv" {
 		t.Error("OSV records left out for an app with complete advisories")
@@ -283,7 +308,7 @@ func TestCollectSecondSourceFailureIsNotFatal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.OSVApps != 1 || st.NVDApps != 1 || st.OSVRequests == 0 || st.NVDRequests == 0 {
+	if st.OSVApps != 1 || st.NVDApps != 2 || st.OSVRequests == 0 || st.NVDRequests == 0 {
 		t.Fatalf("stats: %+v", st)
 	}
 	if got := f.snapshot(); len(got.Advisories) == 0 {
