@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- An advisory that names only a package of another project (a runner beside the server, a
+  library the report blames, a sibling image of the same author) no longer counts as affected
+  for apps without a reviewed package list: it is shown as "needs a check" with the package it
+  names, is not prioritised and does not notify, and its versions are no update target of the
+  app. Beside a package of the app itself, the other project's entry is left out.
 - Existing findings stay active when an image's package inventory is incomplete or unavailable;
   only sufficient evidence resolves them, preserving acknowledgements and notification history.
 - Update targets no longer count advisories with incomparable or missing alias version data as

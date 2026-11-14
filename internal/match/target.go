@@ -63,7 +63,11 @@ func candidates(app *catalog.App, running version.Version, groups [][]Advisory) 
 	var out []version.Version
 	for _, g := range groups {
 		for i := range g {
-			for _, aff := range relevantEntries(app, g[i].Vuln.Affected) {
+			entries, other := relevantEntries(app, g[i].Vuln.Affected)
+			if other != "" {
+				continue // another project's versions are no update of this app
+			}
+			for _, aff := range entries {
 				for _, r := range aff.Ranges {
 					for _, ev := range r.Events {
 						if ev.Fixed == "" {

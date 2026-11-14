@@ -188,10 +188,35 @@ func better(a, b *evaluation) bool {
 }
 
 func evaluate(in Input, a *Advisory, running version.Version, versionErr string) *evaluation {
-	entries := relevantEntries(in.App, a.Vuln.Affected)
+	entries, other := relevantEntries(in.App, a.Vuln.Affected)
 	if entries == nil {
 		return nil
 	}
+	if other != "" {
+		// Every package the advisory names is another project's. Its
+		// ranges still decide whether it can apply at all, but neither
+		// "affected" nor the version that fixes that package is a
+		// statement about this app.
+		e := evaluateEntries(in, a, entries, running, versionErr)
+		if e.state == Affected {
+			e.state = Unverified
+			e.reason = "the advisory names " + other + ", not " + appName(in.App) + "; check whether that is part of what runs here"
+			e.fixedIn = ""
+		}
+		return e
+	}
+	return evaluateEntries(in, a, entries, running, versionErr)
+}
+
+// appName is the app's name for a sentence, its id when it has none.
+func appName(app *catalog.App) string {
+	if app.Name != "" {
+		return app.Name
+	}
+	return app.ID
+}
+
+func evaluateEntries(in Input, a *Advisory, entries []advisory.Affected, running version.Version, versionErr string) *evaluation {
 	e := &evaluation{adv: a, state: notAffected}
 	if len(entries) == 0 {
 		e.state, e.reason = Unverified, "advisory lists no affected versions"
@@ -252,15 +277,20 @@ func evaluate(in Input, a *Advisory, running version.Version, versionErr string)
 	return e
 }
 
-// relevantEntries applies the app's package filter. It returns nil when the
-// advisory concerns only other products of the same repository.
-func relevantEntries(app *catalog.App, entries []advisory.Affected) []advisory.Affected {
+// relevantEntries applies the app's package filter, or, for an app without
+// one, leaves out the packages of other projects. It returns nil when the
+// advisory concerns only other products of the same repository. other is
+// set when the entries are kept although each names another project: what
+// they say about the app is then in doubt.
+func relevantEntries(app *catalog.App, entries []advisory.Affected) (relevant []advisory.Affected, other string) {
 	filters := app.Advisories.Packages
 	if len(filters) == 0 {
-		if entries == nil {
-			return []advisory.Affected{}
+		if len(entries) == 0 {
+			return []advisory.Affected{}, ""
 		}
-		return entries
+		// Without a list of its own packages, an entry is left out only
+		// when its name proves another project (foreign.go).
+		return ownEntries(app, entries)
 	}
 	named := false
 	for _, e := range entries {
@@ -285,7 +315,7 @@ func relevantEntries(app *catalog.App, entries []advisory.Affected) []advisory.A
 			}
 		}
 	}
-	return out
+	return out, ""
 }
 
 // inRange evaluates OSV range events. ok is false when an event version is
