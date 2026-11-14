@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The data package carries advisories from osv.dev and, for apps whose projects publish no
+  complete advisories, from the NVD (ADR 0042). Such apps (nginx, for example) get findings
+  without the installation asking anyone; each finding says which source the record was read
+  from, and a project's own advisory decides where both describe the same flaw.
 - The data package carries the release tags of every catalog image (ADR 0041). Update
   suggestions name a tag the registry lists without registry versions switched on, and the
   version to update to is a release that exists: a fixed version an advisory names that was

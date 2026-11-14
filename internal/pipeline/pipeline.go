@@ -669,7 +669,13 @@ const nvdSourcePrefix = "nvd:"
 func withoutForeignCPEs(stored []match.Advisory, app *catalog.App) []match.Advisory {
 	out := make([]match.Advisory, 0, len(stored))
 	for _, a := range stored {
-		if cpe, ok := strings.CutPrefix(a.Source, nvdSourcePrefix); ok && !slices.ContainsFunc(app.Advisories.CPE, func(c string) bool { return strings.EqualFold(c, cpe) }) {
+		// A record of the data package names the CPE it was read for
+		// as its origin; one the installation read itself as its source.
+		source := a.Source
+		if o := a.Vuln.Origin(); o != "" {
+			source = o
+		}
+		if cpe, ok := strings.CutPrefix(source, nvdSourcePrefix); ok && !slices.ContainsFunc(app.Advisories.CPE, func(c string) bool { return strings.EqualFold(c, cpe) }) {
 			continue
 		}
 		out = append(out, a)

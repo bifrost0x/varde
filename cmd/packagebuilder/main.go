@@ -75,6 +75,10 @@ type config struct {
 	force                               bool
 	allowDevelopment                    bool
 	githubURL, kevURL, epssURL          string
+	// osv and nvd switch the second advisory sources on (ADR 0042);
+	// osvURL and nvdURL override their endpoints in tests.
+	osv, nvd       bool
+	osvURL, nvdURL string
 	// generate and releases switch the catalog generator and the release
 	// reads on; generateFor and releasesUntil bound them from the start of
 	// the build, maxManifests the manifest requests of the release reads
@@ -148,6 +152,8 @@ func main() {
 	flag.StringVar(&c.kevURL, "kev-url", "", "KEV endpoint (tests)")
 	flag.StringVar(&c.epssURL, "epss-url", "", "EPSS endpoint (tests)")
 	flag.BoolVar(&c.generate, "generate", true, "generate and check catalog entries for index images without a reviewed entry")
+	flag.BoolVar(&c.osv, "osv", true, "ask osv.dev about the osv_packages of catalog apps")
+	flag.BoolVar(&c.nvd, "nvd", true, "ask the NVD about the CPEs of catalog apps whose projects publish no complete advisories")
 	flag.BoolVar(&c.tags, "tags", true, "read the release tags of the images of every catalog app")
 	flag.BoolVar(&c.releases, "releases", true, "read the package lists of the newest release of every catalog app")
 	flag.DurationVar(&c.generateFor, "generate-time", defaultGenerateFor, "the generator starts no project this long after the start of the build")
@@ -326,14 +332,16 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		tagLines []feed.TagLine
 		tagStats releases.TagStats
 	)
+	// The catalog as an installation builds it from the package: the
+	// reviewed entries over the generated ones.
+	layered, err := catalog.BuildLayered(entries, catalog.OriginBuiltin, generated, nil)
+	if err != nil {
+		return fmt.Errorf("catalog with generated entries: %w", err)
+	}
+	for _, d := range layered.DroppedGenerated() {
+		logger.Warn("generated entry left out beside the reviewed ones", "entry", d)
+	}
 	if c.tags || c.releases {
-		layered, err := catalog.BuildLayered(entries, catalog.OriginBuiltin, generated, nil)
-		if err != nil {
-			return fmt.Errorf("catalog with generated entries: %w", err)
-		}
-		for _, d := range layered.DroppedGenerated() {
-			logger.Warn("generated entry left out beside the reviewed ones", "entry", d)
-		}
 		order := releases.Priority(layered, appWeights(candidates))
 		if c.tags {
 			// Before the package lists: a tag list costs one request and
@@ -375,11 +383,16 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		wait = time.Nanosecond
 	}
 	stats, err := pkgbuild.Collect(ctx, repos, pkgbuild.Options{Store: st, HTTP: hc, Token: env("GITHUB_TOKEN"),
-		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: wait, Log: logger})
+		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: wait, Log: logger,
+		Apps: layered.Apps(), OSV: c.osv, NVD: c.nvd, OSVURL: c.osvURL, NVDURL: c.nvdURL, NVDKey: env("VARDE_NVD_API_KEY")})
 	if err != nil {
 		return err
 	}
-	snap, err := pkgbuild.Snapshot(ctx, st, entries, table, repos, now, c.valid)
+	var second []*catalog.App
+	if c.osv || c.nvd {
+		second = layered.Apps()
+	}
+	snap, err := pkgbuild.Snapshot(ctx, st, entries, table, repos, second, now, c.valid)
 	if err != nil {
 		return err
 	}
@@ -513,6 +526,12 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		if _, err := fmt.Fprintf(out, "releases: %d lines, %d bytes compressed, %d unpacked (%d images: %d read, %d unchanged, %d failed, %d not started, %d too large; %d partial, %d stale; %d lines over the size budget); %d manifest requests\n",
 			counts.Releases, counts.ReleasesBytes, releasesUnpacked, relStats.Images, relStats.Read, relStats.Unchanged, relStats.Failed, relStats.NotStarted,
 			relStats.TooLarge, relStats.Partial, relStats.Stale, fitted, relStats.Manifests); err != nil {
+			return err
+		}
+	}
+	if c.osv || c.nvd {
+		if _, err := fmt.Fprintf(out, "second sources: osv.dev %d apps, %d requests%s; NVD %d apps, %d requests%s\n",
+			stats.OSVApps, stats.OSVRequests, stopped(stats.OSVError), stats.NVDApps, stats.NVDRequests, stopped(stats.NVDError)); err != nil {
 			return err
 		}
 	}
@@ -849,4 +868,12 @@ func orDefault(d, def time.Duration) time.Duration {
 		return d
 	}
 	return def
+}
+
+// stopped words a source that ended early for the summary.
+func stopped(err string) string {
+	if err == "" {
+		return ""
+	}
+	return " (stopped early: " + oneLine(err) + ")"
 }

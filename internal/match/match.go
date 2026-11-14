@@ -90,7 +90,11 @@ type Finding struct {
 
 // Evidence records why a finding exists.
 type Evidence struct {
-	Source        string `json:"source"`
+	Source string `json:"source"`
+	// Origin names the second source a record of the data package was
+	// read from ("osv", "nvd:<cpe>"); empty for what the project
+	// published in its repository.
+	Origin        string `json:"origin,omitempty"`
 	RecordID      string `json:"record_id"`
 	Package       string `json:"package,omitempty"`
 	Range         string `json:"range,omitempty"`
@@ -100,7 +104,17 @@ type Evidence struct {
 }
 
 // sourceRank prefers project-published data over aggregated CVE data.
-var sourceRank = map[string]int{"github": 0, "osv": 1, "feed": 1, "nvd": 2}
+var sourceRank = map[string]int{"github": 0, "feed": 1, "osv": 2, "nvd": 3}
+
+// rank orders advisories by where they come from. A record of the data
+// package that the builder read from a second source ranks as that source
+// (advisory.OriginKey), below what the project published itself.
+func (a *Advisory) rank() int {
+	if o := a.Vuln.Origin(); o != "" {
+		return rank(o)
+	}
+	return rank(a.Source)
+}
 
 // rank orders sources; a source may carry a key suffix ("github:org/repo").
 func rank(source string) int {
@@ -185,8 +199,8 @@ func better(a, b *evaluation) bool {
 	if da != db {
 		return da
 	}
-	if rank(a.adv.Source) != rank(b.adv.Source) {
-		return rank(a.adv.Source) < rank(b.adv.Source)
+	if a.adv.rank() != b.adv.rank() {
+		return a.adv.rank() < b.adv.rank()
 	}
 	return a.adv.Vuln.ID < b.adv.Vuln.ID
 }
@@ -482,7 +496,7 @@ func finding(in Input, group []Advisory, best *evaluation, enr Enrichment) Findi
 		CVSS:          best.adv.CVSS,
 		SeverityLabel: best.adv.SeverityLabel,
 		Evidence: Evidence{
-			Source: best.adv.Source, RecordID: best.adv.Vuln.ID, Package: best.pkg, Range: best.rng,
+			Source: best.adv.Source, Origin: best.adv.Vuln.Origin(), RecordID: best.adv.Vuln.ID, Package: best.pkg, Range: best.rng,
 			Version: in.Version, VersionSource: in.VersionSource, Reason: best.reason,
 		},
 	}

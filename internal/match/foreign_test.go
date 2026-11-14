@@ -141,3 +141,25 @@ func TestPackageFilterOverrulesNames(t *testing.T) {
 		t.Errorf("state=%s fixed=%q", f.State, f.FixedIn)
 	}
 }
+
+// A record of the data package read from a second source ranks below what
+// the project published, whatever the IDs: the project's range decides.
+func TestOriginRanksBelowTheProject(t *testing.T) {
+	a := app(version.SemVer)
+	project := ghsa("GHSA-zzzz", []string{"CVE-2026-0001"}, "< 1.2.0", "1.2.0")
+	project.Source = "feed"
+	nvd := ghsa("CVE-2026-0001", nil, "< 9.0.0", "9.0.0")
+	nvd.Source = "feed"
+	nvd.Vuln = advisory.WithOrigin(nvd.Vuln, "nvd:cpe:2.3:a:acme:app")
+
+	f := one(t, Match(Input{App: a, Version: "1.1.0"}, []Advisory{nvd, project}, Enrichment{}))
+	if f.AdvisoryID != "GHSA-zzzz" || f.FixedIn != "1.2.0" || f.Evidence.Origin != "" {
+		t.Errorf("best = %s fixed %s origin %q", f.AdvisoryID, f.FixedIn, f.Evidence.Origin)
+	}
+	// Alone, the second source's record is the finding and says where it
+	// was read from.
+	f = one(t, Match(Input{App: a, Version: "1.1.0"}, []Advisory{nvd}, Enrichment{}))
+	if f.AdvisoryID != "CVE-2026-0001" || f.Evidence.Origin != "nvd:cpe:2.3:a:acme:app" {
+		t.Errorf("alone = %s origin %q", f.AdvisoryID, f.Evidence.Origin)
+	}
+}
