@@ -95,6 +95,34 @@ func TestInventoryEOL(t *testing.T) {
 	}
 }
 
+// With the release tags of an image known, the inventory says when a newer
+// release exists, and nothing for a container that runs the newest.
+func TestInventoryNewestRelease(t *testing.T) {
+	h := newHarness(t, withNginx(t))
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "old", Name: "web-old", Container: &inventory.Container{ImageRef: "nginx:1.29.8"}},
+		{Kind: inventory.KindContainer, RuntimeID: "new", Name: "web-new", Container: &inventory.Container{ImageRef: "nginx:1.31.8"}},
+	}, now)
+	_ = h.store.ReplaceIdentifications(ctx, []identify.Result{
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "old"), AppID: "nginx", Confidence: identify.Exact, Version: "1.29.8", Trust: identify.Confirmed},
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "new"), AppID: "nginx", Confidence: identify.Exact, Version: "1.31.8", Trust: identify.Confirmed},
+	}, now)
+	if _, body := h.do(t, "GET", "/systems/apps", nil, nil); strings.Contains(body, "newest release") {
+		t.Error("a newer release named without a tag list")
+	}
+	if err := h.store.MergeRepositoryTags(ctx, []store.RepositoryTags{{Repository: "docker.io/library/nginx", Checked: now,
+		Tags: []string{"1.31.8", "1.31.8-alpine", "1.31.7", "1.29.8", "latest"}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/systems/apps", nil, nil)
+	if got := strings.Count(stripTags(body), "newest release 1.31.8"); got != 1 {
+		t.Errorf("newest release named %d times, want once (for the old container only)", got)
+	}
+}
+
 // stripTags drops HTML tags, so a sentence reads as on the page.
 func stripTags(s string) string {
 	var b strings.Builder

@@ -43,7 +43,7 @@
   <form class="form" method="post" action="/settings">
     {{template "csrf" $csrf}}<input type="hidden" name="REGISTRY_TAGS" value="false">
     <label class="check"><input type="checkbox" name="REGISTRY_TAGS" value="true" {{if $d.RegistryTags}}checked{{end}}> Ask the registries which version tag points to a running image</label>
-    <span class="hint">For containers started from tags such as <code>latest</code>: Varde reads the tag list of the image's repository and compares the digests of release tags with the running one, anonymously and read-only. The registry learns which images you run, as it does when you pull them.</span>
+    <span class="hint">For containers started from tags such as <code>latest</code>: Varde reads the tag list of the image's repository and compares the digests of release tags with the running one, anonymously and read-only. It also reads the tag list of every other image the data package brings no release tags for (your own registries, images outside the catalog), so the inventory can say when a newer release exists. The registry learns which images you run, as it does when you pull them.</span>
     <button class="btn btn--primary" type="submit">Save</button>
   </form>
   <form class="form" method="post" action="/settings">

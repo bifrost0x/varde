@@ -269,3 +269,42 @@ func plainPath(p string) bool {
 }
 
 var windowsPath = regexp.MustCompile(`^[A-Za-z]:\\`)
+
+// Newer returns the newest stable release among the repository's release
+// tags that is above the running version, "" when there is none or the
+// versions cannot be compared. Pre-releases count only for a running
+// pre-release.
+func Newer(app *catalog.App, repository, running string, tags []string) string {
+	if app == nil || repository == "" || running == "" || len(tags) == 0 {
+		return ""
+	}
+	app = identify.AppForImage(app, repository)
+	have, err := version.Parse(app.Version.Scheme, running)
+	if err != nil {
+		return ""
+	}
+	pre := strings.Contains(running, "-")
+	var best version.Version
+	for _, t := range tags {
+		canon, ok := identify.TagRelease(app, repository, t)
+		if !ok || (strings.Contains(canon, "-") && !pre) {
+			continue
+		}
+		v, err := version.Parse(app.Version.Scheme, canon)
+		if err != nil {
+			continue
+		}
+		if c, ok := v.Compare(have); !ok || c <= 0 {
+			continue
+		}
+		if best.IsZero() {
+			best = v
+		} else if c, ok := v.Compare(best); ok && c > 0 {
+			best = v
+		}
+	}
+	if best.IsZero() {
+		return ""
+	}
+	return best.String()
+}

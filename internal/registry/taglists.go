@@ -31,9 +31,11 @@ type TagListJob struct {
 	Repository string
 }
 
-// TagListJobs lists the repositories of containers with open affected
-// findings whose tag list is missing or older than a day: those are the
-// only ones an update suggestion needs (ADR 0029).
+// TagListJobs lists the repositories of identified containers whose tag
+// list is missing or older than a day. Those with open affected findings
+// come first: an update suggestion needs their list (ADR 0029). The others
+// follow, so that the inventory can say when a newer release exists; a
+// repository the data package lists is fresh and not asked (ADR 0041).
 func TagListJobs(cat *catalog.Catalog, ws []inventory.Workload, ids map[string]identify.Result, findings []store.Finding, known map[string]store.RepositoryTags, now time.Time) []TagListJob {
 	affected := map[string]bool{}
 	for _, f := range findings {
@@ -42,9 +44,10 @@ func TagListJobs(cat *catalog.Catalog, ws []inventory.Workload, ids map[string]i
 		}
 	}
 	var out []TagListJob
+	urgent := map[string]bool{}
 	seen := map[string]bool{}
 	for _, w := range ws {
-		if w.Container == nil || !affected[w.ID] {
+		if w.Container == nil {
 			continue
 		}
 		app, ok := cat.App(ids[w.ID].AppID)
@@ -52,7 +55,11 @@ func TagListJobs(cat *catalog.Catalog, ws []inventory.Workload, ids map[string]i
 			continue
 		}
 		ref, err := imageref.Parse(w.Container.ImageRef)
-		if err != nil || seen[ref.Repository] {
+		if err != nil {
+			continue
+		}
+		urgent[ref.Repository] = urgent[ref.Repository] || affected[w.ID]
+		if seen[ref.Repository] {
 			continue
 		}
 		seen[ref.Repository] = true
@@ -61,7 +68,12 @@ func TagListJobs(cat *catalog.Catalog, ws []inventory.Workload, ids map[string]i
 		}
 		out = append(out, TagListJob{App: identify.AppForImage(app, ref.Repository), Repository: ref.Repository})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Repository < out[j].Repository })
+	sort.SliceStable(out, func(i, j int) bool {
+		if ui, uj := urgent[out[i].Repository], urgent[out[j].Repository]; ui != uj {
+			return ui
+		}
+		return out[i].Repository < out[j].Repository
+	})
 	return out
 }
 

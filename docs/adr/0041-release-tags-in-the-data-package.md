@@ -38,6 +38,10 @@ of the release package lists, which reaches a few dozen images a day.
   before the target is chosen. A fixed version above every known release stays as named: the
   list may be a day behind the fix. A pre-release counts only for a running pre-release. What a
   finding says about its own advisory (`fixed in`) is unchanged.
+- **The inventory names the newest release.** Where a known release is above the version a
+  container runs, the list of apps and containers says so. With registry versions switched
+  on, the installation lists the tags of every identified container's repository that the
+  package brought no fresh list for, those with open findings first; the setting says so.
 - **No new request from an installation.** Everything above comes with the package (ADR 0039).
 
 ## Alternatives

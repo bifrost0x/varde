@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The inventory names the newest release of a container's image when it is newer than the
+  version running, from the release tags of the data package. With registry versions on, Varde
+  also lists the tags of images the package does not cover, findings or not.
 - The data package carries advisories from osv.dev and, for apps whose projects publish no
   complete advisories, from the NVD (ADR 0042). Such apps (nginx, for example) get findings
   without the installation asking anyone; each finding says which source the record was read

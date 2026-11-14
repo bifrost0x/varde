@@ -163,3 +163,19 @@ func TestFloatingAndPinned(t *testing.T) {
 		t.Error("nil container")
 	}
 }
+
+// The newest stable release above the running version, whatever the tag's
+// variant; nothing when the container runs the newest or cannot be compared.
+func TestNewer(t *testing.T) {
+	a := &catalog.App{ID: "app", Version: catalog.VersionSpec{Scheme: "semver"}}
+	const repo = "docker.io/acme/app"
+	tags := []string{"1.2.0", "1.3.0-alpine", "v1.4.0", "1.5.0-rc1", "latest", "main", "1.1.0"}
+	for running, want := range map[string]string{"1.2.0": "1.4.0", "1.4.0": "", "1.4.1-rc1": "1.5.0-rc1", "2.0.0": "", "": "", "not-a-version": ""} {
+		if got := Newer(a, repo, running, tags); got != want {
+			t.Errorf("running %q: newer = %q, want %q", running, got, want)
+		}
+	}
+	if got := Newer(a, repo, "1.2.0", nil); got != "" {
+		t.Errorf("without tags: %q", got)
+	}
+}

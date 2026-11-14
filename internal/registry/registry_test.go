@@ -233,7 +233,9 @@ verified: "2026-11-12"
 	}
 	findings := []store.Finding{{WorkloadID: "label", MatchState: "affected"}}
 	tl := TagListJobs(cat, ws, ids, findings, nil, time.Now())
-	if len(tl) != 1 || tl[0].App.Version.Sources != nil {
+	// The container with the finding first; the other is listed too, to
+	// say whether a newer release exists.
+	if len(tl) != 2 || tl[0].App.Version.Sources != nil {
 		t.Errorf("tag list jobs %+v", tl)
 	}
 }

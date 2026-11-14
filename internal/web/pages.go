@@ -45,6 +45,9 @@ type snapshot struct {
 	exposure *exposure.Detector
 	// marked holds the image repositories marked as not an app.
 	marked map[string]bool
+	// tags are the known release tags per image repository, from the
+	// data package or the registry.
+	tags map[string]store.RepositoryTags
 	// machines are the hosts and devices merged from every source; hostOf
 	// maps a stored host ID to its machine.
 	machines []coverage.Machine
@@ -85,6 +88,11 @@ func (a *app) load(ctx context.Context, includeResolved bool) (*snapshot, error)
 	}
 	s := &snapshot{byID: map[string]inventory.Workload{}, ids: ids, findings: fs, hosts: hosts,
 		exposure: a.d.Settings.Exposure().WithRoutes(coverage.ProxyRoutes(ins, hosts)), marked: marked, devices: devs, integrations: ins, hostOf: map[string]*coverage.Machine{}}
+	// Release tags only add the note that a newer release exists: a
+	// store that cannot give them does not fail the page.
+	if tags, err := a.d.Store.RepositoryTags(ctx); err == nil {
+		s.tags = tags
+	}
 	perHost := map[string]int{}
 	for _, w := range ws {
 		s.byID[w.ID] = w
@@ -634,6 +642,10 @@ type workloadRow struct {
 	// Basis says what an automatic recognition rests on (source label,
 	// GitHub's registry, app store lists); empty for reviewed apps.
 	Basis string
+	// Newer is the newest release of the container's image above the
+	// version it runs, from the known release tags; empty when it runs
+	// the newest or nothing is known.
+	Newer string
 	// Pulled is set when a newer image for the container's tag is pulled
 	// but the container still runs the old one; Changed lists version
 	// evidence files changed inside the container.
@@ -1086,6 +1098,11 @@ func (a *app) workloadRow(s *snapshot, wl inventory.Workload, open map[string]in
 	switch {
 	case wl.Container != nil:
 		row.Image, row.Stack = wl.Container.ImageRef, wl.Container.ComposeProject
+		if app, ok := a.d.Catalog.Current().App(id.AppID); ok && id.Doubt() == "" {
+			if ref, err := imageref.Parse(wl.Container.ImageRef); err == nil {
+				row.Newer = remedy.Newer(app, ref.Repository, id.Version, s.tags[ref.Repository].Tags)
+			}
+		}
 		row.Pulled, row.Changed = wl.Container.PulledImageID != "", wl.Container.ChangedFiles
 	case wl.Manual != nil:
 		row.Image = "manual entry"
