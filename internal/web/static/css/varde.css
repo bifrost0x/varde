@@ -235,7 +235,9 @@ a.stat:hover { border-color: var(--border-strong); background: var(--surface-2);
 .details-text { white-space: pre-wrap; font-size: var(--fs-sm); color: var(--text-muted); max-height: 360px; overflow: auto; background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px; }
 
 /* Finding groups: one card per app version, advisories fold out. */
-.groups { display: grid; gap: 10px; margin-bottom: 20px; }
+/* The groups lay out by the room they get, not the window: inside an app
+   card they have a column's width. */
+.groups { display: grid; gap: 10px; margin-bottom: 20px; container-type: inline-size; min-width: 0; }
 .panel .groups { margin-bottom: 0; }
 .group { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); }
 .group--p1 { border-left: 4px solid var(--ember); }
@@ -249,7 +251,8 @@ a.stat:hover { border-color: var(--border-strong); background: var(--surface-2);
 .group[open] .group__count::after { content: " · hide"; }
 .group__action { grid-area: action; }
 .group__body { padding: 0 16px 12px; border-top: 1px solid var(--border); }
-@media (max-width: 720px) {
+.group__body { overflow-x: auto; }
+@container (max-width: 680px) {
   .group__head { grid-template-columns: 1fr; grid-template-areas: "badges" "title" "action" "count"; }
 }
 
@@ -441,7 +444,10 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .segmented a:last-child { border-right: 0; }
 .segmented a:hover { color: var(--text); background: var(--surface-2); }
 .segmented a[aria-current="page"] { color: var(--text); background: var(--surface-2); font-weight: 600; }
-.todo__details { margin-top: 8px; }
+.todo__details { margin-top: 8px; min-width: 0; }
+/* An app card whose affected list is open takes the whole row: the list
+   is for reading, a column is too narrow for it. */
+.apps > .app:has(> .todo__details[open]) { grid-column: 1 / -1; }
 .todo__details > summary { cursor: pointer; color: var(--text-muted); }
 .todo__details[open] > summary { margin-bottom: 8px; }
 
