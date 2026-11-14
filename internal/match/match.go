@@ -110,7 +110,9 @@ type Evidence struct {
 }
 
 // sourceRank prefers project-published data over aggregated CVE data.
-var sourceRank = map[string]int{"github": 0, "feed": 1, "osv": 2, "nvd": 3}
+// A release note ranks last: it says where a fix landed, not which
+// versions a flaw affects (ADR 0044).
+var sourceRank = map[string]int{"github": 0, "feed": 1, "osv": 2, "nvd": 3, advisory.OriginRelease: 4}
 
 // rank orders advisories by where they come from. A record of the data
 // package that the builder read from a second source ranks as that source
@@ -350,7 +352,16 @@ func evaluate(in Input, a *Advisory, running version.Version, versionErr string)
 		}
 		return e
 	}
-	return evaluateEntries(in, a, entries, running, versionErr)
+	e := evaluateEntries(in, a, entries, running, versionErr)
+	if a.Vuln.Origin() == advisory.OriginRelease && e.state == Affected {
+		// The builder marks these ranges inferred; a record that lost
+		// the mark is still no more than a note.
+		e.state = Unverified
+	}
+	if a.Vuln.Origin() == advisory.OriginRelease && e.state == Unverified && versionErr == "" && e.fixedIn != "" {
+		e.reason = "the release notes of " + e.fixedIn + " name a security fix; no advisory says which versions the flaw affects"
+	}
+	return e
 }
 
 // appName is the app's name for a sentence, its id when it has none.

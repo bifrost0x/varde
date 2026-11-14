@@ -234,3 +234,49 @@ func TestOpenRangeIsCompleted(t *testing.T) {
 		t.Errorf("closed: %s fixed %q completed by %q", f.AdvisoryID, f.FixedIn, f.Evidence.CompletedBy)
 	}
 }
+
+// releaseNote is a record the builder made from a release note (ADR 0044).
+func releaseNote(id, fixed string, aliases ...string) Advisory {
+	v := advisory.Vulnerability{ID: id, Aliases: aliases, Summary: "Release " + fixed + " names a security fix",
+		Affected: []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeEcosystem,
+			Events:           []advisory.Event{{Introduced: "0"}, {Fixed: fixed}},
+			DatabaseSpecific: map[string]any{advisory.RangeInferred: true}}}}}}
+	return Advisory{Source: "feed", Vuln: advisory.WithOrigin(v, advisory.OriginRelease)}
+}
+
+// A release note never makes a version affected: below the release it is
+// a finding to check with the release as the fix, at or above it nothing.
+func TestReleaseNoteIsNeverAffected(t *testing.T) {
+	a := app(version.SemVer)
+	note := releaseNote("VARDE-REL-1", "1.5.0")
+	f := one(t, Match(Input{App: a, Version: "1.4.0"}, []Advisory{note}, Enrichment{}))
+	if f.State != Unverified || f.FixedIn != "1.5.0" || f.Target != nil || f.Evidence.Origin != advisory.OriginRelease ||
+		!strings.Contains(f.Evidence.Reason, "release notes of 1.5.0") {
+		t.Errorf("below the release: %+v", f)
+	}
+	if fs := Match(Input{App: a, Version: "1.5.0"}, []Advisory{note}, Enrichment{}); len(fs) != 0 {
+		t.Errorf("at the release: %+v", fs)
+	}
+	// A record that lost its inferred mark is still no more than a note.
+	bare := note
+	bare.Vuln.Affected = []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeEcosystem,
+		Events: []advisory.Event{{Introduced: "0"}, {Fixed: "1.5.0"}}}}}}
+	if f := one(t, Match(Input{App: a, Version: "1.4.0"}, []Advisory{bare}, Enrichment{})); f.State != Unverified {
+		t.Errorf("without the mark: %+v", f)
+	}
+}
+
+// Where the project's advisory describes the same flaw, it decides, also
+// when it clears the running version.
+func TestReleaseNoteRanksLast(t *testing.T) {
+	a := app(version.SemVer)
+	project := ghsa("GHSA-pppp", []string{"CVE-2026-0007"}, ">= 1.3.0, < 1.4.0", "1.4.0")
+	note := releaseNote("VARDE-REL-2", "1.5.0", "CVE-2026-0007")
+	if fs := Match(Input{App: a, Version: "1.4.2"}, []Advisory{note, project}, Enrichment{}); len(fs) != 0 {
+		t.Errorf("the note outvoted the project's advisory: %+v", fs)
+	}
+	f := one(t, Match(Input{App: a, Version: "1.3.5"}, []Advisory{note, project}, Enrichment{}))
+	if f.State != Affected || f.AdvisoryID != "GHSA-pppp" || f.FixedIn != "1.4.0" {
+		t.Errorf("project's flaw: %+v", f)
+	}
+}

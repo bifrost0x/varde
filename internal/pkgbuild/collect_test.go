@@ -45,6 +45,10 @@ type upstream struct {
 	// advisories per "owner/name"; status overrides the answer.
 	advisories map[string][]string
 	status     map[string]int
+	// releases per "owner/name", as GitHub's release list answers.
+	releases map[string]string
+	// notesLimited refuses release requests with a rate limit.
+	notesLimited bool
 	// limitAt refuses the n-th advisory request (1-based) once, naming a
 	// reset this far ahead.
 	limitAt    int
@@ -61,7 +65,7 @@ type upstream struct {
 
 func newUpstream(t *testing.T, now func() time.Time) *upstream {
 	t.Helper()
-	u := &upstream{t: t, advisories: map[string][]string{}, status: map[string]int{}, requests: map[string]int{}, now: now}
+	u := &upstream{t: t, advisories: map[string][]string{}, status: map[string]int{}, releases: map[string]string{}, requests: map[string]int{}, now: now}
 	u.srv = httptest.NewTLSServer(http.HandlerFunc(u.serve))
 	t.Cleanup(u.srv.Close)
 	return u
@@ -106,6 +110,22 @@ func (u *upstream) serve(w http.ResponseWriter, r *http.Request) {
 			doc.Data = append(doc.Data, d{CVE: cve, EPSS: "0.42", Percentile: "0.97", Date: "2026-11-10"})
 		}
 		_ = json.NewEncoder(w).Encode(doc)
+	case strings.HasPrefix(r.URL.Path, "/repos/") && strings.HasSuffix(r.URL.Path, "/releases"):
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/repos/"), "/")
+		repo := parts[0] + "/" + parts[1]
+		u.requests["releases:"+repo]++
+		if u.notesLimited {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(u.now().Add(time.Hour).Unix(), 10))
+			http.Error(w, "rate limit", http.StatusForbidden)
+			return
+		}
+		body, ok := u.releases[repo]
+		if !ok {
+			body = "[]"
+		}
+		w.Header().Set("X-RateLimit-Remaining", "900")
+		_, _ = w.Write([]byte(body))
 	case strings.HasPrefix(r.URL.Path, "/repos/"):
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/repos/"), "/")
 		repo := parts[0] + "/" + parts[1]

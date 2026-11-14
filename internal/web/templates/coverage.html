@@ -72,7 +72,7 @@
 <section class="panel" aria-labelledby="lim-title">
   <h2 id="lim-title">Apps with limited advisory data{{if $d.Limited}} <span class="muted">({{len $d.Limited}})</span>{{end}}</h2>
   {{if $d.Limited}}<p class="small">These apps are checked, but their projects do not publish every flaw in a form a program can compare, so Varde may learn of one late or not at all. That is a limit of what the project publishes, not a setting you can change. The packages and libraries inside their images are checked in full either way.</p>
-  <ul class="small">{{range $d.Limited}}<li>{{.Name}}: {{if eq .Coverage "partial"}}<span class="muted">the project publishes advisories on its repository; flaws it only mentions in release notes are missed</span>{{else}}<span class="muted">the project publishes no advisories a program can read; Varde relies on the CVE database, which lags and is incomplete</span>{{end}}</li>{{end}}</ul>
+  <ul class="small">{{range $d.Limited}}<li>{{.Name}}: {{if eq .Coverage "partial"}}<span class="muted">the project publishes advisories on its repository; {{if $d.Notes}}a fix it names only in its release notes comes as a finding to check yourself{{else}}flaws it only mentions in release notes are missed{{end}}</span>{{else}}<span class="muted">the project publishes no advisories a program can read; Varde relies on the CVE database, which lags and is incomplete</span>{{end}}</li>{{end}}</ul>
   {{else}}<p class="small muted">All identified apps publish structured advisories.</p>{{end}}
 </section>
 {{end}}

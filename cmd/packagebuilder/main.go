@@ -79,6 +79,9 @@ type config struct {
 	// osvURL and nvdURL override their endpoints in tests.
 	osv, nvd       bool
 	osvURL, nvdURL string
+	// releaseNotes switches on the security fixes named in release notes
+	// (ADR 0044).
+	releaseNotes bool
 	// generate and releases switch the catalog generator and the release
 	// reads on; generateFor and releasesUntil bound them from the start of
 	// the build, maxManifests the manifest requests of the release reads
@@ -154,6 +157,7 @@ func main() {
 	flag.BoolVar(&c.generate, "generate", true, "generate and check catalog entries for index images without a reviewed entry")
 	flag.BoolVar(&c.osv, "osv", true, "ask osv.dev about the osv_packages of catalog apps")
 	flag.BoolVar(&c.nvd, "nvd", true, "ask the NVD about the CPEs of catalog apps whose projects publish no complete advisories")
+	flag.BoolVar(&c.releaseNotes, "release-notes", true, "read the release notes of repositories whose advisories are not complete")
 	flag.BoolVar(&c.tags, "tags", true, "read the release tags of the images of every catalog app")
 	flag.BoolVar(&c.releases, "releases", true, "read the package lists of the newest release of every catalog app")
 	flag.DurationVar(&c.generateFor, "generate-time", defaultGenerateFor, "the generator starts no project this long after the start of the build")
@@ -384,7 +388,8 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	}
 	stats, err := pkgbuild.Collect(ctx, repos, pkgbuild.Options{Store: st, HTTP: hc, Token: env("GITHUB_TOKEN"),
 		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: wait, Log: logger,
-		Apps: layered.Apps(), OSV: c.osv, NVD: c.nvd, OSVURL: c.osvURL, NVDURL: c.nvdURL, NVDKey: env("VARDE_NVD_API_KEY")})
+		Apps: layered.Apps(), OSV: c.osv, NVD: c.nvd, OSVURL: c.osvURL, NVDURL: c.nvdURL, NVDKey: env("VARDE_NVD_API_KEY"),
+		ReleaseNotes: c.releaseNotes})
 	if err != nil {
 		return err
 	}
@@ -392,7 +397,7 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if c.osv || c.nvd {
 		second = layered.Apps()
 	}
-	snap, err := pkgbuild.Snapshot(ctx, st, entries, table, repos, second, now, c.valid)
+	snap, err := pkgbuild.Snapshot(ctx, st, entries, table, repos, second, c.releaseNotes, now, c.valid)
 	if err != nil {
 		return err
 	}
@@ -532,6 +537,12 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 	if c.osv || c.nvd {
 		if _, err := fmt.Fprintf(out, "second sources: osv.dev %d apps, %d requests%s; NVD %d apps, %d requests%s\n",
 			stats.OSVApps, stats.OSVRequests, stopped(stats.OSVError), stats.NVDApps, stats.NVDRequests, stopped(stats.NVDError)); err != nil {
+			return err
+		}
+	}
+	if c.releaseNotes {
+		if _, err := fmt.Fprintf(out, "release notes: %d repositories, %d requests%s\n",
+			stats.NotesRepos, stats.NotesRequests, stopped(stats.NotesError)); err != nil {
 			return err
 		}
 	}

@@ -28,6 +28,10 @@ type Repo struct {
 	// CatalogIDs are the reviewed catalog apps that name the repository;
 	// the package repeats the advisories under each.
 	CatalogIDs []string
+	// Complete is set when a catalog app that names the repository has
+	// coverage full: its advisories are complete, and its release notes
+	// are not read (ADR 0044).
+	Complete bool
 }
 
 // Repos lists every GitHub repository of a catalog app or an index row,
@@ -63,6 +67,9 @@ func Repos(cat *catalog.Catalog, index *applists.Table) ([]Repo, error) {
 				return nil, fmt.Errorf("catalog entry %s: %w", app.ID, err)
 			}
 			r.CatalogIDs = append(r.CatalogIDs, app.ID)
+			if app.Advisories.Coverage == catalog.CoverageFull {
+				r.Complete = true
+			}
 			// A reviewed entry names a repository that exists: for it a
 			// 404 is a failure, not "no advisories" as for a derived one.
 			r.App.Origin = catalog.OriginBuiltin

@@ -41,6 +41,9 @@ history of what was built is in `CHANGELOG.md`; design decisions are in `docs/ad
   (ADR 0036). Reads have size, file-count and nesting limits; arbitrary Rust binaries, dependencies
   without supported metadata, programs on hosts outside the package manager, snaps and flatpaks
   are not checked. rpm databases before rpm 4.16 (Berkeley DB, NDB) are not read.
+- Security fixes named only in release notes come with the data package, not in direct mode
+  (ADR 0044). They are found by their wording and never count as affected; a fix described
+  without any of the words is missed.
 - Device firmware is reported only where a controller says an update is available (UniFi); no
   advisory feed covers it.
 

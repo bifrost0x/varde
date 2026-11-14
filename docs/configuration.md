@@ -363,6 +363,10 @@ package then says "not available" and Varde asks the public sources itself.
   Gaps as "no advisory source". To have them checked, switch on "Also ask public sources directly"
   in the same section (`VARDE_DIRECT_QUERIES`): Varde then asks api.github.com about those apps,
   and only those, which shows GitHub which of them you run.
+- **Release notes.** Many projects name part of their security fixes only in their release
+  notes. The package carries those of every app whose advisories are not complete (ADR 0044).
+  They never make a version affected: a version below such a release shows a finding to check
+  yourself, with the release that fixes it and the lines of the notes, and nothing is sent.
 - **What is not in it.** Distribution package data (Debian, Ubuntu, Alpine and the others),
   osv.dev package data, NVD and endoflife.date. Their switches under Settings › Optional advisory
   sources work the same with and without the package, and what they find counts beside the
