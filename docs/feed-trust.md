@@ -69,7 +69,7 @@ transaction and the file write, the database is ahead of the files and the next 
 the same sequence.
 
 When no manifest verified for `VARDE_FEED_STALE_AFTER` (default 72 h), or the installed one has
-expired, a system notice appears on the overview and in the daily digest.
+expired, a system notice appears on the front page and in the daily digest.
 
 ## Channels
 

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bifrost0x/varde/internal/advisory"
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/feed"
 	"github.com/bifrost0x/varde/internal/store"
@@ -20,7 +21,7 @@ import (
 
 func (f *fixture) snapshot() feed.Snapshot {
 	f.t.Helper()
-	snap, err := Snapshot(context.Background(), f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, f.now, 7*24*time.Hour)
+	snap, err := Snapshot(context.Background(), f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, nil, f.now, 7*24*time.Hour)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -174,5 +175,143 @@ func TestCountsRoundTrip(t *testing.T) {
 	}
 	if _, _, err := ReadCounts(dir); err == nil {
 		t.Fatal("a broken baseline was read")
+	}
+}
+
+// Records of the second sources ship under the catalog app that names the
+// package or the CPE, marked with their origin: not when the repository
+// already published the same record, not for a CPE the entry dropped, and
+// the NVD's not for an app whose project publishes complete advisories.
+func TestSnapshotSecondSources(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if _, err := Collect(ctx, f.repos, f.opts); err != nil {
+		t.Fatal(err)
+	}
+	base := f.snapshot()
+	var published string
+	for _, a := range base.Advisories {
+		if a.AppID == "widget" {
+			published = a.OSV.ID
+			break
+		}
+	}
+	if published == "" {
+		t.Fatal("fixture has no advisory for widget")
+	}
+	const cpe, dropped = "cpe:2.3:a:acme:widget", "cpe:2.3:a:acme:old"
+	rec := func(source, id string, aliases ...string) store.AdvisoryRecord {
+		return store.AdvisoryRecord{AppID: "widget", Source: source, CVSS: 7.5, SeverityLabel: "high",
+			Vuln: advisory.Vulnerability{ID: id, Aliases: aliases, Modified: f.now}}
+	}
+	put := func(source string, recs ...store.AdvisoryRecord) {
+		t.Helper()
+		if err := f.st.ReplaceAdvisories(ctx, "widget", source, recs, f.now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("osv", rec("osv", "GO-2026-0001", "CVE-2026-1111"), rec("osv", published))
+	put("nvd:"+cpe, rec("nvd:"+cpe, "CVE-2026-2222"), rec("nvd:"+cpe, "GO-2026-0001"))
+	put("nvd:"+dropped, rec("nvd:"+dropped, "CVE-2026-3333"))
+
+	app := func(coverage string) *catalog.App {
+		return &catalog.App{ID: "widget", Advisories: catalog.Advisories{Coverage: coverage, CPE: []string{cpe},
+			OSVPackages: []catalog.OSVPackage{{Ecosystem: "Go", Name: "example.org/widget"}}}}
+	}
+	snap := func(a *catalog.App) map[string]string {
+		t.Helper()
+		s, err := Snapshot(ctx, f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, []*catalog.App{a}, f.now, 7*24*time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(s.Advisories) < len(base.Advisories) {
+			t.Fatalf("second sources removed advisories: %d < %d", len(s.Advisories), len(base.Advisories))
+		}
+		origins := map[string]string{}
+		for _, l := range s.Advisories {
+			if l.AppID != "widget" {
+				continue
+			}
+			if _, twice := origins[l.OSV.ID]; twice {
+				t.Fatalf("%s shipped twice under one app", l.OSV.ID)
+			}
+			origins[l.OSV.ID] = l.OSV.Origin()
+		}
+		return origins
+	}
+
+	got := snap(app(catalog.CoveragePartial))
+	want := map[string]string{"GO-2026-0001": "osv", "CVE-2026-2222": "nvd:" + cpe, published: ""}
+	for id, origin := range want {
+		if o, ok := got[id]; !ok || o != origin {
+			t.Errorf("%s: origin %q (shipped %v), want %q", id, o, ok, origin)
+		}
+	}
+	if _, ok := got["CVE-2026-3333"]; ok {
+		t.Error("a record of a CPE the entry no longer names was shipped")
+	}
+	// The stored record keeps its own database_specific.
+	recs, err := f.st.Advisories(ctx, "widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range recs {
+		if r.Vuln.Origin() != "" {
+			t.Fatalf("the store's record %s was changed", r.Vuln.ID)
+		}
+	}
+
+	// For an app with complete advisories only the NVD records ship that
+	// give an end to a project advisory which names none.
+	var own []store.AdvisoryRecord
+	derived, err := f.st.Advisories(ctx, "gh-acme-widget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range derived {
+		if r.Source == "github:acme/widget" {
+			own = append(own, r)
+		}
+	}
+	own = append(own, store.AdvisoryRecord{AppID: "gh-acme-widget", Source: "github:acme/widget", CVSS: 7, SeverityLabel: "high",
+		Vuln: advisory.Vulnerability{ID: "GHSA-open-0001", Aliases: []string{"CVE-2026-4444"}, Modified: f.now,
+			Affected: []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "2.8"}}}}}}}})
+	if err := f.st.ReplaceAdvisories(ctx, "gh-acme-widget", "github:acme/widget", own, f.now); err != nil {
+		t.Fatal(err)
+	}
+	closing := rec("nvd:"+cpe, "CVE-2026-4444")
+	closing.Vuln.Affected = []advisory.Affected{{Ranges: []advisory.Range{{Type: advisory.RangeEcosystem, Events: []advisory.Event{{Introduced: "2.8"}, {Fixed: "6.2.19"}}}}}}
+	put("nvd:"+cpe, rec("nvd:"+cpe, "CVE-2026-2222"), closing)
+
+	full := snap(app(catalog.CoverageFull))
+	if _, ok := full["CVE-2026-2222"]; ok {
+		t.Error("NVD records shipped for an app with complete advisories")
+	}
+	if full["CVE-2026-4444"] != "nvd:"+cpe {
+		t.Errorf("the NVD record that completes an open project advisory was left out: %v", full)
+	}
+	if full["GO-2026-0001"] != "osv" {
+		t.Error("OSV records left out for an app with complete advisories")
+	}
+}
+
+// A second source that cannot be read does not stop the build.
+func TestCollectSecondSourceFailureIsNotFatal(t *testing.T) {
+	f := newFixture(t)
+	o := f.opts
+	o.OSV, o.NVD = true, true
+	o.OSVURL, o.NVDURL = o.GitHubURL+"/no-such-osv", o.GitHubURL+"/no-such-nvd"
+	o.Apps = []*catalog.App{{ID: "widget", Advisories: catalog.Advisories{Coverage: catalog.CoverageLimited, CPE: []string{"cpe:2.3:a:acme:widget"},
+		OSVPackages: []catalog.OSVPackage{{Ecosystem: "Go", Name: "example.org/widget"}}}},
+		{ID: "full", Advisories: catalog.Advisories{Coverage: catalog.CoverageFull, CPE: []string{"cpe:2.3:a:acme:full"}}}}
+	st, err := Collect(context.Background(), f.repos, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.OSVApps != 1 || st.NVDApps != 2 || st.OSVRequests == 0 || st.NVDRequests == 0 {
+		t.Fatalf("stats: %+v", st)
+	}
+	if got := f.snapshot(); len(got.Advisories) == 0 {
+		t.Fatal("the repositories' advisories were lost")
 	}
 }

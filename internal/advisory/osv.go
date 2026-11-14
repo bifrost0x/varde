@@ -115,3 +115,47 @@ func (v Vulnerability) URL() string {
 	}
 	return ""
 }
+
+// OriginKey is the database_specific key under which a record of the data
+// package names the source the package builder read it from, when that is
+// not the project's own repository: "osv", or "nvd:" and the CPE asked
+// for. Installations released before it ignore the key.
+const OriginKey = "varde_origin"
+
+// Origin returns the origin of a record of the data package, "" for one a
+// project published in its repository.
+func (v Vulnerability) Origin() string {
+	s, _ := v.DatabaseSpecific[OriginKey].(string)
+	return s
+}
+
+// WithOrigin returns v with its origin set, leaving v's map as it is.
+func WithOrigin(v Vulnerability, origin string) Vulnerability {
+	m := make(map[string]any, len(v.DatabaseSpecific)+1)
+	for k, val := range v.DatabaseSpecific {
+		m[k] = val
+	}
+	m[OriginKey] = origin
+	v.DatabaseSpecific = m
+	return v
+}
+
+// NamesEnd reports whether the record says where the affected versions
+// end: a fixed or last affected version, or an explicit list of versions.
+// A record that does not ("from 2.8 on", or a range no program could read)
+// cannot clear a patched version or name an update by itself.
+func (v Vulnerability) NamesEnd() bool {
+	for _, a := range v.Affected {
+		if len(a.Versions) > 0 {
+			return true
+		}
+		for _, r := range a.Ranges {
+			for _, ev := range r.Events {
+				if ev.Fixed != "" || ev.LastAffected != "" || ev.Limit != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

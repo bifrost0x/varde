@@ -74,7 +74,7 @@ func (a *app) systems(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 			v.Notices = append(v.Notices, n)
 		}
 	}
-	a.page(w, r, cur, http.StatusOK, "hosts", view{Title: "Systems", Nav: "systems", Tabs: tabs("systems", "/systems"), Data: v})
+	a.page(w, r, cur, http.StatusOK, "hosts", view{Title: "Machines", Nav: "systems", Tabs: tabs("systems", "/systems"), Data: v})
 }
 
 // readSystems counts the systems whose installed software Varde knows. Every

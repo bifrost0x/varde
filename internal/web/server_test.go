@@ -350,7 +350,7 @@ func TestPagesRenderForSignedInUser(t *testing.T) {
 	_, _ = h.store.SyncFindings(ctx, []store.FindingInput{{WorkloadID: wid, AppID: "immich", AdvisoryID: "GHSA-test", MatchState: "affected", FixedIn: "1.121.0", Detail: map[string]any{"summary": "<b>x</b>"}}}, now)
 	_ = h.store.SetAssessments(ctx, []store.Assessment{{ID: store.FindingID(wid, "GHSA-test"), Priority: "P1", Exposure: "public"}})
 	_, body = h.do(t, "GET", "/", nil, nil)
-	if !strings.Contains(body, "1 urgent update to do") || !strings.Contains(body, "On 1 container or system") || !strings.Contains(body, `class="todo todo--p1"`) || !strings.Contains(body, "hero--alert") || strings.Contains(body, "<b>x</b>") {
+	if !strings.Contains(body, "1 app needs an update now") || !strings.Contains(body, `class="app app--now"`) || !strings.Contains(body, "Update to 1.121.0") || !strings.Contains(body, "hero--alert") || strings.Contains(body, "<b>x</b>") {
 		t.Error("P1 state not rendered or upstream text not escaped")
 	}
 	resp, body := h.do(t, "GET", "/findings/"+store.FindingID(wid, "GHSA-test"), nil, nil)
@@ -363,7 +363,7 @@ func TestPagesRenderForSignedInUser(t *testing.T) {
 	// By default one card per update to do on a system, with the app
 	// versions behind it.
 	_, body = h.do(t, "GET", "/findings", nil, nil)
-	if !strings.Contains(body, `class="todo todo--p1"`) || !strings.Contains(body, "1 update to do") || !strings.Contains(body, "Pull a newer image and recreate the container") || !strings.Contains(body, "docker compose pull") ||
+	if !strings.Contains(body, `class="app app--now"`) || !strings.Contains(body, "1 update to do") || !strings.Contains(body, "Update to 1.121.0") || !strings.Contains(body, "What is affected") ||
 		!strings.Contains(body, `class="group group--p1"`) {
 		t.Error("findings not grouped by what fixes them")
 	}
@@ -735,17 +735,19 @@ func TestOverviewCountsUpdates(t *testing.T) {
 	}
 	_, body := h.do(t, "GET", "/", nil, nil)
 	body = html.UnescapeString(body)
-	_, stats, ok := strings.Cut(body, `class="stats"`)
+	_, chips, ok := strings.Cut(body, `class="chips"`)
 	if ok {
-		stats, _, ok = strings.Cut(stats, "</div>")
+		chips, _, ok = strings.Cut(chips, "</nav>")
 	}
 	if !ok {
-		t.Fatal("overview has no tiles")
+		t.Fatal("the front page has no counts")
 	}
-	if !strings.Contains(stats, `P2</span> updates</span><span class="stat__value">1<`) || !strings.Contains(stats, `P3</span> updates</span><span class="stat__value">1<`) {
-		t.Errorf("tiles do not count updates:\n%s", stats)
+	// Apps are counted, not findings: thirty flaws of one container are
+	// one app to update.
+	if !strings.Contains(chips, `<strong>1</strong> update soon`) || !strings.Contains(chips, `<strong>1</strong> with the next update`) {
+		t.Errorf("the counts do not count apps:\n%s", chips)
 	}
-	for _, want := range []string{"2 updates to do, none urgent", "1 update has no fixed version published yet", "The 31 findings behind them"} {
+	for _, want := range []string{"2 updates to do, none urgent", "Update to 1.121.0", "fixes all 30 flaws", "No fixed version is published yet"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
 		}

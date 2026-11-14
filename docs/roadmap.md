@@ -12,6 +12,13 @@ history of what was built is in `CHANGELOG.md`; design decisions are in `docs/ad
 - Notification channels are configured through environment variables only; the settings page shows
   them read-only, so channel secrets never pass through the UI.
 - Resolved findings are reported in the weekly digest only, not in a message of their own.
+- The interface is English only.
+- The data package carries the release tags of catalog images and, beside the projects' own
+  advisories, records of osv.dev and the NVD (ADR 0041, ADR 0042). For an image outside the
+  catalog, release tags are known only with registry versions switched on. NVD ranges are as
+  precise as the NVD's CPE configurations.
+- A flaw is urgent because of an attack path only when the path starts with it (ADR 0034); what
+  lies behind it is at least P2 on a path from the internet.
 - Varde installs agents on Linux hosts with systemd or OpenRC, for linux/amd64 and linux/arm64
   (ADR 0031); elsewhere the agent is run by hand.
 - Every installed package of hosts and container images is checked against its distribution's
@@ -53,6 +60,7 @@ another VLAN or behind a VPN. ADR 0020 records the decision.
   on the other side (token, role, key line), checks the connection and explains failures in plain
   words.
 - **Product tour.** A guided tour through the main pages, as in WebSSH.
+- **Apps first.** The interface starts from what runs and what each app needs (ADR 0043).
 
 ## Stages
 

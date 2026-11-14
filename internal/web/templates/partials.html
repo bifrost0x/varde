@@ -1,15 +1,15 @@
 {{/* SPDX-License-Identifier: Apache-2.0 */}}
 {{define "findingtable"}}
 <table class="table">
-  <thead><tr><th scope="col">Priority</th><th scope="col">App</th><th scope="col">Advisory</th><th scope="col">Fix</th><th scope="col">Exposure</th></tr></thead>
+  <thead><tr><th scope="col">Urgency</th><th scope="col">App</th><th scope="col">Flaw</th><th scope="col">Fixed in</th><th scope="col">Reachable</th></tr></thead>
   <tbody>
   {{range .}}
   <tr>
-    <td data-label="Priority">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</td>
+    <td data-label="Urgency">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</td>
     <td data-label="App"><a href="/findings/{{.ID}}">{{.AppName}}</a><span class="cell-sub">{{.WorkloadName}}{{if .Version}} · <span class="mono">{{.Version}}</span>{{end}}</span></td>
-    <td data-label="Advisory"><span class="mono">{{.AdvisoryID}}</span><span class="cell-sub">{{truncate .Summary 110}}</span></td>
-    <td data-label="Fix">{{if .FixedIn}}<span class="mono">≥ {{.FixedIn}}</span>{{else}}<span class="muted">no fix yet</span>{{end}}</td>
-    <td data-label="Exposure">{{template "exposure" .Exposure}}</td>
+    <td data-label="Flaw">{{if .Summary}}{{truncate .Summary 110}}{{else}}<span class="mono">{{.AdvisoryID}}</span>{{end}}<span class="cell-sub mono">{{.AdvisoryID}}</span></td>
+    <td data-label="Fixed in">{{if .FixedIn}}<span class="mono">{{.FixedIn}}</span>{{else}}<span class="muted">no fix yet</span>{{end}}</td>
+    <td data-label="Reachable">{{template "exposure" .Exposure}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -124,31 +124,26 @@
 {{end}}
 {{end}}{{end}}
 
-{{define "guiderest"}}{{if ge .Next 0}}<section class="panel" id="get-started" aria-labelledby="rest-title">
-  <h2 id="rest-title">Left to set up</h2>
-  <ul class="notice-list">{{range .Steps}}{{if not .Done}}<li>{{if .Link}}<a href="{{.Link}}"><strong>{{.Title}}</strong></a>{{else}}<strong>{{.Title}}</strong>{{end}}<span class="cell-sub">{{.Text}}</span></li>{{end}}{{end}}</ul>
-</section>{{end}}{{end}}
+{{/* What a workload without open findings was checked against. */}}
+{{define "findingscell"}}{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else if eq .Checked "not"}}<span class="badge badge--unverified">not checked</span>{{else if eq .Checked "limited"}}<span class="muted">none known</span>{{else}}<span class="muted">none found</span>{{end}}{{if .CheckNote}}<span class="cell-sub">{{.CheckNote}}</span>{{end}}{{end}}
 
-{{/* One card per thing to do on one system; the packages behind it fold out. */}}
-{{define "todogroups"}}
-{{range .}}
-<article class="todo{{if eq .Priority "P1"}} todo--p1{{else if eq .Priority "P2"}} todo--p2{{end}}">
-  <div class="todo__head">
-    <div class="todo__badges">{{template "prio" .Priority}}{{if .KEV}} <span class="badge badge--kev" title="Known exploited: attackers use this flaw (CISA KEV list)">exploited</span>{{end}}{{template "pathclass" .PathClass}}</div>
-    <div class="todo__what">
-      <h3>{{.Name}}</h3>
-      <span class="cell-sub">{{.Where}}</span>
-    </div>
-    <div class="todo__count"><strong>{{.Count}}</strong><span class="cell-sub">{{if .Urgent}}{{.Urgent}} urgent{{else}}{{if eq .Count 1}}finding{{else}}findings{{end}}{{end}}{{if .New}} · {{.New}} new{{end}}</span></div>
-  </div>
-  <p class="todo__action"><strong>{{.Action}}</strong></p>
-  {{if .Note}}<p class="small">{{.Note}}</p>{{end}}
-  {{if .Command}}<p class="small muted">For example <code>{{.Command}}</code></p>{{end}}
+{{define "appicon"}}<span class="app__dot app__dot--{{.}}" aria-hidden="true"></span>{{end}}
+
+{{define "appcard"}}<article class="app app--{{.State}}">
+  <header class="app__head">
+    {{template "appicon" .State}}
+    <div class="app__title"><a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span></div>
+    <span class="app__state">{{.Label}}</span>
+  </header>
+  {{if .Why}}<p class="app__why">{{.Why}}</p>{{end}}
+  <p class="app__action"><strong>{{.Action}}</strong>{{if .Fixes}} <span class="muted">· {{.Fixes}}</span>{{end}}</p>
+  {{if .Line}}<div class="secret"><pre id="line-{{.Key}}" class="mono install">{{.Line}}</pre><button class="btn btn--ghost" type="button" data-copy="#line-{{.Key}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>{{end}}
   {{with .Release}}<p class="small">{{if .Fixes}}{{if .Fixed}}<strong>Release <span class="mono">{{.Tag}}</span> fixes {{len .Fixed}} of {{.Total}}</strong> flaws in the image's packages.{{else if .Open}}<strong>Release <span class="mono">{{.Tag}}</span> does not fix these yet:</strong> none of the {{.Total}} flaws in the image's packages.{{else}}Varde cannot tell which of the {{.Total}} flaws in the image's packages release <span class="mono">{{.Tag}}</span> fixes.{{end}}{{if .OpenShown}} Not fixed in any release yet: {{range $i, $id := .OpenShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .OpenMore}} and {{.OpenMore}} more{{end}}.{{end}}{{if .UnknownShown}} Varde cannot tell for: {{range $i, $id := .UnknownShown}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}{{if .UnknownMore}} and {{.UnknownMore}} more{{end}}.{{end}}{{else if .Newest}}Already runs the newest release (<span class="mono">{{.Tag}}</span>).{{else}}Newest release: <span class="mono">{{.Tag}}</span>.{{end}} <span class="muted">Read {{date .Read}}.</span></p>{{end}}
-  <details class="todo__details">
+  <footer class="app__foot"><span class="small muted">{{if .Rest}}{{.Rest}}{{else}}{{plural .Count "open finding"}}{{end}}</span><a class="btn" href="{{.Href}}">How to update</a></footer>
+  {{if .Groups}}<details class="todo__details">
     <summary class="small">What is affected ({{len .Groups}} {{if eq (len .Groups) 1}}package or app{{else}}packages and apps{{end}})</summary>
     {{template "findinggroups" .Groups}}
-  </details>
-</article>
-{{end}}
-{{end}}
+  </details>{{end}}
+</article>{{end}}
+
+{{define "approw"}}<li class="approw approw--{{.State}}">{{template "appicon" .State}}<a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span><span class="approw__state">{{.Label}}{{if .Newer}} · newest release <span class="mono">{{.Newer}}</span>{{end}}</span>{{if .Action}}<span class="cell-sub">{{.Action}}{{if .Fixes}} · {{.Fixes}}{{end}}</span>{{end}}{{if .Note}}<span class="cell-sub">{{.Note}}</span>{{end}}</li>{{end}}

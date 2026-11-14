@@ -75,11 +75,19 @@ type config struct {
 	force                               bool
 	allowDevelopment                    bool
 	githubURL, kevURL, epssURL          string
+	// osv and nvd switch the second advisory sources on (ADR 0042);
+	// osvURL and nvdURL override their endpoints in tests.
+	osv, nvd       bool
+	osvURL, nvdURL string
 	// generate and releases switch the catalog generator and the release
 	// reads on; generateFor and releasesUntil bound them from the start of
 	// the build, maxManifests the manifest requests of the release reads
 	// (0: by whether Docker Hub credentials are set).
-	generate, releases         bool
+	generate, releases bool
+	// tags switches the tag lists on: the release tags of every catalog
+	// image, read before the release package lists and bounded by the
+	// same releasesUntil.
+	tags                       bool
 	generateFor, releasesUntil time.Duration
 	maxManifests               int
 	// storeLimit, releasesBudget and layerCache override the size bounds
@@ -94,6 +102,8 @@ type config struct {
 	sources *genSources
 	// readReleases reads the release package lists (releases.Reader.Run).
 	readReleases func(ctx context.Context, cat *catalog.Catalog, order []string) ([]feed.ReleaseLine, releases.Stats, error)
+	// readTags reads the release tags (releases.TagReader.Run).
+	readTags func(ctx context.Context, cat *catalog.Catalog, order []string) ([]feed.TagLine, releases.TagStats, error)
 }
 
 // genSources are what the generator asks; nil fields are left unset.
@@ -142,6 +152,9 @@ func main() {
 	flag.StringVar(&c.kevURL, "kev-url", "", "KEV endpoint (tests)")
 	flag.StringVar(&c.epssURL, "epss-url", "", "EPSS endpoint (tests)")
 	flag.BoolVar(&c.generate, "generate", true, "generate and check catalog entries for index images without a reviewed entry")
+	flag.BoolVar(&c.osv, "osv", true, "ask osv.dev about the osv_packages of catalog apps")
+	flag.BoolVar(&c.nvd, "nvd", true, "ask the NVD about the CPEs of catalog apps whose projects publish no complete advisories")
+	flag.BoolVar(&c.tags, "tags", true, "read the release tags of the images of every catalog app")
 	flag.BoolVar(&c.releases, "releases", true, "read the package lists of the newest release of every catalog app")
 	flag.DurationVar(&c.generateFor, "generate-time", defaultGenerateFor, "the generator starts no project this long after the start of the build")
 	flag.DurationVar(&c.releasesUntil, "releases-until", defaultReleasesUntil, "the release reads start no image this long after the start of the build")
@@ -311,17 +324,44 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		return err
 	}
 	var (
-		lines    []feed.ReleaseLine
-		relStats releases.Stats
+		lines          []feed.ReleaseLine
+		relStats       releases.Stats
+		releaseCatalog *catalog.Catalog
 	)
+	var (
+		tagLines []feed.TagLine
+		tagStats releases.TagStats
+	)
+	// The catalog as an installation builds it from the package: the
+	// reviewed entries over the generated ones.
+	layered, err := catalog.BuildLayered(entries, catalog.OriginBuiltin, generated, nil)
+	if err != nil {
+		return fmt.Errorf("catalog with generated entries: %w", err)
+	}
+	for _, d := range layered.DroppedGenerated() {
+		logger.Warn("generated entry left out beside the reviewed ones", "entry", d)
+	}
+	if c.tags || c.releases {
+		order := releases.Priority(layered, appWeights(candidates))
+		if c.tags {
+			// Before the package lists: a tag list costs one request and
+			// no pull, so every image gets one whatever the lists cost.
+			read := c.readTags
+			if read == nil {
+				r := &releases.TagReader{Store: st, Registry: reg, Now: c.now,
+					Deadline: now.Add(orDefault(c.releasesUntil, defaultReleasesUntil)), Log: logger}
+				read = r.Run
+			}
+			if tagLines, tagStats, err = read(ctx, layered, order); err != nil {
+				return fmt.Errorf("tag lists: %w", err)
+			}
+			// Not nil: a package without tag lists says so.
+			tagLines = append([]feed.TagLine{}, tagLines...)
+		}
+		releaseCatalog = layered
+	}
 	if c.releases {
-		layered, err := catalog.BuildLayered(entries, catalog.OriginBuiltin, generated, nil)
-		if err != nil {
-			return fmt.Errorf("catalog with generated entries: %w", err)
-		}
-		for _, d := range layered.DroppedGenerated() {
-			logger.Warn("generated entry left out beside the reviewed ones", "entry", d)
-		}
+		layered := releaseCatalog
 		read := c.readReleases
 		if read == nil {
 			r := &releases.Reader{Store: st, Registry: reg, Now: c.now, MaxManifests: c.manifests(env),
@@ -343,15 +383,23 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		wait = time.Nanosecond
 	}
 	stats, err := pkgbuild.Collect(ctx, repos, pkgbuild.Options{Store: st, HTTP: hc, Token: env("GITHUB_TOKEN"),
-		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: wait, Log: logger})
+		GitHubURL: c.githubURL, KEVURL: c.kevURL, EPSSURL: c.epssURL, Now: c.now, MaxWait: wait, Log: logger,
+		Apps: layered.Apps(), OSV: c.osv, NVD: c.nvd, OSVURL: c.osvURL, NVDURL: c.nvdURL, NVDKey: env("VARDE_NVD_API_KEY")})
 	if err != nil {
 		return err
 	}
-	snap, err := pkgbuild.Snapshot(ctx, st, entries, table, repos, now, c.valid)
+	var second []*catalog.App
+	if c.osv || c.nvd {
+		second = layered.Apps()
+	}
+	snap, err := pkgbuild.Snapshot(ctx, st, entries, table, repos, second, now, c.valid)
 	if err != nil {
 		return err
 	}
 	snap.Generated = generated
+	if c.tags {
+		snap.Tags = tagLines
+	}
 	var (
 		fitted int
 		pruned store.PruneStats
@@ -478,6 +526,18 @@ func run(ctx context.Context, c config, env func(string) string, out io.Writer) 
 		if _, err := fmt.Fprintf(out, "releases: %d lines, %d bytes compressed, %d unpacked (%d images: %d read, %d unchanged, %d failed, %d not started, %d too large; %d partial, %d stale; %d lines over the size budget); %d manifest requests\n",
 			counts.Releases, counts.ReleasesBytes, releasesUnpacked, relStats.Images, relStats.Read, relStats.Unchanged, relStats.Failed, relStats.NotStarted,
 			relStats.TooLarge, relStats.Partial, relStats.Stale, fitted, relStats.Manifests); err != nil {
+			return err
+		}
+	}
+	if c.osv || c.nvd {
+		if _, err := fmt.Fprintf(out, "second sources: osv.dev %d apps, %d requests%s; NVD %d apps, %d requests%s\n",
+			stats.OSVApps, stats.OSVRequests, stopped(stats.OSVError), stats.NVDApps, stats.NVDRequests, stopped(stats.NVDError)); err != nil {
+			return err
+		}
+	}
+	if c.tags {
+		if _, err := fmt.Fprintf(out, "tags: %d images with release tags (%d images: %d read, %d fresh, %d failed, %d not started, %d without a release tag; %d stale)\n",
+			len(tagLines), tagStats.Images, tagStats.Read, tagStats.Fresh, tagStats.Failed, tagStats.NotStarted, tagStats.NoRelease, tagStats.Stale); err != nil {
 			return err
 		}
 	}
@@ -666,9 +726,14 @@ func verify(ctx context.Context, dir string, rootData []byte, root *feed.Root, n
 
 // registry is the registry client of the generator and the release reads,
 // with the Docker Hub credentials when both are set.
+// builderTagPages bounds a tag list of the builder: a hundred thousand
+// tags. The largest repositories of the catalog list some forty thousand.
+const builderTagPages = 100
+
 func (c config) registry(env func(string) string) *registry.Client {
 	return registry.New(httpx.New(httpx.Options{Timeout: registryTimeout}),
-		registry.WithCredentials("docker.io", env("VARDE_DOCKERHUB_USER"), env("VARDE_DOCKERHUB_TOKEN")))
+		registry.WithCredentials("docker.io", env("VARDE_DOCKERHUB_USER"), env("VARDE_DOCKERHUB_TOKEN")),
+		registry.WithTagPages(builderTagPages))
 }
 
 // manifests is the manifest budget of the release reads.
@@ -808,4 +873,12 @@ func orDefault(d, def time.Duration) time.Duration {
 		return d
 	}
 	return def
+}
+
+// stopped words a source that ended early for the summary.
+func stopped(err string) string {
+	if err == "" {
+		return ""
+	}
+	return " (stopped early: " + oneLine(err) + ")"
 }

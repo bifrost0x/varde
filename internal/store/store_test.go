@@ -238,3 +238,41 @@ func TestTempStoreInMemory(t *testing.T) {
 		t.Errorf("temp_store %d, want 2 (memory)", mode)
 	}
 }
+
+// A package's tag list replaces an older or failed local answer, never a
+// fresher one.
+func TestMergeRepositoryTags(t *testing.T) {
+	s, _ := openTest(t)
+	ctx := context.Background()
+	t0 := time.Date(2026, 11, 12, 4, 0, 0, 0, time.UTC)
+	for _, r := range []RepositoryTags{
+		{Repository: "docker.io/a/old", Tags: []string{"1.0.0"}, Checked: t0.Add(-time.Hour)},
+		{Repository: "docker.io/a/new", Tags: []string{"1.0.0"}, Checked: t0.Add(time.Hour)},
+		{Repository: "docker.io/a/failed", Tags: []string{"1.0.0"}, Checked: t0.Add(-2 * time.Hour)},
+		{Repository: "docker.io/a/failed", Checked: t0.Add(time.Hour), Error: "registry refused"},
+	} {
+		if err := s.RecordRepositoryTags(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var lists []RepositoryTags
+	for _, repo := range []string{"docker.io/a/old", "docker.io/a/new", "docker.io/a/failed", "docker.io/a/unknown"} {
+		lists = append(lists, RepositoryTags{Repository: repo, Tags: []string{"2.0.0", "1.0.0"}, Checked: t0})
+	}
+	lists = append(lists, RepositoryTags{Repository: "docker.io/a/empty", Checked: t0})
+	if err := s.MergeRepositoryTags(ctx, lists); err != nil {
+		t.Fatal(err)
+	}
+	known, err := s.RepositoryTags(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for repo, want := range map[string]int{"docker.io/a/old": 2, "docker.io/a/new": 1, "docker.io/a/failed": 2, "docker.io/a/unknown": 2} {
+		if got := known[repo]; len(got.Tags) != want || got.Error != "" {
+			t.Errorf("%s: %d tags, error %q; want %d", repo, len(got.Tags), got.Error, want)
+		}
+	}
+	if _, ok := known["docker.io/a/empty"]; ok {
+		t.Error("an empty list was stored")
+	}
+}

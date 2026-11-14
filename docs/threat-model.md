@@ -99,7 +99,7 @@ signing keys combined with the release pipeline (residual risk, mitigated by key
 | S: A forged X-Forwarded-Proto makes Varde believe a connection is encrypted | The header counts only from `VARDE_TRUSTED_PROXIES`; from any other peer it is ignored and only used to name that peer in the hint |
 | E: Agent user gains more than it needs | `varde-agent` has no login and no password; the systemd unit sets `NoNewPrivileges`, `ProtectSystem=strict` with only its own directory writable, `ProtectHome`, `PrivateTmp`, `PrivateDevices`, an empty capability set; the `docker` group only when the user chose Docker access |
 | E: Stolen agent key used after revocation | Certificate fingerprint compared with the stored pin on every request; revocation clears it and removes the host's workloads |
-| R: Silent agent hides a host | Hosts missing three intervals become `stale`, raise a notice in the overview and the daily digest |
+| R: Silent agent hides a host | Hosts missing three intervals become `stale`, raise a notice on the front page and in the daily digest |
 | I: Agent listener exposes UI | Separate listener and port; mTLS required before any handler runs |
 | T: A compromised agent changes what other hosts' containers are checked against | Image records are kept per source; a container uses Varde's own read of its image or the record of its own host's agent, never another agent's; a revoked agent's records are deleted (ADR 0033) |
 | T: A compromised agent claims another device's address to hide its endpoint findings | Agents' addresses do not suppress endpoint results; an app an agent reads can show twice instead |

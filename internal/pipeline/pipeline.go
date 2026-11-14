@@ -241,7 +241,7 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 	for id, a := range systemApps {
 		all[id] = a
 	}
-	findings, unfixed, err := p.match(ctx, matchInput{results: results, images: images, apps: all, repos: imageRepositories(ws)})
+	findings, unfixed, err := p.match(ctx, matchInput{results: results, images: images, apps: all, repos: imageRepositories(ws), tags: p.repositoryTags(ctx)})
 	if err != nil {
 		return Summary{}, err
 	}
@@ -393,6 +393,9 @@ func (p *Pipeline) Candidates(ctx context.Context) ([]notify.Candidate, error) {
 			Priority: policy.Priority(f.Priority), PriorityReason: f.PriorityReason, MatchState: f.MatchState,
 			Image: m.Image, PathClass: f.PathClass, PathReason: f.PathReason,
 		}
+		if m.Step != nil && !m.Image {
+			it.Update = m.Step.Version
+		}
 		if p.opts.BaseURL != "" {
 			it.FindingURL = strings.TrimRight(p.opts.BaseURL, "/") + "/findings/" + f.ID
 		}
@@ -421,6 +424,47 @@ type matchInput struct {
 	images  []imageTarget
 	apps    map[string]*catalog.App
 	repos   map[string]string
+	// tags are the release tags known per image repository, from the
+	// data package or the registry (store.RepositoryTags).
+	tags map[string]store.RepositoryTags
+}
+
+// tagStore is the part of the store that knows release tags; a store
+// without it leaves update targets to the advisories alone.
+type tagStore interface {
+	RepositoryTags(ctx context.Context) (map[string]store.RepositoryTags, error)
+}
+
+// repositoryTags returns the known release tags. They only sharpen the
+// update target, so a store that cannot give them does not stop the run.
+func (p *Pipeline) repositoryTags(ctx context.Context) map[string]store.RepositoryTags {
+	ts, ok := p.store.(tagStore)
+	if !ok {
+		return nil
+	}
+	tags, err := ts.RepositoryTags(ctx)
+	if err != nil {
+		p.log.Warn("release tags not readable; update targets come from the advisories alone", "err", err)
+		return nil
+	}
+	return tags
+}
+
+// releasesOf lists the versions the repository's release tags name for
+// app, each once.
+func releasesOf(app *catalog.App, repository string, tags []string) []string {
+	if repository == "" || len(tags) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, t := range tags {
+		if v, ok := identify.TagRelease(app, repository, t); ok && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // imageRepositories maps each container workload to its image repository.
@@ -480,7 +524,10 @@ func (p *Pipeline) match(ctx context.Context, in matchInput) ([]store.FindingInp
 		if view := identify.AppForImage(app, in.repos[r.WorkloadID]); view != app {
 			app, stored = view, withoutForeignCPEs(stored, view)
 		}
-		for _, f := range match.Match(match.Input{App: app, Version: r.Version, VersionSource: r.VersionSource, Doubt: r.Doubt(), Distro: r.DistroPackage}, stored, enr) {
+		repo := in.repos[r.WorkloadID]
+		input := match.Input{App: app, Version: r.Version, VersionSource: r.VersionSource, Doubt: r.Doubt(), Distro: r.DistroPackage,
+			Releases: releasesOf(app, repo, in.tags[repo].Tags)}
+		for _, f := range match.Match(input, stored, enr) {
 			// A system package is reported when an update fixes it: the
 			// distribution's unfixed and minor issues would bury the
 			// actionable ones (ADR 0032).
@@ -625,7 +672,13 @@ const nvdSourcePrefix = "nvd:"
 func withoutForeignCPEs(stored []match.Advisory, app *catalog.App) []match.Advisory {
 	out := make([]match.Advisory, 0, len(stored))
 	for _, a := range stored {
-		if cpe, ok := strings.CutPrefix(a.Source, nvdSourcePrefix); ok && !slices.ContainsFunc(app.Advisories.CPE, func(c string) bool { return strings.EqualFold(c, cpe) }) {
+		// A record of the data package names the CPE it was read for
+		// as its origin; one the installation read itself as its source.
+		source := a.Source
+		if o := a.Vuln.Origin(); o != "" {
+			source = o
+		}
+		if cpe, ok := strings.CutPrefix(source, nvdSourcePrefix); ok && !slices.ContainsFunc(app.Advisories.CPE, func(c string) bool { return strings.EqualFold(c, cpe) }) {
 			continue
 		}
 		out = append(out, a)

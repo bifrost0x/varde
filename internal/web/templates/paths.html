@@ -2,20 +2,20 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>Attack paths</h1><p>How an attacker gets from the internet or your LAN to a foothold on your systems, built from what Varde knows: the services that answer, the proxy routes, the findings and how containers and guests run. Fixing the first flaw on a path cuts it.</p></div>
+  <div><h1>Attack paths</h1><p>How an attacker could get from the internet or your network into your systems, from what Varde knows. Fixing the first flaw of a path closes it.</p></div>
 </div>
 <div class="stats">
   <div class="stat{{if $d.InternetCount}} stat--p1{{end}}"><span class="stat__label">Paths from the internet</span><span class="stat__value">{{$d.InternetCount}}</span></div>
   <div class="stat"><span class="stat__label">Paths from the LAN</span><span class="stat__value">{{$d.LANCount}}</span></div>
   <div class="stat"><span class="stat__label">Systems an attacker could take over</span><span class="stat__value">{{$d.Root}}</span></div>
-  <a class="stat" href="/findings?path=path"><span class="stat__label">Findings on a path</span><span class="stat__value">{{$d.OnPath}}</span></a>
+  <a class="stat" href="/findings?path=path"><span class="stat__label">Flaws on a path</span><span class="stat__value">{{$d.OnPath}}</span></a>
   <a class="stat" href="/findings/noise"><span class="stat__label">Background noise</span><span class="stat__value">{{$d.Noise}}</span></a>
 </div>
 {{if not $d.Count}}
 <div class="empty panel">
   <img src="/static/brand/mark-unlit.svg" alt="">
   <h2>No attack path found</h2>
-  <p>No finding Varde knows of opens a way in from the internet or the LAN. {{if $d.Unclear}}{{plural $d.Unclear "finding"}} could not be placed yet: Varde sees more once agents report the ports their hosts listen on and a network scan has run.{{end}}</p>
+  <p>No flaw Varde knows of opens a way in from the internet or the LAN. {{if $d.Unclear}}{{plural $d.Unclear "flaw"}} could not be placed yet: Varde sees more once agents report the ports their hosts listen on and a network scan has run.{{end}}</p>
 </div>
 {{else}}
 {{if $d.Internet}}<h2>From the internet</h2>{{template "pathcards" $d.Internet}}{{end}}
@@ -34,7 +34,7 @@
   <summary class="group__head">
     <span class="group__badges"><span class="badge {{if eq .Entry "internet"}}badge--p1{{else}}badge--p2{{end}}">{{if eq .Entry "internet"}}internet{{else}}LAN{{end}}</span></span>
     <span class="group__title"><strong>{{join .Targets ", "}}</strong><span class="cell-sub">{{if .Same}}{{len .Targets}} targets reached through one way in · {{.Gain}} · up to {{plural .MaxSteps "step"}}{{else}}{{if .Where}}{{.Where}} · {{.Gain}} · {{end}}{{plural (len .Steps) "step"}}{{end}}</span></span>
-    <span class="group__action">{{.Cut}}{{if .Breaker}} <a class="small" href="/findings/{{.Breaker}}">Open the finding</a>{{end}}</span>
+    <span class="group__action">{{.Cut}}{{if .Breaker}} <a class="small" href="/findings/{{.Breaker}}">Show the flaw</a>{{end}}</span>
   </summary>
   <div class="group__body">
     {{if .Same}}<h3 class="small">To {{.Name}}</h3>{{end}}

@@ -3,7 +3,7 @@
 {{$d := .Data}}{{$m := $d.Machine}}
 <div class="page-head">
   <div>
-    <p class="small"><a href="/systems">Systems</a>{{if $m.ParentName}} › <a href="/systems/{{$m.ParentID}}">{{$m.ParentName}}</a>{{end}}</p>
+    <p class="crumb"><a href="/systems">Machines</a>{{if $m.ParentName}} › <a href="/systems/{{$m.ParentID}}">{{$m.ParentName}}</a>{{end}}</p>
     <h1>{{$m.Name}}</h1>
     <p>{{machineKind $m.Kind}}{{if $m.OS}} · {{$m.OS}}{{end}}{{if $m.Addresses}} · <span class="mono">{{join $m.Addresses ", "}}</span>{{end}}</p>
   </div>
@@ -24,10 +24,13 @@
     {{if $d.Children}}<h3>Runs on it</h3><ul class="source-list">{{range $d.Children}}<li><a href="/systems/{{.ID}}">{{.Name}}</a><span class="cell-sub">{{machineKind .Kind}}{{if .OS}} · {{.OS}}{{end}}</span></li>{{end}}</ul>{{end}}
   </section>
   <section class="panel" aria-labelledby="risk-title">
-    <h2 id="risk-title">What is affected</h2>
-    {{if $d.Findings}}
-    <ul class="source-list">{{range $d.Findings}}<li>{{template "prio" .Priority}} <a href="/findings/{{.ID}}">{{.AdvisoryID}}</a> <span class="muted">{{index $d.AppNames .AppID}}</span>{{if eq .MatchState "unverified"}} <span class="badge badge--unverified">unverified</span>{{end}}{{if .FixedIn}}<span class="cell-sub">fixed in <span class="mono">{{.FixedIn}}</span></span>{{end}}</li>{{end}}</ul>
-    {{else}}<p class="muted small">No open finding on this system{{if not (or $d.Apps $d.Total)}}; Varde does not know yet what runs on it{{end}}.</p>{{end}}
+    <h2 id="risk-title">What to update here</h2>
+    {{if $d.ToDo}}
+    <ul class="approws approws--plain">{{range $d.ToDo}}{{template "approw" .}}{{end}}</ul>
+    <p class="small"><a href="/findings">All updates</a>{{if $d.Findings}} · {{plural (len $d.Findings) "open flaw"}} on this machine{{end}}</p>
+    {{else if $d.Findings}}
+    <p class="small">{{plural (len $d.Findings) "open flaw"}}; <a href="/findings">Updates</a> lists them.</p>
+    {{else}}<p class="muted small">Nothing to update on this machine{{if not (or $d.Apps $d.Total)}}; Varde does not know yet what runs on it{{end}}.</p>{{end}}
   </section>
 </div>
 
@@ -35,12 +38,12 @@
 <section class="panel" aria-labelledby="apps-title">
   <h2 id="apps-title">Apps</h2>
   <table class="table">
-    <thead><tr><th scope="col">App</th><th scope="col">Version</th><th scope="col">Where the version comes from</th><th scope="col">Findings</th></tr></thead>
+    <thead><tr><th scope="col">App</th><th scope="col">Version</th><th scope="col">Where the version comes from</th><th scope="col">Open flaws</th></tr></thead>
     <tbody>{{range $d.Apps}}
     <tr><td data-label="App">{{.AppName}}<span class="cell-sub mono">{{.Image}}</span></td>
       <td data-label="Version">{{if .Version}}<span class="mono">{{.Version}}</span>{{if eq .Trust "conflict"}} <span class="badge badge--unverified">sources disagree</span>{{else if eq .Trust "reported"}} <span class="badge badge--muted">reported</span>{{end}}{{else if .Distro}}<span class="mono">{{.PackageVersion}}</span> <span class="badge badge--muted">{{.Distro}}</span>{{else}}<span class="badge badge--unverified">unknown</span>{{end}}</td>
       <td data-label="Source">{{if .Doubt}}{{.Doubt}}{{else if .VersionSource}}{{.VersionSource}}{{else}}<span class="muted">{{truncate .Note 160}}</span>{{end}}</td>
-      <td data-label="Findings">{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else}}<span class="muted">none</span>{{end}}</td></tr>
+      <td data-label="Open flaws">{{template "findingscell" .}}</td></tr>
     {{end}}</tbody>
   </table>
 </section>

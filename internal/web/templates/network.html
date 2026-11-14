@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}{{$csrf := .CSRF}}
 <div class="page-head">
-  <div><h1>Network and platforms</h1><p>What Varde finds in the networks you allow, and the platforms it reads through their official interfaces. For the full inventory of a host, <a href="/connections/agents">install the agent</a>.</p></div>
+  <div><h1>Connections</h1><p>Tell Varde where it may look, let it scan, then connect what it found. Everything it reads is read-only; for every package and container of a host, <a href="/connections/agents">install the agent</a>.</p></div>
 </div>
 
 {{template "setupsteps" $d.Steps}}
@@ -71,7 +71,7 @@
 </section>
 
 <section class="panel" id="integrations" aria-labelledby="int-title">
-  <div class="panel__head"><h2 id="int-title">4. Connected platforms</h2></div>
+  <div class="panel__head"><h2 id="int-title">4. Connected</h2></div>
   {{if $d.Integration}}
   {{range $d.Integration}}
   <article class="integration">
@@ -98,13 +98,13 @@
     </tr>{{end}}
     </tbody></table>
     {{end}}
-    {{with .Docker}}<p class="small">Docker {{.Version}} on {{.Host}} · {{plural .Containers "container"}}. The containers are listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
+    {{with .Docker}}<p class="small">Docker {{.Version}} on {{.Host}} · {{plural .Containers "container"}}. The containers are listed under <a href="/systems/apps">All containers</a>.</p>{{end}}
     {{with .Service}}{{if .Clients}}<p class="small">{{plural (len .Clients) "device"}} with MAC address and name; they give names to found devices and tie Proxmox guests to their addresses.</p>{{end}}{{end}}
     {{if .Routes}}<table class="table"><thead><tr><th scope="col">Host name</th><th scope="col">Forwards to</th><th scope="col">Machine</th></tr></thead><tbody>
     {{range .Routes}}<tr><td data-label="Host name" class="mono">{{.Host}}{{if .Public}} <span class="badge">public</span>{{end}}</td><td data-label="Forwards to" class="mono">{{.Backend}}</td>
       <td data-label="Machine">{{if .Machine}}{{.Machine}}{{if not .Checked}} <span class="badge badge--unverified">not checked</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}</td></tr>{{end}}
     </tbody></table>{{else if .Service}}{{if not .Service.Clients}}<p class="small muted">No routes.</p>{{end}}{{end}}
-    {{with .LXC}}<p class="small">{{plural .Containers "running container"}}, {{plural .Packages "package"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
+    {{with .LXC}}<p class="small">{{plural .Containers "running container"}}, {{plural .Packages "package"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">All containers</a>.</p>{{end}}
     {{if .CanLXC}}
     <div class="banner banner--info" role="note"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg><div>
       <p><strong>Next: have the guests read.</strong> So far Varde knows that these guests exist and where they are, not what is installed in them, so nothing in them is checked yet.</p>
@@ -112,7 +112,7 @@
       <p><a class="btn btn--primary" href="/connections/connect/proxmox-lxc?address={{.Address}}">Read every guest on this node</a></p>
     </div></div>
     {{end}}
-    {{with .Inventory}}<p class="small">{{if .OS}}{{.OS}} · {{end}}{{plural .Packages "package"}} and {{plural .Services "service"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">Apps and containers</a>.</p>{{end}}
+    {{with .Inventory}}<p class="small">{{if .OS}}{{.OS}} · {{end}}{{plural .Packages "package"}} and {{plural .Services "service"}} read; {{plural .Apps "app"}} from the catalog kept, listed under <a href="/systems/apps">All containers</a>.</p>{{end}}
   </article>
   {{end}}
   {{else}}<p class="small muted">No platform connected yet. The devices found above offer the matching setup.</p>{{end}}

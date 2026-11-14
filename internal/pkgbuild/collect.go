@@ -32,6 +32,14 @@ type Options struct {
 	// reset (default 5 h).
 	MaxWait time.Duration
 	Log     *slog.Logger
+	// Apps are the catalog apps the second sources are asked about: OSV
+	// for those with osv_packages, the NVD for those NVDApp accepts. Nil
+	// leaves both out.
+	Apps []*catalog.App
+	// OSV and NVD switch the second sources on; OSVURL and NVDURL
+	// override their endpoints (tests), NVDKey raises the NVD's limit.
+	OSV, NVD               bool
+	OSVURL, NVDURL, NVDKey string
 }
 
 // Stats describe one collection.
@@ -46,7 +54,30 @@ type Stats struct {
 	// day it was last read and the error: what is published for them is
 	// that old.
 	Failing []string
+	// OSVApps and NVDApps are the apps the second sources were asked
+	// about, OSVRequests and NVDRequests the requests that took. OSVError
+	// and NVDError say why a source stopped early; what the store holds
+	// from earlier builds still ships.
+	OSVApps, NVDApps, OSVRequests, NVDRequests int
+	OSVError, NVDError                         string
 }
+
+// NVDApp reports whether the NVD is asked about app: every app with a CPE.
+// What ships of the answer depends on the app (NVDAll).
+func NVDApp(app *catalog.App) bool { return len(app.Advisories.CPE) > 0 }
+
+// NVDAll reports whether every NVD record of app ships: for a project
+// that does not publish every flaw in a form a program can compare
+// (coverage partial or limited). Where a project's own advisories are
+// complete, CVE records derived from them add nothing but coarser ranges
+// (ADR 0017); of those only the records ship that complete a project
+// advisory which names no end of its affected versions.
+func NVDAll(app *catalog.App) bool {
+	return NVDApp(app) && app.Advisories.Coverage != catalog.CoverageFull
+}
+
+// OSVApp reports whether osv.dev is asked about app.
+func OSVApp(app *catalog.App) bool { return len(app.Advisories.OSVPackages) > 0 }
 
 // minInterval is the shortest time between two checks of one repository.
 // The package is built once a day; a second build the same day (a manual
@@ -138,6 +169,46 @@ func Collect(ctx context.Context, repos []Repo, o Options) (Stats, error) {
 			}
 			stats.Failing = append(stats.Failing, fmt.Sprintf("%s (%s): %s", st.Key, since, st.LastError))
 			o.Log.Warn("repository could not be read", "repository", st.Key, "since", since, "err", st.LastError)
+		}
+	}
+	// The second sources: what a project publishes elsewhere than in its
+	// repository. They never stop the build: a source that fails or runs
+	// into its limit leaves what earlier builds stored, and the summary
+	// says so.
+	if o.OSV {
+		var apps []*catalog.App
+		for _, a := range o.Apps {
+			if OSVApp(a) {
+				apps = append(apps, a)
+			}
+		}
+		stats.OSVApps = len(apps)
+		res, err := (&sources.OSV{Deps: deps, BaseURL: o.OSVURL}).Refresh(ctx, apps)
+		stats.OSVRequests = res.Requests
+		if err != nil {
+			if ctx.Err() != nil {
+				return stats, ctx.Err()
+			}
+			stats.OSVError = err.Error()
+			o.Log.Warn("osv.dev not read completely; the package carries what earlier builds stored", "err", err)
+		}
+	}
+	if o.NVD {
+		var apps []*catalog.App
+		for _, a := range o.Apps {
+			if NVDApp(a) {
+				apps = append(apps, a)
+			}
+		}
+		stats.NVDApps = len(apps)
+		res, err := (&sources.NVD{Deps: deps, BaseURL: o.NVDURL, APIKey: o.NVDKey}).Refresh(ctx, apps)
+		stats.NVDRequests = res.Requests
+		if err != nil {
+			if ctx.Err() != nil {
+				return stats, ctx.Err()
+			}
+			stats.NVDError = err.Error()
+			o.Log.Warn("the NVD not read completely; the package carries what earlier builds stored", "err", err)
 		}
 	}
 	// Enrichment last: EPSS is asked for the CVEs of the advisories above.

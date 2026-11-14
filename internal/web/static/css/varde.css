@@ -441,23 +441,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .segmented a:last-child { border-right: 0; }
 .segmented a:hover { color: var(--text); background: var(--surface-2); }
 .segmented a[aria-current="page"] { color: var(--text); background: var(--surface-2); font-weight: 600; }
-.todo { background: var(--surface-1); border: 1px solid var(--border); border-left: 4px solid var(--border-strong); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
-.todo--p1 { border-left-color: var(--ember); }
-.todo--p2 { border-left-color: var(--amber); }
-.todo__head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
-.todo__badges { display: flex; flex-wrap: wrap; gap: 4px; }
-.todo__what h3 { margin: 0; font-size: var(--fs-md); overflow-wrap: anywhere; }
-.todo__count { text-align: right; }
-.todo__count strong { font-size: var(--fs-lg); }
-.todo__action { margin: 10px 0 4px; }
-.todo__action code { margin-left: 6px; }
 .todo__details { margin-top: 8px; }
 .todo__details > summary { cursor: pointer; color: var(--text-muted); }
 .todo__details[open] > summary { margin-bottom: 8px; }
-@media (max-width: 720px) {
-  .todo__head { grid-template-columns: 1fr auto; }
-  .todo__badges { grid-column: 1 / -1; }
-}
 
 /* Setup reminder on the overview: one line until it is opened. */
 .setup { padding: 12px 18px; }
@@ -468,3 +454,130 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .setup[open] > summary { margin-bottom: 12px; }
 .setup[open] .setup__open { display: none; }
 .setup-hidden { display: flex; gap: 8px; align-items: center; margin-bottom: 20px; }
+
+/*
+ * The front of Varde: apps, not advisories. One card per app that needs
+ * something, a quiet row for each that does not. A state is a dot, a
+ * label and a place in the list, never a colour alone; ember stays with
+ * "update now".
+ */
+.nav a { font-size: 15px; padding: 8px 14px; border-radius: 999px; }
+.nav a[aria-current="page"] { background: var(--surface-3); }
+.hero { padding: 22px 24px; gap: 20px; border-radius: 16px; }
+.hero__mark { width: 64px; height: 64px; }
+.hero__title { font-size: 26px; }
+.panel { border-radius: 14px; padding: 20px; }
+.crumb { font-size: var(--fs-sm); margin: 0 0 8px; }
+.crumb a { color: var(--text-muted); text-decoration: none; }
+.crumb a::before { content: "‹ "; }
+.crumb a:hover { color: var(--text); }
+.lead { font-size: var(--fs-lg); margin-bottom: 8px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.chip {
+  display: inline-flex; align-items: baseline; gap: 6px; text-decoration: none; color: var(--text);
+  font-size: var(--fs-sm); padding: 6px 12px; border-radius: 999px;
+  background: var(--surface-1); border: 1px solid var(--border);
+}
+.chip:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.chip strong { font-size: var(--fs-md); }
+.chip--now { border-color: color-mix(in srgb, var(--ember) 55%, var(--border)); }
+.chip--now strong { color: var(--ember); }
+
+.app__dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); background: transparent; }
+.app__dot--now { background: var(--ember); border-color: var(--ember); box-shadow: 0 0 0 4px var(--glow); }
+.app__dot--soon { background: var(--amber); border-color: var(--amber); }
+.app__dot--later { background: var(--info); border-color: var(--info); }
+.app__dot--ok { background: var(--ok); border-color: var(--ok); }
+.app__dot--known { border-color: var(--ok); }
+.app__dot--check, .app__dot--unknown { border-style: dashed; }
+
+.appsection { margin-bottom: 28px; scroll-margin-top: 72px; }
+.appsection__head { margin-bottom: 12px; }
+.appsection__head h2 { margin-bottom: 2px; }
+.appsection__head p { margin: 0; }
+.apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.app {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px;
+  border-left: 4px solid var(--border-strong);
+}
+.app--now { border-left-color: var(--ember); box-shadow: var(--shadow); }
+.app--soon { border-left-color: var(--amber); }
+.app--later { border-left-color: var(--info); }
+.app__head { display: flex; align-items: center; gap: 10px; }
+.app__title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.app__title a, .approw a { color: var(--text); text-decoration: none; }
+.app__title a:hover, .approw a:hover { text-decoration: underline; }
+.app__title strong { font-size: 17px; }
+.app__sub { display: block; font-size: var(--fs-xs); color: var(--text-muted); }
+.app__state { flex: none; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted); white-space: nowrap; }
+.app--now .app__state, .apphead--now .app__state { color: var(--ember); }
+.app__why { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.app__action { margin: 0; }
+.app .secret { margin: 0; }
+.app__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; }
+
+.approws { list-style: none; margin: 0; padding: 0; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; }
+.approw { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 10px 16px; border-top: 1px solid var(--border); }
+.approw:first-child { border-top: 0; }
+.approw .app__sub { display: inline; }
+.approw__state { margin-left: auto; font-size: var(--fs-sm); color: var(--text-muted); }
+.approw .cell-sub { flex-basis: 100%; margin: 0 0 0 22px; }
+
+.apphead { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.apphead > div { flex: 1; min-width: 0; }
+.apphead h1 { margin: 0; overflow-wrap: anywhere; }
+.apphead p { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.apphead .app__dot { width: 16px; height: 16px; }
+.apphead .app__state { font-size: var(--fs-sm); }
+
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 12px; font-size: var(--fs-sm); }
+.facts dt { color: var(--text-muted); }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.howto { margin: 0; padding-left: 20px; display: grid; gap: 12px; font-size: var(--fs-sm); }
+.howto .secret { margin-top: 6px; }
+.flaws { list-style: none; margin: 0; padding: 0; }
+.flaw { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--border); }
+.flaw:first-child { border-top: 0; }
+.flaw a { color: var(--text); text-decoration: none; font-weight: 500; }
+.flaw a:hover { text-decoration: underline; }
+.flaw .cell-sub { grid-column: 2; margin: 0; }
+
+@media (max-width: 720px) {
+  .apps { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: 1fr; padding: 18px; }
+  .hero__mark { width: 48px; height: 48px; }
+  .hero__title { font-size: 22px; }
+  .approw__state { margin-left: 22px; flex-basis: 100%; }
+  .apphead { flex-wrap: wrap; }
+  .facts { grid-template-columns: 1fr; gap: 0; }
+  .facts dd { margin-bottom: 8px; }
+}
+
+/* Filters fold away: most visits need none. */
+.filterbox { margin: 0 0 16px; }
+.filterbox > summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--fs-sm); color: var(--text-muted); padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); list-style: none; }
+.filterbox > summary::-webkit-details-marker { display: none; }
+.filterbox > summary:hover { color: var(--text); border-color: var(--border-strong); }
+.filterbox[open] > summary { margin-bottom: 12px; color: var(--text); }
+
+/* Sections that fold: evidence a reader may want, not what they came for. */
+.fold > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: "›"; color: var(--text-muted); font-size: var(--fs-lg); line-height: 1; transition: transform .15s; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+.fold > summary h2 { margin: 0; font-size: var(--fs-md); }
+.fold[open] > summary { margin-bottom: 12px; }
+@media (prefers-reduced-motion: reduce) { .fold > summary::before { transition: none; } }
+
+.section-title { margin: 28px 0 4px; }
+.panel[id], .fold[id], .section-title { scroll-margin-top: 72px; }
+
+.approws--plain { border: 0; background: transparent; margin-bottom: 12px; }
+.approws--plain .approw { padding-left: 0; padding-right: 0; }
+
+/* The foot of the front page: what Varde covers and how fresh its data is. */
+.statusbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 32px; }
+.statusbar h2 { font-size: var(--fs-md); }
+.statusbar p { margin-bottom: 6px; }

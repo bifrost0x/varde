@@ -44,7 +44,7 @@ func TestSystemsList(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	nas := rowOf(t, body, "nas")
-	for _, want := range []string{"2 packages", "1 container", "1 urgent", "Docker on this server"} {
+	for _, want := range []string{"2 packages", "1 container", "1 to fix now", "Docker on this server"} {
 		if !strings.Contains(nas, want) {
 			t.Errorf("nas row lacks %q:\n%s", want, nas)
 		}
@@ -63,8 +63,8 @@ func TestSystemsList(t *testing.T) {
 	if _, body := h.do(t, "GET", "/", nil, nil); !strings.Contains(body, `1 of 3 systems</a>`) {
 		t.Error("overview counts differently")
 	}
-	// Area navigation: five entries, Systems current, its tabs shown.
-	for _, want := range []string{`href="/systems" aria-current="page">Systems</a>`, `href="/connections" >Connections</a>`, `href="/systems/apps">Apps and containers</a>`, `href="/systems/gaps">Gaps</a>`} {
+	// Area navigation: three entries, Apps current, its tabs shown.
+	for _, want := range []string{`href="/" aria-current="page">Apps</a>`, `href="/connections" >Setup</a>`, `href="/systems/apps">All containers</a>`, `href="/systems/gaps">Gaps</a>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("navigation lacks %s", want)
 		}
@@ -253,7 +253,7 @@ func TestSystemPackageFindingsShown(t *testing.T) {
 	}
 	_ = h.store.SetAssessments(ctx, []store.Assessment{{ID: store.FindingID(wid, "DEBIAN-CVE-2026-1"), Priority: "P3", Exposure: "unknown"}})
 	_, body := h.do(t, "GET", "/systems", nil, nil)
-	if row := rowOf(t, html.UnescapeString(body), "web"); !strings.Contains(row, "1 P3") {
+	if row := rowOf(t, html.UnescapeString(body), "web"); !strings.Contains(row, "1 later") {
 		t.Errorf("system row does not count the package finding:\n%s", row)
 	}
 	_, body = h.do(t, "GET", "/findings", nil, nil)
@@ -390,7 +390,7 @@ func TestSetupReminderCompactAndHideable(t *testing.T) {
 	if strings.Contains(body, "Finish getting started") || strings.Contains(body, `class="panel guide"`) {
 		t.Error("the full guide is shown although Varde has something to show")
 	}
-	setup, stats := strings.Index(body, `<details class="panel setup"`), strings.Index(body, `class="stats"`)
+	setup, stats := strings.Index(body, `<details class="panel setup"`), strings.Index(body, `class="chips"`)
 	if setup < 0 || stats < 0 || setup < stats {
 		t.Fatalf("the setup reminder is missing or above the numbers (setup %d, stats %d)", setup, stats)
 	}

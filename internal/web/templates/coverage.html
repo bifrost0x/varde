@@ -2,11 +2,11 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>Gaps</h1><p>What Varde cannot assess yet: apps it does not recognise, versions it cannot read, routes it cannot check. Every gap comes with the step that closes it.</p></div>
+  <div><h1>Gaps</h1><p>What Varde cannot check yet, and the step that closes each gap.</p></div>
 </div>
 <section class="panel">
   <p>Of {{plural $d.Summary.Total "app"}} on your systems, Varde recognises {{$d.Summary.Identified}} and compares {{$d.Summary.Assessable}} with advisories · {{len $d.Summary.VersionUnknown}} with unknown version · {{plural (len $d.Summary.PublicRoutes) "public route"}} Varde cannot check</p>
-  {{if $d.Summary.NotApps}}<p class="small">These numbers count apps: containers and entries that are an app of their own. The Systems page counts every container. <a href="#not-apps">{{plural (len $d.Summary.NotApps) "supporting container"}}</a> (socket proxies, update helpers) {{if eq (len $d.Summary.NotApps) 1}}is{{else}}are{{end}} listed apart; their packages are checked all the same.</p>{{end}}
+  {{if $d.Summary.NotApps}}<p class="small">These numbers count apps: containers and entries that are an app of their own. The list of all containers counts every one. <a href="#not-apps">{{plural (len $d.Summary.NotApps) "supporting container"}}</a> (socket proxies, update helpers) {{if eq (len $d.Summary.NotApps) 1}}is{{else}}are{{end}} listed apart; their packages are checked all the same.</p>{{end}}
   <div class="meter" role="img" aria-label="{{$d.Summary.Percent}} percent identified"><span class="meter__fill {{meterClass $d.Summary.Percent}}"></span></div>
   <p class="small"><strong>{{$d.Summary.Percent}} %</strong> of your apps are recognised.</p>
   <p class="small">{{if $d.Machines.Hosts}}Varde knows what is installed on <a href="/systems">{{$d.Machines.Read}} of {{plural $d.Machines.Hosts "system"}}</a>{{if $d.Machines.Devices}} · {{plural $d.Machines.Devices "further device"}} found in the network{{end}}.{{else}}No host known yet.{{end}}</p>
@@ -28,6 +28,7 @@
   <table class="table"><thead><tr><th scope="col">Containers</th><th scope="col">Image</th><th scope="col">Next step</th></tr></thead><tbody>
   {{range $d.Unidentified}}<tr><td data-label="Container">{{.Workload}}</td><td data-label="Image" class="mono">{{.Image}}</td><td data-label="Next step"><a href="{{.SuggestURL}}" rel="noopener noreferrer" target="_blank">Suggest a catalog entry</a><span class="cell-sub">Opens GitHub with only the image name filled in.</span>{{if .Repository}}<form class="form--inline" method="post" action="/systems/gaps/not-an-app">{{template "csrf" $.CSRF}}<input type="hidden" name="repository" value="{{.Repository}}"><button class="btn btn--ghost" type="submit">Not an app</button></form><span class="cell-sub">For databases, proxies and other helpers: stops counting this image as a gap.</span>{{end}}</td></tr>{{end}}
   </tbody></table>
+  <p class="small"><a href="/systems/gaps/unrecognised.txt">Download these image names as a list</a>: repositories only, without versions, container or host names, and without images on registries of your own. Varde sends it nowhere; attach it to a catalog suggestion if you want these apps recognised.</p>
   {{else}}<p class="small muted">Every workload matches a catalog entry.</p>{{end}}
 </section>
 

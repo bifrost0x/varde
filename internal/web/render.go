@@ -28,7 +28,7 @@ var staticFS embed.FS
 
 // pages are rendered with the full layout; barePages without navigation.
 var (
-	pages     = []string{"overview", "findings", "finding", "inventory", "coverage", "hosts", "agents", "sources", "settings", "error", "kit", "network", "connect", "system", "agentinstall", "paths", "noise", "history"}
+	pages     = []string{"overview", "findings", "finding", "inventory", "coverage", "hosts", "agents", "sources", "settings", "error", "kit", "network", "connect", "system", "agentinstall", "paths", "noise", "history", "app"}
 	barePages = []string{"login", "setup"}
 )
 
@@ -71,11 +71,18 @@ type navTab struct {
 
 // The areas of the UI: each has a few pages, the first is its landing page.
 var areaTabs = map[string][]navTab{
-	"findings":    {{Label: "Findings", Href: "/findings"}, {Label: "Attack paths", Href: "/findings/paths"}, {Label: "Background noise", Href: "/findings/noise"}, {Label: "History", Href: "/findings/history"}},
-	"systems":     {{Label: "Systems", Href: "/systems"}, {Label: "Apps and containers", Href: "/systems/apps"}, {Label: "Gaps", Href: "/systems/gaps"}},
-	"connections": {{Label: "Network and platforms", Href: "/connections"}, {Label: "Agents", Href: "/connections/agents"}},
-	"settings":    {{Label: "Settings", Href: "/settings"}, {Label: "Advisory data", Href: "/settings/sources"}},
+	// Updates: what to do, and the reasoning behind its order.
+	"findings": {{Label: "To do", Href: "/findings"}, {Label: "Attack paths", Href: "/findings/paths"}, {Label: "Background noise", Href: "/findings/noise"}, {Label: "History", Href: "/findings/history"}},
+	// Apps: what runs, from the front page down to the machines.
+	"systems": {{Label: "Apps", Href: "/"}, {Label: "All containers", Href: "/systems/apps"}, {Label: "Machines", Href: "/systems"}, {Label: "Gaps", Href: "/systems/gaps"}},
+	// Setup: what Varde may read, and how it behaves.
+	"connections": setupTabs,
+	"settings":    setupTabs,
 }
+
+// setupTabs are the pages of the Setup area; connections and settings
+// share them.
+var setupTabs = []navTab{{Label: "Connections", Href: "/connections"}, {Label: "Agents", Href: "/connections/agents"}, {Label: "Settings", Href: "/settings"}, {Label: "Advisory data", Href: "/settings/sources"}}
 
 // tabs returns the tabs of an area with the page at href marked current.
 func tabs(area, href string) []navTab {
@@ -171,7 +178,9 @@ var funcs = template.FuncMap{
 		}
 		return tm.Local().Format("15:04")
 	},
-	"plural":     plural,
+	"plural": plural,
+	// pct turns a probability into percent.
+	"pct":        func(p float64) float64 { return p * 100 },
 	"add":        func(a, b int) int { return a + b },
 	"noticeLink": noticeLink,
 	"machineKind": func(kind string) string {

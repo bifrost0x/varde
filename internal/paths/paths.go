@@ -173,6 +173,10 @@ type Placement struct {
 	Class  Class    `json:"class"`
 	Reason string   `json:"reason"`
 	Paths  []string `json:"paths,omitempty"`
+	// Behind is set for a finding that no path starts with: an attacker
+	// reaches it only after using another flaw first. It is on a path,
+	// but it is not a way in.
+	Behind bool `json:"behind,omitempty"`
 }
 
 // Result is the analysis.
@@ -225,7 +229,10 @@ type analysis struct {
 	paths     []Path
 	findings  map[string]Finding
 	used      map[string]map[string]Class // finding → path ID → class
-	reach     map[string]bool             // machines with a foothold on some path
+	// opens holds the findings that are the first flaw of a path, with
+	// the best entry any such path starts from.
+	opens     map[string]Class
+	reach     map[string]bool // machines with a foothold on some path
 	recorded  map[string]bool
 	truncated bool
 	entered   map[string]bool // containers with a foothold on some path
@@ -237,7 +244,7 @@ type analysis struct {
 
 func newAnalysis(in Input) *analysis {
 	a := &analysis{in: in, machines: map[string]Machine{}, workloads: map[string]Workload{}, byWork: map[string][]Finding{},
-		systemPkg: map[string]map[string][]string{}, services: map[string][]Service{}, used: map[string]map[string]Class{}, reach: map[string]bool{}, recorded: map[string]bool{}, entered: map[string]bool{}, beyond: map[string]bool{}, weak: map[string]bool{}}
+		systemPkg: map[string]map[string][]string{}, services: map[string][]Service{}, used: map[string]map[string]Class{}, opens: map[string]Class{}, reach: map[string]bool{}, recorded: map[string]bool{}, entered: map[string]bool{}, beyond: map[string]bool{}, weak: map[string]bool{}}
 	for _, m := range in.Machines {
 		a.machines[m.ID] = m
 	}
@@ -625,6 +632,7 @@ func (a *analysis) record(entry Entry, steps []Step, hold foothold) {
 		}
 	}
 	a.paths = append(a.paths, p)
+	first := true // the next exploit step is the way in
 	for _, s := range steps {
 		if s.FindingID == "" {
 			continue
@@ -641,6 +649,12 @@ func (a *analysis) record(entry Entry, steps []Step, hold foothold) {
 				a.used[id] = map[string]Class{}
 			}
 			a.used[id][p.ID] = c
+			if s.Kind == "exploit" && first && (c == OnPathInternet || a.opens[id] == "") {
+				a.opens[id] = c
+			}
+		}
+		if s.Kind == "exploit" {
+			first = false
 		}
 	}
 }
@@ -750,14 +764,23 @@ func (a *analysis) placement(f Finding) Placement {
 			}
 		}
 		sort.Strings(ids)
-		reason := "opens an attack path from the LAN"
-		switch best {
-		case OnPathInternet:
-			reason = "opens an attack path from the internet"
-		case Amplifier:
-			reason = "turns a foothold on an attack path into root"
+		// A flaw a path starts with is a way in. One that only comes
+		// later needs another flaw to be used first: it keeps the class
+		// of the best path it is on, and says that it is behind.
+		open := a.opens[f.ID]
+		switch {
+		case open == OnPathInternet:
+			return Placement{Class: OnPathInternet, Reason: "opens an attack path from the internet", Paths: ids}
+		case best == OnPathInternet:
+			return Placement{Class: best, Behind: true, Paths: ids,
+				Reason: "on an attack path from the internet, behind another flaw: usable only after an attacker got in through that one"}
+		case open == OnPathLAN:
+			return Placement{Class: OnPathLAN, Reason: "opens an attack path from the LAN", Paths: ids}
+		case best == OnPathLAN:
+			return Placement{Class: best, Behind: true, Paths: ids,
+				Reason: "on an attack path from the LAN, behind another flaw: usable only after an attacker got in through that one"}
 		}
-		return Placement{Class: best, Reason: reason, Paths: ids}
+		return Placement{Class: best, Reason: "turns a foothold on an attack path into root", Paths: ids}
 	}
 	w := a.workloads[f.WorkloadID]
 	v := vectorOf(f.Vector)

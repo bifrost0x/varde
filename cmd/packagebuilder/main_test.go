@@ -781,3 +781,30 @@ func TestStoreSizeGuard(t *testing.T) {
 		t.Fatal("a refused store was signed")
 	}
 }
+
+// The tag lists go into a blob of their own and into the summary; the
+// build reads them without the release package lists.
+func TestTagListsArePublished(t *testing.T) {
+	h := newHarness(t)
+	h.cfg.tags = true
+	var asked bool
+	h.cfg.readTags = func(_ context.Context, cat *catalog.Catalog, _ []string) ([]feed.TagLine, releases.TagStats, error) {
+		asked = cat != nil
+		return []feed.TagLine{{AppID: "widget", Image: "ghcr.io/acme/widget", Read: h.now, Tags: []string{"v2.0.0", "v1.9.0"}}},
+			releases.TagStats{Images: 2, Read: 1, Failed: 1}, nil
+	}
+	out, err := h.run(h.keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !asked || !strings.Contains(out, "tags: 1 images with release tags (2 images: 1 read, 0 fresh, 1 failed") {
+		t.Fatalf("summary: %s", out)
+	}
+	manifest, err := os.ReadFile(filepath.Join(h.cfg.out, "v1", "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"name":"tags"`) && !strings.Contains(string(manifest), `"name": "tags"`) {
+		t.Fatalf("no tags blob in the manifest: %s", manifest)
+	}
+}

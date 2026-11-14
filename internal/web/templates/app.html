@@ -1,0 +1,63 @@
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Card}}
+<p class="crumb"><a href="/">Apps</a></p>
+<header class="apphead apphead--{{$c.State}}">
+  {{template "appicon" $c.State}}
+  <div>
+    <h1>{{$c.Name}}{{if $c.Version}} <span class="mono">{{$c.Version}}</span>{{end}}</h1>
+    <p class="muted">{{$c.Sub}}{{if $c.Image}} · <span class="mono">{{$c.Image}}</span>{{end}}</p>
+  </div>
+  <span class="app__state">{{$c.Label}}</span>
+</header>
+
+<div class="grid-2">
+<section class="panel" aria-labelledby="do-title">
+  <h2 id="do-title">What to do</h2>
+  {{if $c.Action}}
+  <p class="lead"><strong>{{$c.Action}}</strong>{{if $c.Fixes}}<span class="muted"> · {{$c.Fixes}}</span>{{end}}</p>
+  {{if $c.Rest}}<p class="small">{{$c.Rest}}.</p>{{end}}
+  {{if $c.Line}}
+  <ol class="howto">
+    <li>{{with $c.Compose}}Open the Compose file of the project <strong>{{.Project}}</strong>{{if .Files}} (<span class="mono">{{join .Files ", "}}</span>){{end}} and change the line of the service <strong>{{.Service}}</strong> to:{{else}}Change the image of the container to:{{end}}
+      <div class="secret"><pre id="app-line" class="mono install">{{$c.Line}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-line"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+      {{if not $c.Verified}}<span class="cell-sub">Varde has not seen this tag in the registry yet; check that it exists.</span>{{end}}</li>
+    {{if $c.Command}}<li>Then run{{with $c.Compose}}{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}{{end}}:
+      <div class="secret"><pre id="app-cmd" class="mono install">{{$c.Command}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div></li>{{end}}
+    <li>Varde sees the new version at the next report and clears what it fixes by itself.</li>
+  </ol>
+  {{else if $c.Command}}
+  <div class="secret"><pre id="app-cmd" class="mono install">{{$c.Command}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+  {{end}}
+  {{else}}
+  <p class="lead"><strong>Nothing.</strong></p>
+  <p class="small">{{if eq $c.State "ok"}}Varde compared this version with the advisories of the project and found none that applies.{{else}}{{$c.Note}}.{{end}}</p>
+  {{end}}
+</section>
+
+<section class="panel" aria-labelledby="why-title">
+  <h2 id="why-title">{{if $c.Count}}Why{{else}}What Varde knows{{end}}</h2>
+  <dl class="facts">
+    {{if $c.Why}}<dt>Urgency</dt><dd>{{$c.Why}}</dd>{{end}}
+    <dt>Reachable</dt><dd>{{template "exposure" $c.Exposure}}</dd>
+    <dt>Version</dt><dd>{{if $d.Version}}<span class="mono">{{$d.Version}}</span>{{if $d.Source}} <span class="muted">({{$d.Source}})</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}{{if $d.Doubt}}<span class="cell-sub">{{$d.Doubt}}</span>{{end}}</dd>
+    {{if $c.Newer}}<dt>Newest release</dt><dd><span class="mono">{{$c.Newer}}</span></dd>{{end}}
+    {{if $c.Count}}<dt>Open flaws</dt><dd>{{$c.Count}}{{if $c.Urgent}}, {{$c.Urgent}} of them the reason for "{{$c.Label}}"{{end}}</dd>{{end}}
+    {{if $d.Basis}}<dt>Recognised</dt><dd>{{$d.Basis}}</dd>{{end}}
+    {{if and $c.Note $c.Action}}<dt>Advisory data</dt><dd>{{$c.Note}}</dd>{{end}}
+  </dl>
+  {{if $d.Machine}}<p class="small"><a href="/systems/{{$d.Machine}}">Everything on this machine</a></p>{{end}}
+</section>
+</div>
+
+{{if $d.Flaws}}
+<section class="panel" aria-labelledby="flaws-title">
+  <div class="panel__head"><h2 id="flaws-title">The flaws behind it <span class="muted">({{$c.Count}})</span></h2><a class="small" href="/findings?workload={{$c.Key}}">All with filters</a></div>
+  <p class="small muted">You do not need to read these to update. Each opens with its evidence: the advisory, the affected versions and where Varde knows your version from.</p>
+  <ul class="flaws">{{range $d.Flaws}}
+    <li class="flaw flaw--{{.State}}"><span class="app__dot app__dot--{{.State}}" aria-hidden="true"></span><a href="/findings/{{.ID}}">{{if .Summary}}{{truncate .Summary 110}}{{else}}{{.Advisory}}{{end}}</a><span class="cell-sub"><span class="mono">{{.Advisory}}</span>{{if .Severity}} · {{.Severity}}{{end}}{{if .Exploited}} · known to be exploited{{end}}{{if .Fixed}} · fixed in <span class="mono">{{.Fixed}}</span>{{else if eq .State "check"}} · Varde cannot confirm it{{else}} · no fix yet{{end}}</span></li>
+  {{end}}</ul>
+  {{if $d.Hidden}}<p class="small"><a href="/findings?workload={{$c.Key}}">{{$d.Hidden}} more</a></p>{{end}}
+</section>
+{{end}}
+{{end}}

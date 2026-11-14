@@ -37,6 +37,9 @@ type Store interface {
 	// package already kept does not write the table again.
 	ReplaceReleasePackages(ctx context.Context, marker string, rows []store.ReleasePackageRow) error
 	ReleasePackagesMarker(ctx context.Context) (string, error)
+	// MergeRepositoryTags keeps the release tags of the package beside
+	// those the installation read from a registry itself.
+	MergeRepositoryTags(ctx context.Context, lists []store.RepositoryTags) error
 }
 
 // Channel is one place the feed can come from. Channels share the trust
@@ -195,6 +198,7 @@ func (c *Client) LoadActive(ctx context.Context) error {
 	c.Catalog.Set(cat)
 	c.index.Store(content.Index)
 	c.setReleases(ctx, content.Releases, releasesMarker(m))
+	c.setTags(ctx, content.Tags)
 	if !c.now().Before(m.ExpiresAt) {
 		c.Log.Warn("installed feed has expired; using it until a fresh one verifies", "sequence", m.Sequence, "expired", m.ExpiresAt)
 	}
@@ -266,6 +270,24 @@ func (c *Client) setReleases(ctx context.Context, lines []ReleaseLine, marker st
 	}
 	if err := c.Store.ReplaceReleasePackages(ctx, marker, rows); err != nil {
 		c.Log.Warn("release package lists of the package not kept; release fixes are not shown until the next package", "err", err)
+	}
+}
+
+// setTags keeps the release tags of a package in the store, where update
+// suggestions read them per repository. They stay when the package is
+// left or a later one lacks an image: a tag that existed still exists.
+// Failing to keep them is logged; suggestions then name a tag Varde has
+// not seen, as without the package.
+func (c *Client) setTags(ctx context.Context, lines []TagLine) {
+	if len(lines) == 0 {
+		return
+	}
+	lists := make([]store.RepositoryTags, 0, len(lines))
+	for _, l := range lines {
+		lists = append(lists, store.RepositoryTags{Repository: l.Image, Tags: l.Tags, Checked: l.Read})
+	}
+	if err := c.Store.MergeRepositoryTags(ctx, lists); err != nil {
+		c.Log.Warn("release tags of the package not kept", "err", err)
 	}
 }
 
@@ -446,6 +468,7 @@ func (c *Client) updateFrom(ctx context.Context, channel string, f Fetcher) (Res
 	c.Catalog.Set(cat)
 	c.index.Store(content.Index)
 	c.setReleases(ctx, content.Releases, releasesMarker(m))
+	c.setTags(ctx, content.Tags)
 	c.etag[f.String()] = newETag
 	c.gc(m)
 	c.Log.Info("feed applied", "channel", channel, "sequence", m.Sequence, "catalog", m.CatalogVersion, "advisories", len(content.Advisories), "mirror", f.String())

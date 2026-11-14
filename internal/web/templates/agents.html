@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}{{$csrf := .CSRF}}
 <div class="page-head">
-  <div><h1>Agents</h1><p>The agent reports the full inventory of a host: every installed package and every Docker container, kept current. Varde installs it with one SSH sign-in it does not keep, and the agent updates itself to this server's version. It connects out, so it also works for hosts in another VLAN or behind a VPN.</p></div>
+  <div><h1>Agents</h1><p>A small program on a host that reports every installed package and every Docker container. Varde installs it with one SSH sign-in it does not keep. It connects out, so it also reaches hosts in another VLAN or behind a VPN.</p></div>
   {{if $d.CanInstall}}<div class="actions"><a class="btn btn--primary" href="/connections/agents/install">Install the agent on a host</a></div>{{end}}
 </div>
 {{if $d.NewToken}}

@@ -6,8 +6,61 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The interface starts from apps instead of findings (ADR 0043). The front page lists what
+  runs, each app under what it needs: a card with the one version to install, why, and the
+  image line to copy, or a quiet row that says what "nothing" rests on. Each app has a page
+  with the steps to update it and, below, the flaws behind it. The areas are Apps, Updates and
+  Setup; every earlier page keeps its address. Priorities read "Update now", "Update soon",
+  "Next update" and "Check yourself" on the pages; P1 to P3 stay the names in notifications,
+  the policy and the API.
+- The list of updates, a flaw's page, the machine pages and the settings follow the same
+  design: cards with one update each, evidence in plain words with the long parts folded,
+  settings ordered by what people come for with the rest under "Advanced".
+- The reminder that the connection is not encrypted appears in the Setup area and among the
+  setup steps, no longer above every page. An untrusted TLS proxy is still named everywhere.
+
+### Added
+
+- The Gaps page offers the images Varde does not recognise as a list to download: repositories
+  only, without versions, container or host names, and without images on registries of your
+  own. Varde sends it nowhere; it is for attaching to a catalog suggestion.
+- The inventory names the newest release of a container's image when it is newer than the
+  version running, from the release tags of the data package. With registry versions on, Varde
+  also lists the tags of images the package does not cover, findings or not.
+- The data package carries advisories from osv.dev and, for apps whose projects publish no
+  complete advisories, from the NVD (ADR 0042). Such apps (nginx, for example) get findings
+  without the installation asking anyone; each finding says which source the record was read
+  from, and a project's own advisory decides where both describe the same flaw.
+- The data package carries the release tags of every catalog image (ADR 0041). Update
+  suggestions name a tag the registry lists without registry versions switched on, and the
+  version to update to is a release that exists: a fixed version an advisory names that was
+  never published gives way to the next release that was.
+
 ### Fixed
 
+- A flaw behind the way in of an attack path is no longer urgent because of the path. Only the
+  flaw a path starts with was meant: fixing it cuts the path. Containers that share a Docker
+  network with a public one all became P1; a flaw behind the way in is now at least P2 on a
+  path from the internet and keeps its priority on one from the LAN.
+- A workload without open findings says what that means: "none found" only where it was
+  compared with complete advisory data, "none known" with the reason where the project's data
+  is incomplete, and "not checked" where nothing could be compared.
+- An advisory that only says from which version a flaw exists no longer keeps every later
+  version affected without an update to name. Another record of the same flaw gives it its
+  end: patched versions are cleared, the others get the fixed version, and the finding says
+  which record it came from (ADR 0042).
+- A finding names one version to update to. Its page said "update to" the advisory's own fixed
+  version, a second version that fixes most advisories, and put a third into the image line.
+  The analysis now chooses one (the fix on the running release line when that line fixes the
+  finding, else the newer line), and the page, its image line and the notification name it;
+  the advisory's fixed version and what only a newer major version fixes are said beside it.
+- An advisory that names only a package of another project (a runner beside the server, a
+  library the report blames, a sibling image of the same author) no longer counts as affected
+  for apps without a reviewed package list: it is shown as "needs a check" with the package it
+  names, is not prioritised and does not notify, and its versions are no update target of the
+  app. Beside a package of the app itself, the other project's entry is left out.
 - Existing findings stay active when an image's package inventory is incomplete or unavailable;
   only sufficient evidence resolves them, preserving acknowledgements and notification history.
 - Update targets no longer count advisories with incomparable or missing alias version data as

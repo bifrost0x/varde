@@ -162,7 +162,7 @@ Docker over SSH every 15, packages every hour) is shown as not reading, its host
 into the daily digest. The last scan result is kept across restarts. Token
 secrets are stored encrypted with a key in `<data>/keys`; Varde's SSH keys are `<data>/ssh/id_ed25519`
 (Docker), `<data>/ssh/id_ed25519_inventory` (packages) and `<data>/ssh/id_ed25519_proxmox`
-(containers of Proxmox nodes). The overview and Connections list the next steps, ranked by
+(containers of Proxmox nodes). The front page and Connections list the next steps, ranked by
 what they show.
 Back up the whole data directory together.
 
@@ -222,7 +222,7 @@ ADR 0031): every installed package (the same inventory the SSH inventory reads, 
 with Docker access, every container. It needs no inbound port, so it also covers hosts in another
 VLAN or behind a VPN.
 
-**Install it from Varde.** After a scan, the overview and each found Linux host offer "Install the
+**Install it from Varde.** After a scan, the front page and each found Linux host offer "Install the
 agent"; one run covers up to 20 hosts with the same user and credentials, each with its own host key
 to confirm. Under Connections › Agents choose "Install the agent on a host" (or "Install the
 agent" on a system's page): enter the address and a user (root, or one who may use sudo), compare
@@ -353,7 +353,7 @@ package then says "not available" and Varde asks the public sources itself.
   the newest package, whatever Varde version is running. If the package is in a newer format than
   this version reads, the section says so; the package in use stays until Varde is updated.
 - **When it fails.** The last verified package stays in use, the section names the reason, and
-  after `VARDE_FEED_STALE_AFTER` a notice appears on the overview. Varde never starts asking the
+  after `VARDE_FEED_STALE_AFTER` a notice appears on the front page. Varde never starts asking the
   public sources by itself because the package could not be fetched.
 - **Without internet access.** Put the package (a directory or a `.tar` of it) into a mounted
   volume, set `VARDE_PACKAGE_URLS=file:///path`, and press "Update now" after replacing the file.
@@ -405,7 +405,7 @@ file does not change.
   advisories are removed and the built-in catalog is used again. The same happens by itself when
   the license expires. The license stays stored (encrypted with the key in `<data>/keys`) until
   "Remove license".
-- **When it ends by itself.** An expired or unusable license raises a system notice on the overview
+- **When it ends by itself.** An expired or unusable license raises a system notice on the front page
   and in the notifications, so the return to the public sources does not go unnoticed.
 - **Advisories while it is on.** An app the feed covers is judged by the feed alone. What the
   public sources stored for it earlier stays in the database, unused, and counts again after

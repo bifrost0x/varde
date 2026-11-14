@@ -2,7 +2,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="page-head">
-  <div><h1>History</h1><p>What was fixed, when and how, what came in new, and what you did about it. To keep a report, print this page or save it as PDF from your browser, or download the entries as CSV.</p></div>
+  <div><h1>History</h1><p>What was fixed and when, what came in new, and what you did about it. Print the page or download the entries as CSV to keep a report.</p></div>
   <div class="actions no-print"><a class="btn btn--ghost" href="/findings/history.csv?days={{$d.Days}}{{if $d.HostID}}&amp;host={{$d.HostID}}{{end}}">Download CSV</a></div>
 </div>
 <form class="filters no-print" method="get" action="/findings/history">
@@ -28,7 +28,7 @@
 
 {{if or $d.TimeToFix $d.ByCause}}
 <section class="panel" aria-labelledby="h-summary">
-  <div class="panel__head"><h2 id="h-summary">How findings ended</h2></div>
+  <div class="panel__head"><h2 id="h-summary">How flaws ended</h2></div>
   <div class="split">
     {{if $d.ByCause}}<table class="table table--compact"><tbody>
       {{range $d.ByCause}}<tr><td>{{.Label}}</td><td class="num">{{.Count}}</td></tr>{{end}}
@@ -43,7 +43,7 @@
 
 {{if $d.Oldest}}
 <section class="panel" aria-labelledby="h-oldest">
-  <div class="panel__head"><h2 id="h-oldest">Waiting longest</h2><a class="small no-print" href="/findings">All open findings</a></div>
+  <div class="panel__head"><h2 id="h-oldest">Waiting longest</h2><a class="small no-print" href="/findings">All updates to do</a></div>
   {{template "findingtable" $d.Oldest}}
 </section>
 {{end}}
@@ -61,13 +61,13 @@
         <strong>{{.Headline}}</strong>
         {{if .Workload}}<span>{{.Workload}}{{if .Host}} on {{.Host}}{{end}}</span>{{end}}
         {{if .Actor}}<span class="muted">by {{.Actor}}</span>{{end}}
-        {{if .Items}}<span class="badge{{if eq .Kind "fixed"}} badge--ok{{else if .Urgent}} badge--p1{{end}}">{{plural (len .Items) "finding"}}</span>{{end}}
+        {{if .Items}}<span class="badge{{if eq .Kind "fixed"}} badge--ok{{else if .Urgent}} badge--p1{{end}}">{{plural (len .Items) "flaw"}}</span>{{end}}
       </div>
       {{if .Explain}}<p class="small muted">{{.Explain}}</p>{{end}}
       {{if .Image}}<p class="small muted">Image <span class="mono">{{.Image}}</span></p>{{end}}
       {{if .Items}}
       <details{{if le (len .Items) 3}} open{{end}}>
-        <summary class="small">{{if eq .Kind "fixed"}}What was fixed{{else}}Which findings{{end}}</summary>
+        <summary class="small">{{if eq .Kind "fixed"}}What was fixed{{else}}Which flaws{{end}}</summary>
         <ul class="history__items">
         {{range .Items}}<li>{{template "prio" .Priority}} {{if .Link}}<a href="/findings/{{.FindingID}}">{{.App}}</a>{{else}}{{.App}}{{end}}
           <span class="mono">{{.Advisory}}</span>
@@ -85,7 +85,7 @@
 <div class="empty panel">
   <img src="/static/brand/mark-unlit.svg" alt="">
   <h2>Nothing happened in this period</h2>
-  <p>Varde records every finding it opens and resolves, and why: an update, a package taken out, a container gone. Updates you install show up here after the next report of the system.</p>
+  <p>Varde records every flaw it opens and resolves, and why: an update, a package taken out, a container gone. Updates you install show up here after the next report of the system.</p>
 </div>
 {{end}}
 {{end}}

@@ -414,11 +414,29 @@ func escapeOf(c *inventory.Container) string {
 }
 
 // pathPriority adjusts a finding's priority by its place on the attack
-// paths: on a path from the internet it is urgent, an amplifier or a path
+// paths: a way in from the internet is urgent, an amplifier or a way in
 // from the LAN at least P2, background noise at most P3 (P2 when known to
 // be exploited). Unclear findings keep the matrix's priority.
+//
+// A flaw behind another one (paths.Placement.Behind) is not a way in: an
+// attacker needs the first flaw to reach it. Fixing the way in cuts the
+// path, so only that is urgent because of the path. The flaw behind it is
+// at least P2 on a path from the internet and keeps the matrix's priority
+// on one from the LAN; containers that share a network would otherwise all
+// be urgent as soon as one of them is.
 func pathPriority(prio policy.Priority, reason string, pl paths.Placement, m match.Finding, exposure inventory.Exposure) (policy.Priority, string) {
 	if prio == policy.None {
+		return prio, reason
+	}
+	switch {
+	case pl.Behind && pl.Class == paths.OnPathInternet:
+		if prio.Rank() >= policy.P2.Rank() {
+			// Already that high for a reason of its own (known
+			// exploited, severity and exposure): that reason stands.
+			return prio, reason
+		}
+		return policy.P2, "behind another flaw on an attack path from the internet"
+	case pl.Behind:
 		return prio, reason
 	}
 	switch pl.Class {

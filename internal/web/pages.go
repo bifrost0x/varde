@@ -45,6 +45,9 @@ type snapshot struct {
 	exposure *exposure.Detector
 	// marked holds the image repositories marked as not an app.
 	marked map[string]bool
+	// tags are the known release tags per image repository, from the
+	// data package or the registry.
+	tags map[string]store.RepositoryTags
 	// machines are the hosts and devices merged from every source; hostOf
 	// maps a stored host ID to its machine.
 	machines []coverage.Machine
@@ -85,6 +88,11 @@ func (a *app) load(ctx context.Context, includeResolved bool) (*snapshot, error)
 	}
 	s := &snapshot{byID: map[string]inventory.Workload{}, ids: ids, findings: fs, hosts: hosts,
 		exposure: a.d.Settings.Exposure().WithRoutes(coverage.ProxyRoutes(ins, hosts)), marked: marked, devices: devs, integrations: ins, hostOf: map[string]*coverage.Machine{}}
+	// Release tags only add the note that a newer release exists: a
+	// store that cannot give them does not fail the page.
+	if tags, err := a.d.Store.RepositoryTags(ctx); err == nil {
+		s.tags = tags
+	}
 	perHost := map[string]int{}
 	for _, w := range ws {
 		s.byID[w.ID] = w
@@ -191,15 +199,9 @@ func sortRows(rows []findingRow) {
 type overviewData struct {
 	Findings status.Findings
 	State    string
-	// UrgentApps is the number of app versions with a new P1 finding.
-	UrgentApps int
-	// Todo are the updates to do first: one per container or system with
-	// new P1 or P2 findings; UrgentTodo counts those with new P1 ones.
-	Todo       []todoGroup
-	UrgentTodo int
-	// Urgent lists app versions with new P1 or P2 findings; Quiet those
-	// whose P1 or P2 findings are all acknowledged.
-	Urgent, Quiet []findingGroup
+	// Quiet lists the app versions whose P1 or P2 findings are all
+	// acknowledged.
+	Quiet []findingGroup
 	// LastInventory is the newest report of any source that reads
 	// workloads.
 	LastInventory time.Time
@@ -228,6 +230,10 @@ type overviewData struct {
 	SystemChecked int
 	// Restarts are the systems whose updates wait for a restart.
 	Restarts []systemRow
+	// Apps counts the apps by what they ask for; Sections are the cards
+	// of the front page, grouped by it.
+	Apps     appCounts
+	Sections []appSection
 	// Paths are the most dangerous attack paths, PathCount all of them;
 	// Noise counts the open findings no path uses (ADR 0034).
 	Paths     []paths.Path
@@ -296,33 +302,9 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		}
 		if g.New == 0 {
 			d.Quiet = append(d.Quiet, g)
-			continue
 		}
-		if g.Priority == "P1" {
-			d.UrgentApps++
-		}
-		d.Urgent = append(d.Urgent, g)
 	}
-	if len(d.Urgent) > 5 {
-		d.Urgent = d.Urgent[:5]
-	}
-	todo := a.todoGroups(s, open)
-	d.Updates = countUpdates(todo)
-	for _, g := range todo {
-		if g.NewPriority != "P1" && g.NewPriority != "P2" {
-			continue
-		}
-		if g.NewPriority == "P1" {
-			d.UrgentTodo++
-		}
-		d.Todo = append(d.Todo, g)
-	}
-	// The urgent ones first, also when an acknowledged finding ranks
-	// another update higher.
-	sort.SliceStable(d.Todo, func(i, j int) bool { return priorityRank[d.Todo[i].NewPriority] < priorityRank[d.Todo[j].NewPriority] })
-	if len(d.Todo) > 5 {
-		d.Todo = d.Todo[:5]
-	}
+	d.Updates = countUpdates(a.todoGroups(s, open))
 	if len(d.Quiet) > 5 {
 		d.Quiet = d.Quiet[:5]
 	}
@@ -390,7 +372,9 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	}
 	d.SetupHidden = a.setupHidden(ctx)
 	// Notifications and HTTPS are steps of the guide here, not banners.
-	v := view{Title: "Overview", Nav: "overview", Data: d, OwnSecurityNote: true}
+	cards := a.appCards(s)
+	d.Apps, d.Sections = countApps(cards), appSections(cards)
+	v := view{Title: "Apps", Nav: "overview", Tabs: tabs("systems", "/"), Data: d, OwnSecurityNote: true}
 	a.page(w, r, cur, http.StatusOK, "overview", v)
 }
 
@@ -456,7 +440,11 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	}
 	sort.Slice(apps, func(i, j int) bool { return apps[i].Name < apps[j].Name })
 	filtered := f != (findingsFilter{})
-	a.page(w, r, cur, http.StatusOK, "findings", view{Title: "Findings", Nav: "findings", Tabs: tabs("findings", "/findings"), Data: struct {
+	// The updates to do as the cards of the front page, each under what
+	// it asks for.
+	sections := appSections(a.updateCards(s, todo, selected))
+	a.page(w, r, cur, http.StatusOK, "findings", view{Title: "Updates", Nav: "findings", Tabs: tabs("findings", "/findings"), Data: struct {
+		Sections []appSection
 		Findings []findingRow
 		Groups   []findingGroup
 		Todo     []todoGroup
@@ -467,7 +455,7 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		Apps     []appOption
 		Filtered bool
 		Query    string
-	}{rows, groups, todo, len(selected), list, mode, f, apps, filtered, filterQuery(f)}})
+	}{sections, rows, groups, todo, len(selected), list, mode, f, apps, filtered, filterQuery(f)}})
 }
 
 // filterQuery keeps the filters when switching between the grouped and the
@@ -520,8 +508,11 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		History                         []historyEntry
 		// Image is set for a flaw in a package of the container's image.
 		Image *imageFinding
+		// AppHref is the page of the app the flaw belongs to; empty for
+		// a package of a system, which has none.
+		AppHref string
 	}{f, m, a.appName(f.AppID), wl.Name, host, details, a.update(r.Context(), f, m, wl), a.d.Settings.Get().RegistryTags, a.findingPaths(r, f.ID),
-		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl)}})
+		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl), appHref(wl)}})
 }
 
 // imageFinding is what the page says about a flaw in a package of a
@@ -581,12 +572,18 @@ func (a *app) update(ctx context.Context, f store.Finding, m match.Finding, wl i
 	if f.MatchState != string(match.Affected) || wl.Container == nil {
 		return nil
 	}
+	// The version the page names is the one the image line carries
+	// (match.Step). A finding stored before the step existed has only
+	// its own fixed version.
 	target := f.FixedIn
-	if m.Target != nil && m.Target.Version != "" {
+	switch {
+	case m.Step != nil:
+		target = m.Step.Version
+	case m.Target != nil && m.Target.Version != "":
+		// Stored before the step: the target, or the running line's when
+		// the target leaves the line. The next analysis replaces it.
 		target = m.Target.Version
 		if m.Target.NewLine && m.Target.Line != nil && m.Target.Line.Version != "" {
-			// Stay on the running release line when it fixes something;
-			// a new major version needs upgrade steps first.
 			target = m.Target.Line.Version
 		}
 	}
@@ -628,6 +625,15 @@ type workloadRow struct {
 	// Basis says what an automatic recognition rests on (source label,
 	// GitHub's registry, app store lists); empty for reviewed apps.
 	Basis string
+	// Checked says what "no open finding" means for this workload: only
+	// CheckedFull stands for "compared with complete advisory data and
+	// nothing found". CheckNote says it in words for the others.
+	Checked   string
+	CheckNote string
+	// Newer is the newest release of the container's image above the
+	// version it runs, from the known release tags; empty when it runs
+	// the newest or nothing is known.
+	Newer string
 	// Pulled is set when a newer image for the container's tag is pulled
 	// but the container still runs the old one; Changed lists version
 	// evidence files changed inside the container.
@@ -638,6 +644,41 @@ type workloadRow struct {
 	Distro, PackageVersion string
 	// EOL describes a release line past its end of life.
 	EOL string
+}
+
+// What a workload without open findings was checked against.
+const (
+	CheckedFull    = "full"    // compared, the project publishes complete advisories
+	CheckedLimited = "limited" // compared, but the project's advisory data is incomplete
+	CheckedNot     = "not"     // nothing was compared
+)
+
+// checked says how far a workload was compared with advisories. "None" in
+// a list must not look the same for an app with complete data, one whose
+// project publishes little, and one Varde could not compare at all.
+func (a *app) checked(id identify.Result, row workloadRow) (kind, note string) {
+	app, known := a.d.Catalog.Current().App(id.AppID)
+	switch {
+	case row.NotApp != "":
+		return CheckedLimited, "a helper without advisories of its own; the packages of its image are checked"
+	case !known || id.AppID == "":
+		return CheckedNot, "not recognised, so not compared with any advisory"
+	case a.d.Package != nil && a.d.Package.NoSource(app):
+		return CheckedNot, "no advisory source covers this app"
+	case row.Distro != "":
+		return CheckedFull, ""
+	case id.Version == "":
+		return CheckedNot, "the version is unknown, so nothing can be compared"
+	case row.Derived:
+		return CheckedLimited, "recognised automatically and not confirmed: findings do not alert"
+	case id.Doubt() != "":
+		return CheckedLimited, "the version is not confirmed: findings do not alert"
+	case app.Advisories.Coverage == catalog.CoverageLimited:
+		return CheckedLimited, "the project publishes no advisories a program can read; Varde relies on CVE data, which lags"
+	case app.Advisories.Coverage == catalog.CoveragePartial:
+		return CheckedLimited, "the project publishes only part of its flaws in a form a program can compare"
+	}
+	return CheckedFull, ""
 }
 
 type hostGroup struct {
@@ -693,7 +734,7 @@ func (a *app) inventory(w http.ResponseWriter, r *http.Request, cur *auth.Curren
 		apps = append(apps, appOption{ap.ID, ap.Name})
 	}
 	sort.Slice(apps, func(i, j int) bool { return strings.ToLower(apps[i].Name) < strings.ToLower(apps[j].Name) })
-	a.page(w, r, cur, http.StatusOK, "inventory", view{Title: "Apps and containers", Nav: "systems", Tabs: tabs("systems", "/systems/apps"), Data: struct {
+	a.page(w, r, cur, http.StatusOK, "inventory", view{Title: "All containers", Nav: "systems", Tabs: tabs("systems", "/systems/apps"), Data: struct {
 		Hosts         []hostGroup
 		Apps          []appOption
 		WithoutReads  int
@@ -1077,9 +1118,15 @@ func (a *app) workloadRow(s *snapshot, wl inventory.Workload, open map[string]in
 		row.NotApp = kind
 	}
 	row.EOL = eolNote(a.d.Catalog.Current(), eol, id)
+	row.Checked, row.CheckNote = a.checked(id, row)
 	switch {
 	case wl.Container != nil:
 		row.Image, row.Stack = wl.Container.ImageRef, wl.Container.ComposeProject
+		if app, ok := a.d.Catalog.Current().App(id.AppID); ok && id.Doubt() == "" {
+			if ref, err := imageref.Parse(wl.Container.ImageRef); err == nil {
+				row.Newer = remedy.Newer(app, ref.Repository, id.Version, s.tags[ref.Repository].Tags)
+			}
+		}
 		row.Pulled, row.Changed = wl.Container.PulledImageID != "", wl.Container.ChangedFiles
 	case wl.Manual != nil:
 		row.Image = "manual entry"

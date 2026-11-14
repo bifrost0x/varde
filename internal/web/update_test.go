@@ -49,6 +49,23 @@ func TestFindingUpdate(t *testing.T) {
 	if body = page(); !strings.Contains(body, "a release tag the registry lists") || !strings.Contains(body, "immich-server:v1.121.0") {
 		t.Error("verified tag not shown")
 	}
+	// With the step of the analysis, the page names one version: in its
+	// first sentence, in the image line, and with what else it fixes. The
+	// fix on the running line stands before the newer major version.
+	_, _ = h.store.SyncFindings(ctx, []store.FindingInput{{WorkloadID: wid, AppID: "immich", AdvisoryID: "GHSA-1", MatchState: "affected", FixedIn: "1.120.1",
+		Detail: match.Finding{AdvisoryID: "GHSA-1", FixedIn: "1.120.1",
+			Target: &match.Target{Version: "2.0.0", Fixes: 5, Total: 5, NewLine: true, Line: &match.Target{Version: "1.121.1", Fixes: 3, Total: 5}},
+			Step:   &match.Step{Version: "1.121.1", Fixes: 3, Total: 5, Advisory: "1.120.1", All: &match.Target{Version: "2.0.0", Fixes: 5, Total: 5, NewLine: true}}}}}, now)
+	body = strings.Join(strings.Fields(page()), " ")
+	for _, want := range []string{"Update immich_server to 1.121.1.", "This flaw is fixed from 1.120.1 on", "fixes it together with 3 of the 5 flaws",
+		"The rest need 2.0.0, a new major version that fixes all 5", "image: ghcr.io/immich-app/immich-server:v1.121.1"} {
+		if !strings.Contains(stripTags(body), want) {
+			t.Errorf("step: missing %q", want)
+		}
+	}
+	if strings.Contains(body, "immich-server:v2.0.0") || strings.Contains(body, "immich-server:v1.120.1") {
+		t.Error("the image line names another version than the page")
+	}
 	// Unverified findings get no update suggestion.
 	_, _ = h.store.SyncFindings(ctx, []store.FindingInput{{WorkloadID: wid, AppID: "immich", AdvisoryID: "GHSA-1", MatchState: "unverified", Detail: match.Finding{AdvisoryID: "GHSA-1"}}}, now)
 	if strings.Contains(page(), "How to update") {
@@ -76,4 +93,82 @@ func TestInventoryEOL(t *testing.T) {
 	if strings.Count(body, ">end of life<") != 1 || !strings.Contains(body, "Release line 1.29 gets no more fixes since 2026-05-13; the newest supported release is 1.31.8.") {
 		t.Error("end of life not shown once")
 	}
+}
+
+// With the release tags of an image known, the inventory says when a newer
+// release exists, and nothing for a container that runs the newest.
+func TestInventoryNewestRelease(t *testing.T) {
+	h := newHarness(t, withNginx(t))
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "old", Name: "web-old", Container: &inventory.Container{ImageRef: "nginx:1.29.8"}},
+		{Kind: inventory.KindContainer, RuntimeID: "new", Name: "web-new", Container: &inventory.Container{ImageRef: "nginx:1.31.8"}},
+	}, now)
+	_ = h.store.ReplaceIdentifications(ctx, []identify.Result{
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "old"), AppID: "nginx", Confidence: identify.Exact, Version: "1.29.8", Trust: identify.Confirmed},
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "new"), AppID: "nginx", Confidence: identify.Exact, Version: "1.31.8", Trust: identify.Confirmed},
+	}, now)
+	if _, body := h.do(t, "GET", "/systems/apps", nil, nil); strings.Contains(body, "newest release") {
+		t.Error("a newer release named without a tag list")
+	}
+	if err := h.store.MergeRepositoryTags(ctx, []store.RepositoryTags{{Repository: "docker.io/library/nginx", Checked: now,
+		Tags: []string{"1.31.8", "1.31.8-alpine", "1.31.7", "1.29.8", "latest"}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/systems/apps", nil, nil)
+	if got := strings.Count(stripTags(body), "newest release 1.31.8"); got != 1 {
+		t.Errorf("newest release named %d times, want once (for the old container only)", got)
+	}
+}
+
+// A workload without findings says what that means: an app whose project
+// publishes no readable advisories has none known, not none found, and one
+// Varde could not compare at all is not checked.
+func TestInventorySaysWhatNoFindingMeans(t *testing.T) {
+	h := newHarness(t, withNginx(t))
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "web", Name: "web", Container: &inventory.Container{ImageRef: "nginx:1.31.8"}},
+		{Kind: inventory.KindContainer, RuntimeID: "noversion", Name: "web-latest", Container: &inventory.Container{ImageRef: "nginx:latest"}},
+		{Kind: inventory.KindContainer, RuntimeID: "x", Name: "mystery", Container: &inventory.Container{ImageRef: "someone/thing:1.0"}},
+	}, now)
+	_ = h.store.ReplaceIdentifications(ctx, []identify.Result{
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "web"), AppID: "nginx", Confidence: identify.Exact, Version: "1.31.8", Trust: identify.Confirmed},
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "noversion"), AppID: "nginx", Confidence: identify.Exact},
+	}, now)
+	_, body := h.do(t, "GET", "/systems/apps", nil, nil)
+	text := stripTags(body)
+	for _, want := range []string{
+		"none knownthe project publishes no advisories a program can read",
+		"not checkedthe version is unknown, so nothing can be compared",
+		"not checkednot recognised, so not compared with any advisory",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(text, "none found") {
+		t.Error("an app without complete advisory data is shown as checked and clean")
+	}
+}
+
+// stripTags drops HTML tags, so a sentence reads as on the page.
+func stripTags(s string) string {
+	var b strings.Builder
+	in := false
+	for _, r := range s {
+		switch {
+		case r == '<':
+			in = true
+		case r == '>':
+			in = false
+		case !in:
+			b.WriteRune(r)
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }

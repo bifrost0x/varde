@@ -4,6 +4,7 @@ package paths
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -95,6 +96,33 @@ func TestNeighbourContainer(t *testing.T) {
 	pl := r.Placements["f-db"]
 	if pl.Class != OnPathInternet || len(pl.Paths) == 0 {
 		t.Fatalf("database behind the app: %+v", pl)
+	}
+	// The database is reached through the app: it is on the path, but it
+	// is not the way in, and exactly the flaws paths start with are.
+	if !pl.Behind || !strings.Contains(pl.Reason, "behind another flaw") {
+		t.Errorf("database not marked as behind the way in: %+v", pl)
+	}
+	opens := 0
+	for id, p := range r.Placements {
+		if p.Class != OnPathInternet || p.Behind {
+			continue
+		}
+		opens++
+		starts := false
+		for _, path := range r.Paths {
+			for _, s := range path.Steps {
+				if s.Kind == "exploit" {
+					starts = starts || s.FindingID == id || slices.Contains(s.also, id)
+					break
+				}
+			}
+		}
+		if !starts {
+			t.Errorf("%s is called a way in from the internet, but no path starts with it", id)
+		}
+	}
+	if opens == 0 {
+		t.Error("no way in from the internet left")
 	}
 	found := false
 	for _, p := range r.Paths {
