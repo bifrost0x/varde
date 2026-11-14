@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 
 func (f *fixture) snapshot() feed.Snapshot {
 	f.t.Helper()
-	snap, err := Snapshot(context.Background(), f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, nil, f.now, 7*24*time.Hour)
+	snap, err := Snapshot(context.Background(), f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, nil, false, f.now, 7*24*time.Hour)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -220,7 +221,7 @@ func TestSnapshotSecondSources(t *testing.T) {
 	}
 	snap := func(a *catalog.App) map[string]string {
 		t.Helper()
-		s, err := Snapshot(ctx, f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, []*catalog.App{a}, f.now, 7*24*time.Hour)
+		s, err := Snapshot(ctx, f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, []*catalog.App{a}, false, f.now, 7*24*time.Hour)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -313,5 +314,79 @@ func TestCollectSecondSourceFailureIsNotFatal(t *testing.T) {
 	}
 	if got := f.snapshot(); len(got.Advisories) == 0 {
 		t.Fatal("the repositories' advisories were lost")
+	}
+}
+
+// The security fixes named in release notes ship for repositories whose
+// advisories are not complete, under every ID of the repository, marked
+// with their origin; a note naming a published advisory is left out
+// (ADR 0044).
+func TestSnapshotReleaseNotes(t *testing.T) {
+	f := newFixture(t)
+	notes := `[{"tag_name":"v2.0.0","body":"- fixes CVE-2026-0003 and CVE-2026-0042","published_at":"2026-11-01T00:00:00Z"},
+		{"tag_name":"v1.9.0","body":"- fix a path traversal","published_at":"2026-10-01T00:00:00Z"}]`
+	f.up.releases["other/tool"] = notes
+	f.up.releases["acme/widget"] = notes
+	f.opts.ReleaseNotes = true
+	stats, err := Collect(context.Background(), f.repos, f.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// widget's catalog entry has complete advisories: its notes are not read.
+	if stats.NotesRepos != 1 || f.up.requests["releases:acme/widget"] != 0 || f.up.requests["releases:other/tool"] != 1 {
+		t.Fatalf("notes read: %+v %v", stats, f.up.requests)
+	}
+	snap, err := Snapshot(context.Background(), f.st, []catalog.Entry{{Name: "widget.yaml", Data: widgetEntry}}, f.index, f.repos, nil, true, f.now, 7*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var notesShipped []feed.AdvisoryLine
+	for _, a := range snap.Advisories {
+		if a.OSV.Origin() == advisory.OriginRelease {
+			notesShipped = append(notesShipped, a)
+		}
+	}
+	// other/tool published GHSA-bbbb-bbbb-0003 with CVE-2026-0003: the
+	// note of CVE-2026-0042 and the one without an ID are new.
+	aliases := map[string]bool{}
+	for _, n := range notesShipped {
+		if n.AppID != "gh-other-tool" {
+			t.Fatalf("note under %s", n.AppID)
+		}
+		aliases[strings.Join(n.OSV.Aliases, ",")] = true
+	}
+	if len(notesShipped) != 2 || !aliases["CVE-2026-0042"] || !aliases[""] {
+		t.Fatalf("notes shipped: %+v", notesShipped)
+	}
+	// Without -release-notes nothing stored earlier ships.
+	if snap := f.snapshot(); len(snap.Advisories) != 5 {
+		t.Fatalf("advisories without notes: %d", len(snap.Advisories))
+	}
+}
+
+// A rate limit on the release notes does not stop the build; the summary
+// says why the reads stopped.
+func TestCollectReleaseNotesLimitIsNotFatal(t *testing.T) {
+	f := newFixture(t)
+	f.up.notesLimited = true
+	f.opts.ReleaseNotes = true
+	stats, err := Collect(context.Background(), f.repos, f.opts)
+	if err != nil || stats.NotesError == "" || stats.Failed != 0 {
+		t.Fatalf("stats %+v, err %v", stats, err)
+	}
+	if f.up.kev != 1 {
+		t.Fatal("the enrichment did not run after the notes stopped")
+	}
+}
+
+// A repository whose release notes fail without a rate limit is counted,
+// so the summary does not read as a complete collection.
+func TestCollectReleaseNotesFailuresAreCounted(t *testing.T) {
+	f := newFixture(t)
+	f.up.releases["other/tool"] = "not json"
+	f.opts.ReleaseNotes = true
+	stats, err := Collect(context.Background(), f.repos, f.opts)
+	if err != nil || stats.NotesFailed != 1 || stats.NotesError != "" {
+		t.Fatalf("stats %+v, err %v", stats, err)
 	}
 }

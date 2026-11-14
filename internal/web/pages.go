@@ -768,6 +768,9 @@ type coverageView struct {
 	// they are not counted in the summary.
 	NotApps []gap
 	Limited []struct{ Name, Coverage string }
+	// Notes is set when the data package is read: it carries the security
+	// fixes projects name only in their release notes (ADR 0044).
+	Notes bool
 	// NoSource are identified apps nothing is asked about: the data
 	// package does not cover them and direct queries are off.
 	NoSource []string
@@ -865,6 +868,7 @@ func (a *app) coverageData(s *snapshot) coverageView {
 			c.Limited = append(c.Limited, struct{ Name, Coverage string }{app.Name, app.Advisories.Coverage})
 		}
 	}
+	c.Notes = a.d.Package != nil && a.d.Package.Available()
 	return c
 }
 

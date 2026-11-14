@@ -23,6 +23,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The data package carries the security fixes that projects name only in their release notes
+  (ADR 0044). For apps whose advisories are not complete, a version below such a release gets
+  a finding to check yourself, with the release that fixes it and the lines of the notes that
+  named it. It is never counted as affected and sends no notification; a project's own
+  advisory decides where both describe the same flaw.
 - The Gaps page offers the images Varde does not recognise as a list to download: repositories
   only, without versions, container or host names, and without images on registries of your
   own. Varde sends it nowhere; it is for attaching to a catalog suggestion.

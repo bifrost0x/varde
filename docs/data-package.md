@@ -25,6 +25,7 @@ no package, says so under Settings › Data package and has no advisory data fro
 | `generated` | Catalog entries the build generated for index images without a reviewed entry, after six machine checks. They rank below reviewed entries; at most 20000. |
 | `releases` | The package lists of the newest release of every catalog app with a confirmed tag rule, per platform (linux/amd64 and linux/arm64). A package list shared by several lines (the two platforms of a release, releases on one base) is stored once. The lines fit 64 MiB unpacked, or less when the other blobs leave less of the 256 MiB an installation unpacks: reviewed apps first, then generated apps by weight; what does not fit is left out, lowest priority first. Capped at 32 MiB compressed, which the budget keeps it well below. |
 | `advisories/*` (second sources) | Beside the repositories' advisories, the records osv.dev has for the `osv_packages` of catalog apps and the NVD has for the CPEs of apps with `partial` or `limited` coverage, each marked with its origin in `database_specific.varde_origin` ([ADR 0042](adr/0042-second-advisory-sources-in-the-data-package.md)). `-osv=false` and `-nvd=false` leave them out; the builder reads an NVD API key from `VARDE_NVD_API_KEY`, which the workflow does not pass as it stands. |
+| `advisories/*` (release notes) | For every repository whose catalog entries do not all have `coverage: full`, one record per security fix its newest 50 releases name only in their notes: per CVE or GHSA ID the notes name, or one for a release that names none. The range says that versions before the release lack the fix and is marked inferred, so an installation shows it as a finding to check, never as affected. Marked with the origin `release`; an ID the repository published as an advisory is left out ([ADR 0044](adr/0044-security-fixes-from-release-notes.md)). `-release-notes=false` leaves them out. |
 | `tags` | The release tags of every image of a catalog app whose version is read from a tag: per image the tags the entry's tag rule reads a release from, newest release first, at most 600 ([ADR 0041](adr/0041-release-tags-in-the-data-package.md)). An installation knows from them which releases exist, without asking a registry. `-tags=false` leaves the step out. |
 | `enrichment/kev` | The CISA KEV list. |
 | `enrichment/epss` | EPSS scores for the CVEs the package names, not the whole dataset. |
@@ -51,6 +52,10 @@ what they have. Adding a blob needs nothing: older installations skip it.
    otherwise the builder starts cold and asks everything again. When the rate limit is reached it waits for the reset (`-max-wait`, 5 hours)
    instead of building from half the repositories. The workflow token allows 1,000 requests an
    hour per repository, so the first build of about 1,700 repositories takes two of those hours.
+   After the advisories it reads the release notes (ADR 0044), with conditional requests and
+   the same interval. A rate limit or an error stops these reads without failing the build:
+   what earlier builds stored ships, the summary line `release notes:` counts the repositories that failed and says why the reads stopped,
+   and the repositories not reached are read first by the next build.
 3. Before the advisories, generates catalog entries and reads release package lists (ADR 0040).
    The generator checks at most 150 new candidates per build and starts no project after
    `-generate-time` (90 minutes into the build); the release reads start no image after

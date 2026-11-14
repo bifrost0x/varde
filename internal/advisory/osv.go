@@ -122,6 +122,11 @@ func (v Vulnerability) URL() string {
 // for. Installations released before it ignore the key.
 const OriginKey = "varde_origin"
 
+// OriginRelease is the origin of a record the package builder made from a
+// security fix named in a project's release notes (ADR 0044). Its range
+// is inferred: it never makes a version affected.
+const OriginRelease = "release"
+
 // Origin returns the origin of a record of the data package, "" for one a
 // project published in its repository.
 func (v Vulnerability) Origin() string {

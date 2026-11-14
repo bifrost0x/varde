@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bifrost0x/varde/internal/advisory"
+	"github.com/bifrost0x/varde/internal/advisory/sources"
 	"github.com/bifrost0x/varde/internal/applists"
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/feed"
@@ -35,6 +36,16 @@ func secondSource(app *catalog.App, source string) bool {
 	return false
 }
 
+// namesAny reports whether one of ids is in set.
+func namesAny(ids []string, set map[string]bool) bool {
+	for _, id := range ids {
+		if set[id] {
+			return true
+		}
+	}
+	return false
+}
+
 // cveID is the form of a CVE ID the client accepts.
 var cveID = regexp.MustCompile(`^CVE-\d{4}-\d{4,9}$`)
 
@@ -49,7 +60,12 @@ var cveID = regexp.MustCompile(`^CVE-\d{4}-\d{4,9}$`)
 // a repository already published under that ID is not repeated, and each
 // carries its origin (advisory.Origin), by which an installation ranks it
 // below what the project published itself.
-func Snapshot(ctx context.Context, st *store.Store, entries []catalog.Entry, index *applists.Table, repos []Repo, second []*catalog.App, now time.Time, valid time.Duration) (feed.Snapshot, error) {
+//
+// notes adds the records made from release notes (ADR 0044) of every
+// repository whose advisories are not complete, under the same IDs as its
+// advisories; a note that names an ID the repository published as an
+// advisory is left out.
+func Snapshot(ctx context.Context, st *store.Store, entries []catalog.Entry, index *applists.Table, repos []Repo, second []*catalog.App, notes bool, now time.Time, valid time.Duration) (feed.Snapshot, error) {
 	snap := feed.Snapshot{Channel: feed.ChannelPackage, Sequence: now.Unix(), CreatedAt: now.UTC(), ExpiresAt: now.Add(valid).UTC(),
 		CatalogVersion: now.UTC().Format("2006.01.02"), Catalog: entries}
 	if index.Len() > 0 {
@@ -61,6 +77,7 @@ func Snapshot(ctx context.Context, st *store.Store, entries []catalog.Entry, ind
 		if err != nil {
 			return feed.Snapshot{}, err
 		}
+		published := map[string]bool{}
 		for _, rec := range recs {
 			// Only what this repository published: an ID can hold records
 			// of another source, and must not lend them to the package.
@@ -68,12 +85,30 @@ func Snapshot(ctx context.Context, st *store.Store, entries []catalog.Entry, ind
 				continue
 			}
 			for _, id := range append([]string{rec.Vuln.ID}, rec.Vuln.Aliases...) {
+				published[id] = true
 				if strings.HasPrefix(id, "CVE-") {
 					cves[id] = true
 				}
 			}
 			for _, appID := range append([]string{r.App.ID}, r.CatalogIDs...) {
 				snap.Advisories = append(snap.Advisories, feed.AdvisoryLine{AppID: appID, CVSS: rec.CVSS, Severity: rec.SeverityLabel, OSV: rec.Vuln})
+			}
+		}
+		if !notes || r.Complete {
+			continue
+		}
+		for _, rec := range recs {
+			if rec.Source != sources.ReleaseNotesSource(r.Name) || namesAny(rec.Vuln.Aliases, published) {
+				continue
+			}
+			for _, id := range rec.Vuln.Aliases {
+				if strings.HasPrefix(id, "CVE-") {
+					cves[id] = true
+				}
+			}
+			v := advisory.WithOrigin(rec.Vuln, advisory.OriginRelease)
+			for _, appID := range append([]string{r.App.ID}, r.CatalogIDs...) {
+				snap.Advisories = append(snap.Advisories, feed.AdvisoryLine{AppID: appID, OSV: v})
 			}
 		}
 	}

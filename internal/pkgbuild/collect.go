@@ -40,6 +40,9 @@ type Options struct {
 	// override their endpoints (tests), NVDKey raises the NVD's limit.
 	OSV, NVD               bool
 	OSVURL, NVDURL, NVDKey string
+	// ReleaseNotes switches on the reads of release notes of the
+	// repositories whose advisories are not complete (ADR 0044).
+	ReleaseNotes bool
 }
 
 // Stats describe one collection.
@@ -60,6 +63,12 @@ type Stats struct {
 	// from earlier builds still ships.
 	OSVApps, NVDApps, OSVRequests, NVDRequests int
 	OSVError, NVDError                         string
+	// NotesRepos are the repositories whose release notes are read,
+	// NotesRequests the requests that took, NotesFailed the repositories
+	// whose last read failed and NotesError why the reads stopped early;
+	// what earlier builds stored still ships.
+	NotesRepos, NotesRequests, NotesFailed int
+	NotesError                             string
 }
 
 // NVDApp reports whether the NVD is asked about app: every app with a CPE.
@@ -171,6 +180,11 @@ func Collect(ctx context.Context, repos []Repo, o Options) (Stats, error) {
 			o.Log.Warn("repository could not be read", "repository", st.Key, "since", since, "err", st.LastError)
 		}
 	}
+	if o.ReleaseNotes {
+		if err := collectNotes(ctx, repos, o, deps, &stats); err != nil {
+			return stats, err
+		}
+	}
 	// The second sources: what a project publishes elsewhere than in its
 	// repository. They never stop the build: a source that fails or runs
 	// into its limit leaves what earlier builds stored, and the summary
@@ -230,6 +244,52 @@ func Collect(ctx context.Context, repos []Repo, o Options) (Stats, error) {
 		return stats, err
 	}
 	return stats, nil
+}
+
+// collectNotes reads the release notes of the repositories whose
+// advisories are not complete. It never fails the build: a rate limit or
+// an error leaves what earlier builds stored, and the repositories not
+// reached are due first in the next build.
+func collectNotes(ctx context.Context, repos []Repo, o Options, deps sources.Deps, stats *Stats) error {
+	apps := make([]*catalog.App, 0, len(repos))
+	for _, r := range repos {
+		if !r.Complete {
+			apps = append(apps, r.App)
+		}
+	}
+	stats.NotesRepos = len(apps)
+	asked := make(map[string]bool, len(apps))
+	for _, a := range apps {
+		for _, r := range a.Advisories.GitHubRepos {
+			asked[r] = true
+		}
+	}
+	n := &sources.ReleaseNotes{Deps: deps, Token: o.Token, BaseURL: o.GitHubURL, MinInterval: minInterval}
+	if o.Token != "" {
+		n.Pause = time.Millisecond
+	}
+	res, err := n.Refresh(ctx, apps)
+	stats.NotesRequests = res.Requests
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		stats.NotesError = err.Error()
+		o.Log.Warn("release notes not read completely; the package carries what earlier builds stored", "err", err)
+	}
+	// A repository that failed is skipped, not fatal: count it, so a
+	// degraded collection does not read as a complete one.
+	states, err := o.Store.SourceStates(ctx)
+	if err != nil {
+		return err
+	}
+	for _, st := range states {
+		if st.Source == sources.ReleaseNotesState && asked[st.Key] && st.LastError != "" {
+			stats.NotesFailed++
+			o.Log.Warn("release notes could not be read", "repository", st.Key, "err", st.LastError)
+		}
+	}
+	return nil
 }
 
 // untilReset is the time until the earliest rate-limit reset GitHub named

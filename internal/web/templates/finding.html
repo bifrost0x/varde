@@ -109,7 +109,7 @@
       <dt>Affected versions</dt><dd class="mono">{{if $m.Evidence.Range}}{{$m.Evidence.Range}}{{else}}not machine-readable{{end}}</dd>
       {{if $m.Evidence.Package}}<dt>Package</dt><dd class="mono">{{$m.Evidence.Package}}</dd>{{end}}
       {{with $m.Evidence.CompletedBy}}<dt>Fixed version</dt><dd>from <span class="mono">{{.}}</span> <span class="muted">(the project's advisory names where the flaw starts, not where it ends)</span></dd>{{end}}
-      <dt>Source</dt><dd>{{join $m.Sources ", "}} <span class="muted">(record {{$m.Evidence.RecordID}}{{with $m.Evidence.Origin}}, read from {{.}}{{end}})</span></dd>
+      <dt>Source</dt><dd>{{join $m.Sources ", "}} <span class="muted">(record {{$m.Evidence.RecordID}}{{with $m.Evidence.Origin}}, read from {{if eq . "release"}}the project's release notes{{else}}{{.}}{{end}}{{end}})</span></dd>
       {{if $m.Aliases}}<dt>Also known as</dt><dd class="mono">{{join $m.Aliases ", "}}</dd>{{end}}
       <dt>Severity</dt><dd>{{if $m.CVSS}}CVSS {{printf "%.1f" $m.CVSS}}{{end}}{{if $m.SeverityLabel}} {{$m.SeverityLabel}}{{end}}{{if not (or $m.CVSS $m.SeverityLabel)}}<span class="muted">not rated</span>{{end}}</dd>
       <dt>Being exploited</dt><dd>{{if $m.KEV}}yes, attackers use it (CISA KEV list){{else}}not known to be (not on the CISA KEV list){{end}}{{if $m.EPSS}}<span class="cell-sub">Chance of exploitation in the next 30 days: {{printf "%.1f" (pct $m.EPSS)}} % (EPSS)</span>{{end}}</dd>
