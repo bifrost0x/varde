@@ -41,11 +41,12 @@ Varde runs as a small container in your homelab and answers one question:
 4. Estimates exposure (public, LAN or internal) and prioritises with severity, CISA KEV, EPSS and
    exposure.
 5. Stays silent unless something is relevant. Urgent findings are pushed immediately (ntfy,
-   Gotify, Discord, Telegram, webhook, email), the rest goes into a digest. Every finding names the
-   concrete update: the release tag that fixes it and, for Compose services, the line to change.
-   For a container's image packages it says how many of the flaws the newest release fixes, from
-   package lists the daily data package carries.
-6. Exports what it knows as OpenVEX.
+   Gotify, Discord, Telegram, webhook, email), the rest goes into a digest.
+6. Shows your apps, not a list of advisories: each app that needs something has one card with
+   the version to install, why it matters and, for Compose services, the line to change. The
+   version is a release that exists; the release tags, and for a container's image packages what
+   the newest release fixes, come with the daily data package.
+7. Exports what it knows as OpenVEX.
 
 What it does not do: scan every file of an image for CVEs (it reads the image's package databases
 and checks them against the distribution's data; for a full image scan use Trivy or Grype), change
@@ -58,6 +59,10 @@ account.
 
 <p align="center">
   <img src="docs/screenshots/overview-p1.png" alt="Varde front page with apps that need an update now: the beacon is lit and each app has a card with the version to install and the image line to copy" width="720">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/app.png" alt="The page of one app: the version to update to, the line to change in its Compose file and the command to run, beside why it is urgent" width="720">
 </p>
 
 ## Quick start
