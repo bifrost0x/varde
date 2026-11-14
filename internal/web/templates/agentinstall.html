@@ -30,7 +30,7 @@
   <pre class="details-text">sudo sh -c 'systemctl disable --now varde-agent; rm -f /etc/systemd/system/varde-agent.service /etc/varde-agent.env; systemctl daemon-reload; rm -rf /var/lib/varde-agent; userdel varde-agent'</pre>
   <p>With OpenRC (Alpine):</p>
   <pre class="details-text">sudo sh -c 'rc-service varde-agent stop; rc-update del varde-agent; rm -f /etc/init.d/varde-agent /etc/varde-agent.env; rm -rf /var/lib/varde-agent; deluser varde-agent'</pre>
-  <p>Then revoke the agent under Connections › Agents.</p></details>
+  <p>Then revoke the agent under Setup › Agents.</p></details>
 </section>
 {{else}}
 <section class="panel" aria-labelledby="i1">

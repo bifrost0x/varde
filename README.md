@@ -69,9 +69,9 @@ A deployment is two containers, a read-only Docker socket proxy and Varde:
 2. `docker compose up -d`, then read the one-time setup token:
    `docker compose logs varde | grep setup_token` (on Windows: `findstr setup_token`).
 3. Open `http://<address of that machine>:8080` in a browser, from that machine or any other in
-   your network, create the account with the token and follow the overview: it offers a short
-   tour, and Connections walks you through allowing your networks, scanning and connecting what
-   it found. For the full inventory of a host, Varde installs its agent there with one SSH
+   your network, create the account with the token and follow the front page: it lists your apps
+   with what each needs, offers a short tour, and Setup walks you through allowing your
+   networks, scanning and connecting what it found. For the full inventory of a host, Varde installs its agent there with one SSH
    sign-in (it can also run by hand, see [`deploy/compose.agent.yaml`](deploy/compose.agent.yaml)).
 4. For HTTPS, put a reverse proxy in front of port 8080 and remove the `#` of the two lines the
    file marks for it. The agent port 8443 is published directly and only accepts agents' client

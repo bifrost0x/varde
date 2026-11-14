@@ -63,8 +63,8 @@ func TestSystemsList(t *testing.T) {
 	if _, body := h.do(t, "GET", "/", nil, nil); !strings.Contains(body, `1 of 3 systems</a>`) {
 		t.Error("overview counts differently")
 	}
-	// Area navigation: five entries, Systems current, its tabs shown.
-	for _, want := range []string{`href="/systems" aria-current="page">Systems</a>`, `href="/connections" >Connections</a>`, `href="/systems/apps">Apps and containers</a>`, `href="/systems/gaps">Gaps</a>`} {
+	// Area navigation: three entries, Apps current, its tabs shown.
+	for _, want := range []string{`href="/" aria-current="page">Apps</a>`, `href="/connections" >Setup</a>`, `href="/systems/apps">All containers</a>`, `href="/systems/gaps">Gaps</a>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("navigation lacks %s", want)
 		}
@@ -390,7 +390,7 @@ func TestSetupReminderCompactAndHideable(t *testing.T) {
 	if strings.Contains(body, "Finish getting started") || strings.Contains(body, `class="panel guide"`) {
 		t.Error("the full guide is shown although Varde has something to show")
 	}
-	setup, stats := strings.Index(body, `<details class="panel setup"`), strings.Index(body, `class="stats"`)
+	setup, stats := strings.Index(body, `<details class="panel setup"`), strings.Index(body, `class="chips"`)
 	if setup < 0 || stats < 0 || setup < stats {
 		t.Fatalf("the setup reminder is missing or above the numbers (setup %d, stats %d)", setup, stats)
 	}

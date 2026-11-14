@@ -153,3 +153,19 @@
 {{end}}
 {{end}}
 {{define "findingscell"}}{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else if eq .Checked "not"}}<span class="badge badge--unverified">not checked</span>{{else if eq .Checked "limited"}}<span class="muted">none known</span>{{else}}<span class="muted">none found</span>{{end}}{{if .CheckNote}}<span class="cell-sub">{{.CheckNote}}</span>{{end}}{{end}}
+
+{{define "appicon"}}<span class="app__dot app__dot--{{.}}" aria-hidden="true"></span>{{end}}
+
+{{define "appcard"}}<article class="app app--{{.State}}">
+  <header class="app__head">
+    {{template "appicon" .State}}
+    <div class="app__title"><a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span></div>
+    <span class="app__state">{{.Label}}</span>
+  </header>
+  {{if .Why}}<p class="app__why">{{.Why}}</p>{{end}}
+  <p class="app__action"><strong>{{.Action}}</strong>{{if .Fixes}} <span class="muted">· {{.Fixes}}</span>{{end}}</p>
+  {{if .Line}}<div class="secret"><pre id="line-{{.Key}}" class="mono install">{{.Line}}</pre><button class="btn btn--ghost" type="button" data-copy="#line-{{.Key}}"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>{{end}}
+  <footer class="app__foot"><span class="small muted">{{if .Rest}}{{.Rest}}{{else}}{{plural .Count "open finding"}}{{end}}</span><a class="btn" href="{{.Href}}">How to update</a></footer>
+</article>{{end}}
+
+{{define "approw"}}<li class="approw approw--{{.State}}">{{template "appicon" .State}}<a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span><span class="approw__state">{{.Label}}{{if .Newer}} · newest release <span class="mono">{{.Newer}}</span>{{end}}</span>{{if .Note}}<span class="cell-sub">{{.Note}}</span>{{end}}</li>{{end}}

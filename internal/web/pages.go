@@ -236,6 +236,10 @@ type overviewData struct {
 	SystemChecked int
 	// Restarts are the systems whose updates wait for a restart.
 	Restarts []systemRow
+	// Apps counts the apps by what they ask for; Sections are the cards
+	// of the front page, grouped by it.
+	Apps     appCounts
+	Sections []appSection
 	// Paths are the most dangerous attack paths, PathCount all of them;
 	// Noise counts the open findings no path uses (ADR 0034).
 	Paths     []paths.Path
@@ -398,7 +402,9 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	}
 	d.SetupHidden = a.setupHidden(ctx)
 	// Notifications and HTTPS are steps of the guide here, not banners.
-	v := view{Title: "Overview", Nav: "overview", Data: d, OwnSecurityNote: true}
+	cards := a.appCards(s)
+	d.Apps, d.Sections = countApps(cards), appSections(cards)
+	v := view{Title: "Apps", Nav: "overview", Tabs: tabs("systems", "/"), Data: d, OwnSecurityNote: true}
 	a.page(w, r, cur, http.StatusOK, "overview", v)
 }
 

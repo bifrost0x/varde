@@ -240,3 +240,7 @@ func atLeast(scheme version.Scheme, v, min string) bool {
 	c, ok := a.Compare(b)
 	return ok && c >= 0
 }
+
+// AtLeast reports whether version v is at or above min under the scheme;
+// false when they cannot be compared.
+func AtLeast(scheme version.Scheme, v, min string) bool { return atLeast(scheme, v, min) }

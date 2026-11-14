@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The interface starts from apps instead of findings (ADR 0043). The front page lists what
+  runs, each app under what it needs: a card with the one version to install, why, and the
+  image line to copy, or a quiet row that says what "nothing" rests on. Each app has a page
+  with the steps to update it and, below, the flaws behind it. The areas are Apps, Updates and
+  Setup; every earlier page keeps its address. Priorities read "Update now", "Update soon",
+  "Next update" and "Check yourself" on the pages; P1 to P3 stay the names in notifications,
+  the policy and the API.
+
 ### Added
 
 - The Gaps page offers the images Varde does not recognise as a list to download: repositories

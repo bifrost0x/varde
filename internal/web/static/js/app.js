@@ -47,14 +47,15 @@
   // button. The step survives page changes in sessionStorage. Storage may be
   // unavailable (private windows); the tour then simply does not resume.
   var tourSteps = [
-    { path: "/", sel: ".hero, main h1", title: "Overview", text: "The state at a glance. When an urgent finding appears, the beacon lights up and this page names the update that fixes it." },
-    { path: "/connections", sel: "#scope", title: "Allow your networks", text: "Varde connects only to the ranges you allow here. A scan then finds Proxmox nodes, Docker hosts and web apps." },
-    { path: "/connections", sel: "#next-steps, #integrations", title: "Next steps", text: "Ranked by what they reveal: one Proxmox token shows every guest, the agent reads every package and container of a host. Each step says exactly what Varde may do afterwards." },
-    { path: "/systems", sel: "main h1", title: "Systems", text: "Every machine with what is installed, what is affected and where Varde knows it from. Open one for its full inventory." },
-    { path: "/findings", sel: "main h1", title: "Findings", text: "Advisories that apply, by priority. Unverified ones stay visible but never notify; each finding says how to update." },
+    { path: "/", sel: ".hero, main h1", title: "Your apps", text: "Everything that runs, sorted by what it needs. When an app needs an update now, the beacon lights up and its card names the version to install." },
+    { path: "/", sel: ".apps, .approws, main h1", title: "One card, one update", text: "A card says why it matters and what to install; copy the image line into your Compose file. Its page shows the steps and, if you want them, the flaws behind it." },
+    { path: "/findings", sel: "main h1", title: "Updates", text: "The same updates as a list with filters, plus how an attacker could get in and what was fixed when. Nothing here is needed to update." },
+    { path: "/connections", sel: "#scope", title: "Setup: allow your networks", text: "Varde connects only to the ranges you allow here. A scan then finds Proxmox nodes, Docker hosts and web apps." },
+    { path: "/connections", sel: "#next-steps, #integrations", title: "Connect more", text: "Ranked by what they reveal: one Proxmox token shows every guest, the agent reads every package and container of a host. Each step says exactly what Varde may do afterwards." },
     { path: "/systems/gaps", sel: "main h1", title: "Gaps", text: "What Varde cannot see yet. Every gap comes with the step that closes it." },
-    { path: "/settings", sel: "#sources", title: "Optional sources", text: "Each source says what it reveals before you switch it on. Notification secrets are set through environment variables and never pass the UI." }
+    { path: "/settings", sel: "#sources", title: "Settings", text: "Each source says what it reveals before you switch it on. Notification secrets are set through environment variables and never pass the UI." }
   ];
+
   function store(kind) { try { return window[kind]; } catch (err) { return null; } }
   function get(kind, key) { var s = store(kind); try { return s ? s.getItem(key) : null; } catch (err) { return null; } }
   function set(kind, key, v) { var s = store(kind); try { if (s) { if (v === null) { s.removeItem(key); } else { s.setItem(key, v); } } } catch (err) { /* ignore */ } }

@@ -23,11 +23,9 @@
   <div class="topbar__inner">
     <a class="brand" href="/"><img src="/static/brand/{{if .Lit}}mark{{else}}mark-unlit{{end}}.svg" alt=""><span>varde</span></a>
     <nav class="nav" aria-label="Main">
-      <a href="/" {{if eq .Nav "overview"}}aria-current="page"{{end}}>Overview</a>
-      <a href="/findings" {{if eq .Nav "findings"}}aria-current="page"{{end}}>Findings</a>
-      <a href="/systems" {{if eq .Nav "systems"}}aria-current="page"{{end}}>Systems</a>
-      <a href="/connections" {{if eq .Nav "connections"}}aria-current="page"{{end}}>Connections</a>
-      <a href="/settings" {{if eq .Nav "settings"}}aria-current="page"{{end}}>Settings</a>
+      <a href="/" {{if or (eq .Nav "overview") (eq .Nav "apps") (eq .Nav "systems")}}aria-current="page"{{end}}>Apps</a>
+      <a href="/findings" {{if eq .Nav "findings"}}aria-current="page"{{end}}>Updates</a>
+      <a href="/connections" {{if or (eq .Nav "connections") (eq .Nav "settings")}}aria-current="page"{{end}}>Setup</a>
     </nav>
     <div class="topbar__user">
       <button class="btn btn--ghost" type="button" data-tour-start>Tour</button>
@@ -62,7 +60,7 @@
 </html>
 {{end}}
 
-{{define "prio"}}{{if eq . "P1"}}<span class="badge badge--p1">P1 urgent</span>{{else if eq . "P2"}}<span class="badge badge--p2">P2</span>{{else if eq . "P3"}}<span class="badge badge--p3">P3</span>{{else}}<span class="badge badge--unverified">needs a check</span>{{end}}{{end}}
+{{define "prio"}}{{if eq . "P1"}}<span class="badge badge--p1" title="Priority P1">Update now</span>{{else if eq . "P2"}}<span class="badge badge--p2" title="Priority P2">Update soon</span>{{else if eq . "P3"}}<span class="badge badge--p3" title="Priority P3">Next update</span>{{else}}<span class="badge badge--unverified" title="Varde cannot confirm it">Check yourself</span>{{end}}{{end}}
 
 {{define "exposure"}}{{if eq . "public"}}<span class="badge"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#globe"></use></svg>public</span>{{else if eq . "lan"}}<span class="badge"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#home"></use></svg>LAN</span>{{else if eq . "internal"}}<span class="badge badge--muted"><svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#lock"></use></svg>internal</span>{{else}}<span class="badge badge--muted">unknown</span>{{end}}{{end}}
 
