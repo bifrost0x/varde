@@ -28,6 +28,7 @@
   <table class="table"><thead><tr><th scope="col">Containers</th><th scope="col">Image</th><th scope="col">Next step</th></tr></thead><tbody>
   {{range $d.Unidentified}}<tr><td data-label="Container">{{.Workload}}</td><td data-label="Image" class="mono">{{.Image}}</td><td data-label="Next step"><a href="{{.SuggestURL}}" rel="noopener noreferrer" target="_blank">Suggest a catalog entry</a><span class="cell-sub">Opens GitHub with only the image name filled in.</span>{{if .Repository}}<form class="form--inline" method="post" action="/systems/gaps/not-an-app">{{template "csrf" $.CSRF}}<input type="hidden" name="repository" value="{{.Repository}}"><button class="btn btn--ghost" type="submit">Not an app</button></form><span class="cell-sub">For databases, proxies and other helpers: stops counting this image as a gap.</span>{{end}}</td></tr>{{end}}
   </tbody></table>
+  <p class="small"><a href="/systems/gaps/unrecognised.txt">Download these image names as a list</a>: repositories only, without versions, container or host names, and without images on registries of your own. Varde sends it nowhere; attach it to a catalog suggestion if you want these apps recognised.</p>
   {{else}}<p class="small muted">Every workload matches a catalog entry.</p>{{end}}
 </section>
 

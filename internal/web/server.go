@@ -153,6 +153,7 @@ func New(d Deps) (http.Handler, error) {
 	mux.Handle("POST /systems/apps/manual", a.user(a.addManual))
 	mux.Handle("POST /systems/apps/{id}/delete", a.user(a.removeManual))
 	mux.Handle("GET /systems/gaps", a.user(a.coverage))
+	mux.Handle("GET /systems/gaps/unrecognised.txt", a.user(a.unrecognised))
 	mux.Handle("POST /systems/gaps/not-an-app", a.user(a.markNotAnApp))
 	mux.Handle("POST /systems/gaps/not-an-app/delete", a.user(a.unmarkNotAnApp))
 	// Connections: how Varde reads them.

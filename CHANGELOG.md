@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The Gaps page offers the images Varde does not recognise as a list to download: repositories
+  only, without versions, container or host names, and without images on registries of your
+  own. Varde sends it nowhere; it is for attaching to a catalog suggestion.
 - The inventory names the newest release of a container's image when it is newer than the
   version running, from the release tags of the data package. With registry versions on, Varde
   also lists the tags of images the package does not cover, findings or not.
