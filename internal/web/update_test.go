@@ -123,6 +123,39 @@ func TestInventoryNewestRelease(t *testing.T) {
 	}
 }
 
+// A workload without findings says what that means: an app whose project
+// publishes no readable advisories has none known, not none found, and one
+// Varde could not compare at all is not checked.
+func TestInventorySaysWhatNoFindingMeans(t *testing.T) {
+	h := newHarness(t, withNginx(t))
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	_ = h.store.UpsertHost(ctx, inventory.Host{ID: "local", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now})
+	_, _ = h.store.ApplySnapshot(ctx, "local", inventory.KindContainer, []inventory.Workload{
+		{Kind: inventory.KindContainer, RuntimeID: "web", Name: "web", Container: &inventory.Container{ImageRef: "nginx:1.31.8"}},
+		{Kind: inventory.KindContainer, RuntimeID: "noversion", Name: "web-latest", Container: &inventory.Container{ImageRef: "nginx:latest"}},
+		{Kind: inventory.KindContainer, RuntimeID: "x", Name: "mystery", Container: &inventory.Container{ImageRef: "someone/thing:1.0"}},
+	}, now)
+	_ = h.store.ReplaceIdentifications(ctx, []identify.Result{
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "web"), AppID: "nginx", Confidence: identify.Exact, Version: "1.31.8", Trust: identify.Confirmed},
+		{WorkloadID: inventory.WorkloadID("local", inventory.KindContainer, "noversion"), AppID: "nginx", Confidence: identify.Exact},
+	}, now)
+	_, body := h.do(t, "GET", "/systems/apps", nil, nil)
+	text := stripTags(body)
+	for _, want := range []string{
+		"none knownthe project publishes no advisories a program can read",
+		"not checkedthe version is unknown, so nothing can be compared",
+		"not checkednot recognised, so not compared with any advisory",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(text, "none found") {
+		t.Error("an app without complete advisory data is shown as checked and clean")
+	}
+}
+
 // stripTags drops HTML tags, so a sentence reads as on the page.
 func stripTags(s string) string {
 	var b strings.Builder

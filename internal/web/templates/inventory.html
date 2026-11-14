@@ -23,7 +23,7 @@
       </td>
       <td data-label="Version">{{if .Version}}<span class="mono">{{.Version}}</span>{{if eq .Trust "conflict"}} <span class="badge badge--unverified">sources disagree</span>{{else if eq .Trust "reported"}} <span class="badge badge--muted">reported</span>{{end}}<span class="cell-sub">{{if .Doubt}}{{truncate .Doubt 160}}{{else}}{{.VersionSource}}{{end}}</span>{{if .Newer}}<span class="cell-sub">newest release <span class="mono">{{.Newer}}</span></span>{{end}}{{else if .Distro}}<span class="mono">{{.PackageVersion}}</span> <span class="badge badge--muted">{{.Distro}}</span><span class="cell-sub">Distribution package, checked against the {{.Distro}} security data</span>{{else if .AppID}}<span class="badge badge--unverified">unknown</span><span class="cell-sub">{{truncate .Note 140}}</span>{{else}}<span class="muted">–</span>{{end}}</td>
       <td data-label="Exposure">{{template "exposure" .Exposure}}</td>
-      <td data-label="Findings">{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else}}<span class="muted">none</span>{{end}}
+      <td data-label="Findings">{{template "findingscell" .}}
         {{if .Manual}}<form method="post" action="/systems/apps/{{.ID}}/delete" data-confirm="Remove the manual entry {{.Name}}?">{{template "csrf" $csrf}}<button class="btn btn--ghost" type="submit">Remove</button></form>{{end}}
       </td>
     </tr>

@@ -25,6 +25,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A flaw behind the way in of an attack path is no longer urgent because of the path. Only the
+  flaw a path starts with was meant: fixing it cuts the path. Containers that share a Docker
+  network with a public one all became P1; a flaw behind the way in is now at least P2 on a
+  path from the internet and keeps its priority on one from the LAN.
+- A workload without open findings says what that means: "none found" only where it was
+  compared with complete advisory data, "none known" with the reason where the project's data
+  is incomplete, and "not checked" where nothing could be compared.
 - An advisory that only says from which version a flaw exists no longer keeps every later
   version affected without an update to name. Another record of the same flaw gives it its
   end: patched versions are cleared, the others get the fixed version, and the finding says

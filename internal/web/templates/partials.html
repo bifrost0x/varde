@@ -152,3 +152,4 @@
 </article>
 {{end}}
 {{end}}
+{{define "findingscell"}}{{if .Open}}<a href="/findings?workload={{.ID}}">{{.Open}} open</a>{{else if eq .Checked "not"}}<span class="badge badge--unverified">not checked</span>{{else if eq .Checked "limited"}}<span class="muted">none known</span>{{else}}<span class="muted">none found</span>{{end}}{{if .CheckNote}}<span class="cell-sub">{{.CheckNote}}</span>{{end}}{{end}}

@@ -642,6 +642,11 @@ type workloadRow struct {
 	// Basis says what an automatic recognition rests on (source label,
 	// GitHub's registry, app store lists); empty for reviewed apps.
 	Basis string
+	// Checked says what "no open finding" means for this workload: only
+	// CheckedFull stands for "compared with complete advisory data and
+	// nothing found". CheckNote says it in words for the others.
+	Checked   string
+	CheckNote string
 	// Newer is the newest release of the container's image above the
 	// version it runs, from the known release tags; empty when it runs
 	// the newest or nothing is known.
@@ -656,6 +661,41 @@ type workloadRow struct {
 	Distro, PackageVersion string
 	// EOL describes a release line past its end of life.
 	EOL string
+}
+
+// What a workload without open findings was checked against.
+const (
+	CheckedFull    = "full"    // compared, the project publishes complete advisories
+	CheckedLimited = "limited" // compared, but the project's advisory data is incomplete
+	CheckedNot     = "not"     // nothing was compared
+)
+
+// checked says how far a workload was compared with advisories. "None" in
+// a list must not look the same for an app with complete data, one whose
+// project publishes little, and one Varde could not compare at all.
+func (a *app) checked(wl inventory.Workload, id identify.Result, row workloadRow) (kind, note string) {
+	app, known := a.d.Catalog.Current().App(id.AppID)
+	switch {
+	case row.NotApp != "":
+		return CheckedLimited, "a helper without advisories of its own; the packages of its image are checked"
+	case !known || id.AppID == "":
+		return CheckedNot, "not recognised, so not compared with any advisory"
+	case a.d.Package != nil && a.d.Package.NoSource(app):
+		return CheckedNot, "no advisory source covers this app"
+	case row.Distro != "":
+		return CheckedFull, ""
+	case id.Version == "":
+		return CheckedNot, "the version is unknown, so nothing can be compared"
+	case row.Derived:
+		return CheckedLimited, "recognised automatically and not confirmed: findings do not alert"
+	case id.Doubt() != "":
+		return CheckedLimited, "the version is not confirmed: findings do not alert"
+	case app.Advisories.Coverage == catalog.CoverageLimited:
+		return CheckedLimited, "the project publishes no advisories a program can read; Varde relies on CVE data, which lags"
+	case app.Advisories.Coverage == catalog.CoveragePartial:
+		return CheckedLimited, "the project publishes only part of its flaws in a form a program can compare"
+	}
+	return CheckedFull, ""
 }
 
 type hostGroup struct {
@@ -1095,6 +1135,7 @@ func (a *app) workloadRow(s *snapshot, wl inventory.Workload, open map[string]in
 		row.NotApp = kind
 	}
 	row.EOL = eolNote(a.d.Catalog.Current(), eol, id)
+	row.Checked, row.CheckNote = a.checked(wl, id, row)
 	switch {
 	case wl.Container != nil:
 		row.Image, row.Stack = wl.Container.ImageRef, wl.Container.ComposeProject

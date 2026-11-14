@@ -127,6 +127,34 @@ func TestPathPriority(t *testing.T) {
 	}
 }
 
+// A flaw behind the way in is not urgent because of the path: fixing the
+// way in cuts it. It is at least P2 behind a way in from the internet and
+// keeps its priority behind one from the LAN; known exploited stays P1.
+func TestPathPriorityBehindTheWayIn(t *testing.T) {
+	for _, c := range []struct {
+		prio  policy.Priority
+		class paths.Class
+		m     match.Finding
+		want  policy.Priority
+	}{
+		{policy.P2, paths.OnPathInternet, match.Finding{CVSS: 9.8}, policy.P2},
+		{policy.P3, paths.OnPathInternet, match.Finding{CVSS: 7.5}, policy.P2},
+		{policy.P1, paths.OnPathInternet, match.Finding{CVSS: 9.8, KEV: true}, policy.P1},
+		{policy.P3, paths.OnPathLAN, match.Finding{CVSS: 7.5}, policy.P3},
+		{policy.P2, paths.OnPathLAN, match.Finding{CVSS: 9}, policy.P2},
+	} {
+		got, reason := pathPriority(c.prio, "matrix", paths.Placement{Class: c.class, Behind: true, Reason: "x"}, c.m, inventory.ExposureInternal)
+		if got != c.want {
+			t.Errorf("%s behind %s: got %s, want %s", c.prio, c.class, got, c.want)
+		}
+		// Raised by the path, the reason is the path; otherwise the
+		// matrix's own reason stands.
+		if raised := got != c.prio; raised != strings.Contains(reason, "behind another flaw") {
+			t.Errorf("%s behind %s: reason %q", c.prio, c.class, reason)
+		}
+	}
+}
+
 func TestEscapeOf(t *testing.T) {
 	for want, c := range map[string]*inventory.Container{
 		"":                 {},
