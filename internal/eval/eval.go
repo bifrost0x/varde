@@ -435,12 +435,12 @@ func scoreDevice(r *Report, dc DeviceCase, fail func(string, string, string, str
 				break
 			}
 		}
-		switch {
-		case got == f.want:
+		switch got {
+		case f.want:
 			if got != "" {
 				r.Counts.DeviceFieldsRight++
 			}
-		case got == "":
+		case "":
 			r.Counts.DeviceFieldsMissing++
 			fail(dc.Name, "device-field", f.name+": none", f.want)
 		default:

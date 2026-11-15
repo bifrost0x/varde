@@ -11,9 +11,9 @@ import (
 	"github.com/bifrost0x/varde/internal/store"
 )
 
-func scope(t *testing.T, s string) discovery.Scope {
+func scope(t *testing.T) discovery.Scope {
 	t.Helper()
-	sc, err := discovery.ParseScope(s)
+	sc, err := discovery.ParseScope("10.10.1.0/24")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func byID(ms []Machine) map[string]Machine {
 func TestMachinesMergeByAddress(t *testing.T) {
 	now := time.Now()
 	in := MachineInput{
-		Scope: scope(t, "10.10.1.0/24"),
+		Scope: scope(t),
 		Hosts: []inventory.Host{
 			{ID: "pve-a-101", Name: "docker-vm", Kind: inventory.HostProxmoxGuest, Source: inventory.SourceProxmox, OS: "QEMU VM",
 				Addresses: []string{"10.10.1.20", "172.17.0.1"}, IntegrationID: "a", LastContact: now},
@@ -76,7 +76,7 @@ func TestMachinesMergeByAddress(t *testing.T) {
 // two of them, outside the scope or link-local tie nothing together.
 func TestMachinesKeepDistinctRecordsApart(t *testing.T) {
 	in := MachineInput{
-		Scope: scope(t, "10.10.1.0/24"),
+		Scope: scope(t),
 		Hosts: []inventory.Host{
 			// Two guests behind the same address (NAT, VIP, stale lease).
 			{ID: "pve-a-1", Name: "g1", Kind: inventory.HostProxmoxGuest, Source: inventory.SourceProxmox, Addresses: []string{"10.10.1.5"}, IntegrationID: "a"},
@@ -99,7 +99,7 @@ func TestMachinesKeepDistinctRecordsApart(t *testing.T) {
 func TestMachineStates(t *testing.T) {
 	old := time.Now().Add(-48 * time.Hour)
 	in := MachineInput{
-		Scope: scope(t, "10.10.1.0/24"),
+		Scope: scope(t),
 		Hosts: []inventory.Host{
 			{ID: "local", Name: "varde", Kind: inventory.HostDocker, Source: inventory.SourceLocal, Addresses: []string{"10.10.1.150"}},
 			{ID: "pve-a-1", Name: "guest", Kind: inventory.HostProxmoxGuest, Source: inventory.SourceProxmox, IntegrationID: "a", OS: "LXC container"},
@@ -152,7 +152,7 @@ func TestMachineLevel(t *testing.T) {
 	d.Services = []discovery.Service{{Port: 80, Proto: discovery.ProtoARP, Fields: []discovery.Field{{Name: discovery.FieldMAC, Value: "02:aa:bb:cc:dd:ee", Trust: discovery.TrustStated}}}}
 	d.Kind = discovery.KindOther
 	in := MachineInput{
-		Scope:   scope(t, "10.10.1.0/24"),
+		Scope:   scope(t),
 		Hosts:   []inventory.Host{{ID: "agent-1", Name: "far", Kind: inventory.HostDocker, Source: inventory.SourceAgent, Addresses: []string{"10.10.1.30"}}},
 		Devices: []store.StoredDevice{d, device("10.10.1.30", ""), device("10.10.1.40", "")},
 	}
@@ -179,7 +179,7 @@ func TestMachineLevelIgnoresStaleRows(t *testing.T) {
 		d.Missed = missed
 		return d
 	}
-	ms := byID(Machines(MachineInput{Scope: scope(t, "10.10.1.0/24"), Devices: []store.StoredDevice{mk("10.10.1.21", false), mk("10.10.1.20", true)}}))
+	ms := byID(Machines(MachineInput{Scope: scope(t), Devices: []store.StoredDevice{mk("10.10.1.21", false), mk("10.10.1.20", true)}}))
 	if got := ms["device:10.10.1.21"].Level; got != "anchored" {
 		t.Errorf("moved device: %q", got)
 	}

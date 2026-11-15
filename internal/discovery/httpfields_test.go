@@ -171,7 +171,7 @@ func TestReadHTTPFaviconTooLarge(t *testing.T) {
 }
 
 func TestFaviconNoRedirect(t *testing.T) {
-	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("elsewhere"))
 	}))
 	defer other.Close()

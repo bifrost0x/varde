@@ -10,6 +10,7 @@ import (
 // Level says how far a device is identified.
 type Level int
 
+// The levels, from least to most identified.
 const (
 	LevelSeen Level = iota
 	LevelAnchored

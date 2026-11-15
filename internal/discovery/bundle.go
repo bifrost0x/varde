@@ -214,7 +214,7 @@ func hasIPLiteral(s string) bool {
 		return true
 	}
 	tokens := strings.FieldsFunc(s, func(r rune) bool {
-		return !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F' || r == ':' || r == '.')
+		return (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') && r != ':' && r != '.'
 	})
 	for _, t := range tokens {
 		cands := []string{t, strings.Trim(t, ".:")}
