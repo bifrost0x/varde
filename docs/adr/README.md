@@ -49,3 +49,4 @@ Superseded by NNNN. Records are not edited after acceptance except to change the
 | [0042](0042-second-advisory-sources-in-the-data-package.md) | Second advisory sources in the data package | Accepted |
 | [0043](0043-apps-first-interface.md) | An interface that starts from apps | Accepted |
 | [0044](0044-security-fixes-from-release-notes.md) | Security fixes named only in release notes | Accepted |
+| [0046](0046-device-identification.md) | Every device is identified from what it states, resolved by data, and learned once for everyone | Accepted |
