@@ -52,6 +52,9 @@ type Finding struct {
 	// (ADR 0034): path-internet, path-lan, amplifier, noise or unclear.
 	PathClass  string `json:"path_class,omitempty"`
 	PathReason string `json:"path_reason,omitempty"`
+	// SnoozeUpstream marks a snooze that ends when an image that fixes the
+	// finding appears (SnoozeUntilUpstream).
+	SnoozeUpstream bool `json:"snooze_upstream,omitempty"`
 }
 
 // FindingChanges summarises a SyncFindings call.
@@ -311,7 +314,7 @@ type FindingFilter struct {
 
 const findingSelect = `SELECT id, workload_id, app_id, advisory_id, match_state, state, priority, exposure, fixed_in,
 	detail_json, first_seen, last_changed, resolved_at, priority_reason, exposure_evidence_json, acknowledged_at,
-	snoozed_until, suppression_id, notified_at, last_notified_priority, digest_pending, path_class, path_reason FROM findings`
+	snoozed_until, suppression_id, notified_at, last_notified_priority, digest_pending, path_class, path_reason, snooze_upstream FROM findings`
 
 // Findings returns findings ordered by first seen, newest first.
 func (s *Store) Findings(ctx context.Context, f FindingFilter) ([]Finding, error) {
@@ -357,7 +360,7 @@ func scanFinding(sc scanner) (Finding, error) {
 	var resolved, acked, snoozed, notified sql.NullInt64
 	if err := sc.Scan(&f.ID, &f.WorkloadID, &f.AppID, &f.AdvisoryID, &f.MatchState, &f.State, &f.Priority, &f.Exposure,
 		&f.FixedIn, &detail, &first, &last, &resolved, &f.PriorityReason, &evidence, &acked, &snoozed,
-		&f.SuppressionID, &notified, &f.LastNotifiedPriority, &f.DigestPending, &f.PathClass, &f.PathReason); err != nil {
+		&f.SuppressionID, &notified, &f.LastNotifiedPriority, &f.DigestPending, &f.PathClass, &f.PathReason, &f.SnoozeUpstream); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return f, err
 		}

@@ -10,7 +10,6 @@ import (
 	"github.com/bifrost0x/varde/internal/distro"
 	"github.com/bifrost0x/varde/internal/feed"
 	"github.com/bifrost0x/varde/internal/identify"
-	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/registry"
 	"github.com/bifrost0x/varde/internal/version"
@@ -98,47 +97,11 @@ func ReleaseFixFor(app *catalog.App, run Running, platform registry.Platform, fi
 	if suffixClass(haveSuffix) != suffixClass(newestSuffix) {
 		return fix, false
 	}
-	// Nor does an image on another distribution release: its packages are
-	// judged by other records than the container's findings were.
-	releaseEco, _, _ := distro.Ecosystem(rel.Distro)
-	for _, f := range findings {
-		if eco, _, ok := strings.Cut(f.Evidence.Package, "/"); f.Image && ok && !distro.Language(eco) && eco != releaseEco {
-			return fix, false
-		}
+	d, ok := DiffImage(findings, Candidate{Distro: rel.Distro, Packages: rel.Packages, Partial: rel.Partial}, advs, false)
+	if !ok {
+		return fix, false
 	}
-
-	img := &inventory.Container{Distro: rel.Distro, Packages: rel.Packages}
-	system, langs := identify.ImageSystemPackages(img), identify.ImageLanguagePackages(img)
-	// An image can carry several copies of a language package; each one
-	// counts.
-	byKey := make(map[string][]distro.Package, len(system)+len(langs))
-	for _, p := range append(system, langs...) {
-		k := p.Ecosystem + "/" + p.Name
-		byKey[k] = append(byKey[k], p)
-	}
-	// Presence is read from the release's whole list: a package the checked
-	// lists leave out (a build from outside the distribution, a version
-	// that does not compare) is still in the release.
-	listed := identify.ImagePackageNames(img)
-	// A package missing from the release counts as gone only when the
-	// list is complete: the read did not stop at a bound, and neither did
-	// the checked list.
-	complete := !rel.Partial && len(system) < identify.MaxImagePackages && len(langs) < identify.MaxImagePackages
-
-	for _, f := range findings {
-		if !f.Image {
-			continue
-		}
-		flaw := Flaw{AdvisoryID: f.AdvisoryID, Package: f.Evidence.Package}
-		switch inRelease(f, byKey, listed, complete, advs) {
-		case gone:
-			fix.Fixed = append(fix.Fixed, flaw)
-		case still:
-			fix.Open = append(fix.Open, flaw)
-		default:
-			fix.Unknown = append(fix.Unknown, flaw)
-		}
-	}
+	fix.Fixed, fix.Open, fix.Unknown = d.Fixed, d.Open, d.Unknown
 	return fix, fix.Total() > 0
 }
 
@@ -304,4 +267,10 @@ func HostPlatform(arch string) registry.Platform {
 		return registry.Platform{}
 	}
 	return p
+}
+
+// ReleaseLineFor picks the release line of a host platform, as
+// ReleaseFixFor does.
+func ReleaseLineFor(lines []feed.ReleaseLine, host registry.Platform) (feed.ReleaseLine, bool) {
+	return releaseLine(lines, host)
 }

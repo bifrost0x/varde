@@ -325,7 +325,8 @@ func TestFindingsFilterBySystemPackage(t *testing.T) {
 	}
 }
 
-// A package finding in a container's image asks for a newer image.
+// A package finding in a container's image names the package version a fix
+// needs; without an upstream status it promises no newer image.
 func TestImageFindingGroup(t *testing.T) {
 	h := newHarness(t)
 	h.signIn(t)
@@ -341,8 +342,11 @@ func TestImageFindingGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, body := h.do(t, "GET", "/findings", nil, nil)
-	if !strings.Contains(body, "Pull a newer image whose") || !strings.Contains(body, "glibc (Debian 12 package)") {
+	if !strings.Contains(body, "The fix needs an image built with") || !strings.Contains(body, "glibc (Debian 12 package)") {
 		t.Errorf("image finding without the image action:\n%s", body)
+	}
+	if strings.Contains(body, "Pull a newer image") {
+		t.Error("an image Varde does not know of is suggested")
 	}
 }
 

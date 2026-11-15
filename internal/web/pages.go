@@ -29,6 +29,7 @@ import (
 	"github.com/bifrost0x/varde/internal/remedy"
 	"github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
+	"github.com/bifrost0x/varde/internal/upstream"
 )
 
 // snapshot is the joined state most pages need. Machines, workload coverage
@@ -55,6 +56,9 @@ type snapshot struct {
 	// devices and integrations are loaded for the machines.
 	devices      []store.StoredDevice
 	integrations []store.Integration
+	// upstream is the upstream status of containers with image findings,
+	// by workload ID (ADR 0045).
+	upstream map[string]upstream.Status
 }
 
 func (a *app) load(ctx context.Context, includeResolved bool) (*snapshot, error) {
@@ -93,6 +97,7 @@ func (a *app) load(ctx context.Context, includeResolved bool) (*snapshot, error)
 	if tags, err := a.d.Store.RepositoryTags(ctx); err == nil {
 		s.tags = tags
 	}
+	s.upstream = a.loadUpstream(ctx)
 	perHost := map[string]int{}
 	for _, w := range ws {
 		s.byID[w.ID] = w

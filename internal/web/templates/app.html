@@ -17,6 +17,7 @@
   {{if $c.Action}}
   <p class="lead"><strong>{{$c.Action}}</strong>{{if $c.Fixes}}<span class="muted"> · {{$c.Fixes}}</span>{{end}}</p>
   {{if $c.Rest}}<p class="small">{{$c.Rest}}.</p>{{end}}
+  {{if $c.Introduced}}<p class="small">The new image {{$c.Introduced}}; they are listed once it runs.</p>{{end}}
   {{if $c.Line}}
   <ol class="howto">
     <li>{{with $c.Compose}}Open the Compose file of the project <strong>{{.Project}}</strong>{{if .Files}} (<span class="mono">{{join .Files ", "}}</span>){{end}} and change the line of the service <strong>{{.Service}}</strong> to:{{else}}Change the image of the container to:{{end}}
@@ -28,6 +29,19 @@
   </ol>
   {{else if $c.Command}}
   <div class="secret"><pre id="app-cmd" class="mono install">{{$c.Command}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+  {{end}}
+  {{with $c.Mitigation}}
+  <p class="small">Pulling the image again changes nothing until a fixed image is published. Until then:</p>
+  <ol class="howto">
+    {{if .Exposed}}<li><strong>Limit who can reach it.</strong> Remove the published port, or put the container behind your reverse proxy's authentication or a VPN.</li>{{end}}
+    {{if .Dockerfile}}<li><strong>{{if .Exposed}}Or b{{else}}B{{end}}uild an image with the {{.Distro}} package updates.</strong> The distribution often ships a fix before the image is rebuilt:
+      <div class="secret"><pre id="app-dockerfile" class="mono install">{{.Dockerfile}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-dockerfile"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+      <span class="cell-sub">Build it (<code>docker build -t &lt;name&gt;-patched .</code>) and run that image instead. Varde reads the packages of the image that runs and clears what the upgrade fixed.</span></li>{{end}}
+    {{if .Snooze}}<li><strong>{{if or .Exposed .Dockerfile}}Or w{{else}}W{{end}}ait for the next upstream release.</strong>
+      <form class="form form--inline" method="post" action="/apps/{{$c.Key}}/snooze-upstream">{{template "csrf" $.CSRF}}<button class="btn" type="submit"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#clock"></use></svg>Snooze until a fixed image appears</button></form>
+      <span class="cell-sub">The flaws stop notifying and come back by themselves once an image fixes them, or after 180 days.</span></li>{{end}}
+  </ol>
+  <p class="small muted">{{.Recheck}}</p>
   {{end}}
   {{else}}
   <p class="lead"><strong>Nothing.</strong></p>
@@ -42,6 +56,7 @@
     <dt>Reachable</dt><dd>{{template "exposure" $c.Exposure}}</dd>
     <dt>Version</dt><dd>{{if $d.Version}}<span class="mono">{{$d.Version}}</span>{{if $d.Source}} <span class="muted">({{$d.Source}})</span>{{end}}{{else}}<span class="muted">unknown</span>{{end}}{{if $d.Doubt}}<span class="cell-sub">{{$d.Doubt}}</span>{{end}}</dd>
     {{if $c.Newer}}<dt>Newest release</dt><dd><span class="mono">{{$c.Newer}}</span></dd>{{end}}
+    {{if $c.Upstream}}<dt>Newer image</dt><dd>{{$c.UpstreamText}}</dd>{{end}}
     {{if $c.Count}}<dt>Open flaws</dt><dd>{{$c.Count}}{{if $c.Urgent}}, {{$c.Urgent}} of them the reason for "{{$c.Label}}"{{end}}</dd>{{end}}
     {{if $d.Basis}}<dt>Recognised</dt><dd>{{$d.Basis}}</dd>{{end}}
     {{if and $c.Note $c.Action}}<dt>Advisory data</dt><dd>{{$c.Note}}</dd>{{end}}

@@ -29,6 +29,7 @@ from the table below.
 | `VARDE_FEED_ALLOW_DEVELOPMENT_ROOT` | `false` | Accept a trust root marked `development` (feeds built with `cmd/feedbuilder`). Only for tests; without it such roots are refused, also when a rotation tries to switch to one. |
 | `VARDE_FEED_STALE_AFTER` | `72h` | A system notice appears when no feed manifest verified for this long (at least `1h`). |
 | `VARDE_ADVISORY_REFRESH` | `6h` | Period of scheduled advisory refreshes (at least `1h`, jittered by ±30 min). New apps trigger an extra refresh. KEV, EPSS and NVD refresh daily. |
+| `VARDE_UPSTREAM_TTL` | `6h` | How long a registry's answer about a running image stands before Varde asks again whether a newer image exists (at least `30m`; see [Newer images](#newer-images)). Only used with registry versions on. |
 | `VARDE_GITHUB_TOKEN` / `VARDE_GITHUB_TOKEN_FILE` | unset | Optional GitHub token (no scopes needed) for 5000 instead of 60 API requests per hour. |
 | `VARDE_PACKAGE_URLS` | `https://raw.githubusercontent.com/bifrost0x/varde/data/feed` | Mirrors of the data package in order, comma-separated: `https://` URLs, or `file:///path` for a directory or a `.tar` file in a mounted volume (installations without internet access; same verification). Set it to an empty value to switch the data package off. The package is only used once a trust root exists (built in, or `VARDE_FEED_ROOT_FILE`) and `VARDE_MODE` is unset. See [The data package](#the-data-package). |
 | `VARDE_DIRECT_QUERIES` | `false` | With the data package in use: also ask api.github.com about apps the package does not cover, which shows GitHub which of those you run. osv.dev, NVD and endoflife.date have switches of their own. Without a data package Varde always asks GitHub. |
@@ -250,6 +251,45 @@ do not want Varde to read files of containers at all.
 With registry versions on, Varde also reads the tag list of each repository whose containers have
 affected findings (once a day), so the finding page can name the release tag that fixes them, in
 the form of the running tag, with the Compose line to change and the commands (ADR 0029).
+
+## Newer images
+
+Varde suggests pulling or updating an image only when it knows an image that fixes at least one
+open flaw in the running image's packages (ADR 0045). For every container with such flaws it
+decides an upstream status:
+
+- **update available**: a newer image exists and fixes some of the flaws; the card names it
+  ("Update to 3.5.0", or "Pull the rebuilt image") and says how many it fixes and introduces;
+- **no fixed image upstream yet**: the running image is the newest of its tag, or the newer one
+  fixes none of the flaws; the card offers to limit who can reach the container, a Dockerfile
+  that builds the image again with the distribution's package updates, and a snooze until a
+  fixed image appears (at most 180 days);
+- **unknown**: Varde could not tell, and says why (registry checks are off, the image was built
+  locally or is pinned by digest, the registry asks for credentials, limited the requests or did
+  not answer).
+
+The answer comes from the data package, which reads the newest release of each catalog app, and,
+with **registry versions** on, from the registry itself: one `HEAD` request for the running tag
+(a rebuilt floating tag shows as a new digest) and, for a version tag, the newest tag of the same
+variant and major version from its tag list. Answers are kept for `VARDE_UPSTREAM_TTL`, at most
+ten images are asked per half hour, and a refused or failed request is recorded with its reason,
+never taken for an answer. Varde never pulls, recreates or changes anything.
+
+**Read newer images from the registry before suggesting them** (Settings › Versions, off by
+default, only with registry versions on) also reads the package list of a newer image from the
+registry: its manifest, config and layers, at most two images per run and 1 GB each, without
+pulling it into Docker. Layer reads are cached in the database. **Also suggest a new major
+version of a pinned tag** lets the track cross a major version.
+
+Private registries need credentials Varde does not have: their images stay unknown.
+
+"Update now" needs both urgency and an update that fixes an urgent flaw. Urgent flaws without one
+are under **Mitigate now**, which notifies at once just the same. A flaw in an image package is
+urgent only when the package is what the container serves: the program it runs (read from the
+container's command) or a library such a program loads, in a container reachable from outside its
+host. Known exploitation of any other package of the image is at most "update soon", and the card
+says "in the image". The lists of programs, wrappers and libraries are in
+`internal/paths/components.yaml`.
 
 **Read release lines from endoflife.date** (Settings › Versions, off by default) marks versions on
 release lines that no longer get fixes, for catalog apps endoflife.date tracks. It reveals those

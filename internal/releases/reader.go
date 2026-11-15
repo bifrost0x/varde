@@ -6,8 +6,9 @@
 // resolver orders tags, squashes the release's layers for linux/amd64 and
 // linux/arm64 and reads them as a running container is read. The lines go
 // into the signed package, so an installation can tell which of its
-// findings that release fixes without asking a registry itself. It runs in
-// the builder, never in an installation.
+// findings that release fixes without asking a registry itself. Run runs in
+// the builder, never in an installation; an installation reads single
+// candidate images with ReadImage, only when the user switched that on.
 package releases
 
 import (

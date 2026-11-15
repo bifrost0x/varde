@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Which package of a container image serves what the container exposes
+# (ADR 0045). A flaw in an image package is reachable through the network
+# only when the package is the program the container runs or a library such
+# a program commonly loads; any other package is "in the image".
+#
+# Names are source packages as distributions publish them (Debian, Alpine,
+# RPM-based). A name also matches its versioned form: "python3" matches
+# "python3.11", "postgresql" matches "postgresql-16".
+
+# programs maps the program a container runs (the base name of the first
+# argument that is not a wrapper) to the packages that provide it.
+programs:
+  nginx: [nginx]
+  openresty: [openresty, nginx]
+  httpd: [apache2, httpd]
+  apache2: [apache2]
+  apache2ctl: [apache2]
+  lighttpd: [lighttpd]
+  caddy: [caddy]
+  haproxy: [haproxy]
+  traefik: [traefik]
+  envoy: [envoy]
+  varnishd: [varnish]
+  squid: [squid]
+  node: [nodejs]
+  nodejs: [nodejs]
+  npm: [nodejs]
+  python: [python3]
+  python3: [python3]
+  gunicorn: [python3]
+  uvicorn: [python3]
+  hypercorn: [python3]
+  java: [openjdk-17, openjdk-21, openjdk-11, openjdk, java-17-openjdk, java-21-openjdk]
+  php-fpm: [php, php8.2, php8.3, php8.4]
+  php: [php, php8.2, php8.3, php8.4]
+  ruby: [ruby, ruby3.1, ruby3.2, ruby3.3]
+  perl: [perl]
+  sshd: [openssh]
+  dropbear: [dropbear]
+  postgres: [postgresql]
+  mysqld: [mysql, mariadb]
+  mariadbd: [mariadb]
+  redis-server: [redis]
+  valkey-server: [valkey]
+  memcached: [memcached]
+  mongod: [mongodb]
+  mosquitto: [mosquitto]
+  dnsmasq: [dnsmasq]
+  unbound: [unbound]
+  named: [bind9, bind]
+  smbd: [samba]
+  vsftpd: [vsftpd]
+  postfix: [postfix]
+  dovecot: [dovecot]
+  openvpn: [openvpn]
+  busybox: [busybox]
+  httpd-busybox: [busybox]
+
+# wrappers start the real program; the argument after them is what runs.
+# Shell scripts (*.sh) count as wrappers too.
+wrappers:
+  - tini
+  - tini-static
+  - dumb-init
+  - gosu
+  - su-exec
+  - s6-overlay-suexec
+  - catatonit
+  - exec
+  - env
+  - sh
+  - ash
+  - bash
+  - dash
+  - nice
+  - runuser
+  - chpst
+  - setpriv
+
+# libraries are packages a network-facing program commonly loads: TLS,
+# compression, HTTP, parsers, the C library. A flaw in one counts as
+# reachable when the container is exposed and runs a known program.
+libraries:
+  - openssl
+  - openssl3
+  - libssl
+  - gnutls28
+  - gnutls
+  - nettle
+  - glibc
+  - musl
+  - zlib
+  - curl
+  - nghttp2
+  - nghttp3
+  - libxml2
+  - expat
+  - pcre2
+  - pcre3
+  - pcre
+  - krb5
+  - cyrus-sasl2
+  - libssh
+  - libssh2
+  - libuv1
+  - libtasn1-6
+  - c-ares
+  - brotli
+  - libxcrypt
