@@ -14,12 +14,16 @@ import (
 const faviconLimit = 64 << 10
 
 // certFields returns what a TLS certificate says about the service. The
-// issuer and subject are names the certificate carries, the fingerprint and
-// the self-signed check are computed from the certificate itself.
+// issuer and subject are the organizations the certificate names, the
+// fingerprint and the self-signed check are computed from the certificate
+// itself. The subject's common name is often a host name under the user's
+// own domain, so it is a display name only and never a cert_subject; the
+// issuer's common name names a CA, not the device, and is left out.
 func certFields(c *x509.Certificate) []Field {
 	var fs []Field
-	fs = addField(fs, FieldCertIssuer, orgOrCN(c.Issuer.Organization, c.Issuer.CommonName), TrustDerived)
-	fs = addField(fs, FieldCertSubject, orgOrCN(c.Subject.Organization, c.Subject.CommonName), TrustDerived)
+	fs = addField(fs, FieldCertIssuer, firstOrg(c.Issuer.Organization), TrustDerived)
+	fs = addField(fs, FieldCertSubject, firstOrg(c.Subject.Organization), TrustDerived)
+	fs = addField(fs, FieldDisplayName, c.Subject.CommonName, TrustDerived)
 	sum := sha256.Sum256(c.Raw)
 	fs = addField(fs, FieldCertFingerprint, hex.EncodeToString(sum[:]), TrustStated)
 	if string(c.RawIssuer) == string(c.RawSubject) && c.CheckSignature(c.SignatureAlgorithm, c.RawTBSCertificate, c.Signature) == nil {
@@ -28,11 +32,11 @@ func certFields(c *x509.Certificate) []Field {
 	return fs
 }
 
-func orgOrCN(org []string, cn string) string {
-	if len(org) > 0 && org[0] != "" {
+func firstOrg(org []string) string {
+	if len(org) > 0 {
 		return org[0]
 	}
-	return cn
+	return ""
 }
 
 // pageFields returns the page title and Server header. Error and redirect

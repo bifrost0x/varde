@@ -472,19 +472,12 @@ func (s *Scanner) probe(ctx context.Context, p probe, timeout time.Duration) (sv
 
 var sshBanner = regexp.MustCompile(`^SSH-[0-9.]+-([!-~]{1,100})(?: ([ -~]{0,120}))?$`)
 
-// readSSH reads the greeting an SSH server sends on its own. Nothing is
-// sent.
+// readSSH reads the greeting an SSH server sends on its own, then the host
+// key. Nothing is sent on the greeting connection, and it is closed before
+// the key exchange dials, so the server never holds two connections.
 func (s *Scanner) readSSH(ctx context.Context, target string, svc *Service) {
-	conn, err := s.dial(ctx, "tcp", target)
-	if err != nil {
-		return
-	}
-	defer func() { _ = conn.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl)
-	}
-	line, err := bufio.NewReaderSize(io.LimitReader(conn, 512), 512).ReadString('\n')
-	if err != nil && line == "" {
+	line, ok := s.sshGreeting(ctx, target)
+	if !ok {
 		return
 	}
 	if m := sshBanner.FindStringSubmatch(strings.TrimRight(line, "\r\n")); m != nil {
@@ -493,6 +486,22 @@ func (s *Scanner) readSSH(ctx context.Context, target string, svc *Service) {
 			svc.Fields = addField(svc.Fields, FieldSSHHostKey, fp, TrustStated)
 		}
 	}
+}
+
+func (s *Scanner) sshGreeting(ctx context.Context, target string) (string, bool) {
+	conn, err := s.dial(ctx, "tcp", target)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = conn.Close() }()
+	if dl, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(dl)
+	}
+	line, err := bufio.NewReaderSize(io.LimitReader(conn, 512), 512).ReadString('\n')
+	if err != nil && line == "" {
+		return "", false
+	}
+	return line, true
 }
 
 var errHostKeySeen = errors.New("host key read")
@@ -582,8 +591,12 @@ func (s *Scanner) readHTTP(ctx context.Context, target string, tlsOn bool, svc *
 			svc.Fields = addField(svc.Fields, f.Name, f.Value, f.Trust)
 		}
 	}
-	if v, ok := s.favicon(ctx, scheme+"://"+target); ok {
-		svc.Fields = addField(svc.Fields, FieldFavicon, v, TrustDerived)
+	// Only a start page that answered is the device's own; behind an error
+	// or a redirect the favicon may belong to something else.
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if v, ok := s.favicon(ctx, scheme+"://"+target); ok {
+			svc.Fields = addField(svc.Fields, FieldFavicon, v, TrustDerived)
+		}
 	}
 	if svc.Product == "" && resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		if loc, err := resp.Location(); err == nil && loc.Path != "" && loc.Path != "/" && len(loc.Path) <= 40 {

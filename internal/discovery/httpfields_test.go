@@ -9,11 +9,13 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -182,5 +184,84 @@ func TestFaviconNoRedirect(t *testing.T) {
 	s := &Scanner{ReadTimeout: 2 * time.Second, dial: (&net.Dialer{}).DialContext}
 	if v, ok := s.favicon(context.Background(), srv.URL); ok {
 		t.Errorf("followed redirect: %q", v)
+	}
+}
+
+// The favicon is fetched only from a service whose start page answered;
+// an error or a redirect on / says the page is not the device's own.
+func TestReadHTTPNoFaviconWithoutPage(t *testing.T) {
+	for _, status := range []int{http.StatusInternalServerError, http.StatusFound} {
+		var icons atomic.Int32
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/":
+				if status == http.StatusFound {
+					http.Redirect(w, r, "/login", status)
+					return
+				}
+				w.WriteHeader(status)
+			case "/favicon.ico":
+				icons.Add(1)
+				_, _ = w.Write([]byte("icon-bytes"))
+			}
+		}))
+		svc := readTestHTTP(t, srv)
+		srv.Close()
+		if n := icons.Load(); n != 0 {
+			t.Errorf("status %d on /: %d favicon requests", status, n)
+		}
+		if got := fieldValue(svc.Fields, FieldFavicon); got != "" {
+			t.Errorf("status %d on /: favicon %q", status, got)
+		}
+	}
+}
+
+// A common name is often the host name under the user's own domain, so it
+// is kept as a display name and never reaches the evidence bundle; only an
+// organization names the maker.
+func TestCertFieldsCommonNameStaysLocal(t *testing.T) {
+	ca, caKey := testCert(t, "Test CA", nil, nil)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(9),
+		Subject:      pkix.Name{CommonName: "nas.family.example"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca, &key.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs := certFields(leaf)
+	if got := fieldValue(fs, FieldCertSubject); got != "" {
+		t.Errorf("subject from the CN: %q", got)
+	}
+	if got := fieldValue(fs, FieldDisplayName); got != "nas.family.example" {
+		t.Errorf("display name = %q", got)
+	}
+	d := Device{Address: "10.0.0.5", Kind: KindOther, Label: "HTTPS", Services: []Service{{Port: 443, Proto: ProtoHTTPS, Fields: fs}}}
+	b := MakeBundle(d, nil)
+	raw, err := json.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range b.Fields {
+		if f.Name == FieldCertSubject {
+			t.Errorf("bundle holds cert_subject %q", f.Value)
+		}
+	}
+	if strings.Contains(string(raw), "family") {
+		t.Errorf("common name in the bundle: %s", raw)
+	}
+	if fieldValue(b.Fields, FieldCertIssuer) != "Test CA" {
+		t.Errorf("issuer organization missing: %s", raw)
 	}
 }

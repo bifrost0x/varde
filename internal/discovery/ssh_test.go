@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"io"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -92,5 +93,65 @@ func TestSSHHostKeyStalledServer(t *testing.T) {
 	}
 	if time.Since(start) > 2*time.Second {
 		t.Errorf("took %v, deadline not honoured", time.Since(start))
+	}
+}
+
+// The banner connection is closed before the key exchange dials again, so
+// the device never holds two connections from the scan at once.
+func TestReadSSHOneConnectionAtATime(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &ssh.ServerConfig{NoClientAuth: true}
+	cfg.AddHostKey(signer)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	var overlap atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		first, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		closed := make(chan struct{})
+		go func() {
+			defer close(closed)
+			_, _ = first.Write([]byte("SSH-2.0-OpenSSH_9.6\r\n"))
+			_, _ = io.Copy(io.Discard, first) // returns when the scan closes it
+			_ = first.Close()
+		}()
+		second, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = second.Close() }()
+		select {
+		case <-closed:
+		case <-time.After(time.Second):
+			overlap.Store(true)
+		}
+		_, _, _, _ = ssh.NewServerConn(second, cfg)
+	}()
+
+	s := &Scanner{ReadTimeout: 5 * time.Second, dial: (&net.Dialer{}).DialContext}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	svc := &Service{}
+	s.readSSH(ctx, ln.Addr().String(), svc)
+	<-done
+	if overlap.Load() {
+		t.Error("the banner connection was still open during the key exchange")
+	}
+	if got := fieldValue(svc.Fields, FieldSSHHostKey); got != ssh.FingerprintSHA256(signer.PublicKey()) {
+		t.Errorf("host key = %q", got)
 	}
 }
