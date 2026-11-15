@@ -237,11 +237,17 @@ func hasIPLiteral(s string) bool {
 	return false
 }
 
+// JSON returns the bundle as it is shown, downloaded and sent: indented
+// JSON, the same bytes everywhere.
+func (b Bundle) JSON() ([]byte, error) {
+	return json.MarshalIndent(b, "", "  ")
+}
+
 // IssueURL returns a link that opens the device issue form with the bundle
 // filled in. ok is false when the link would be too long; the bundle then
 // goes in as a file.
 func (b Bundle) IssueURL() (string, bool) {
-	raw, err := json.MarshalIndent(b, "", "  ")
+	raw, err := b.JSON()
 	if err != nil {
 		return "", false
 	}

@@ -3,7 +3,6 @@
 package web
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,9 +25,11 @@ type deviceView struct {
 	Identity string
 	NextStep string
 	// Help is set below the model level; IssueURL is empty when the link
-	// would be too long, and the evidence goes in as a file.
+	// would be too long, and the evidence goes in as a file. Evidence is
+	// the bundle exactly as the link and the download carry it.
 	Help     bool
 	IssueURL string
+	Evidence string
 }
 
 type fieldRow struct{ Label, Value string }
@@ -86,7 +87,15 @@ func newDeviceView(d discovery.Device, shared map[string]bool, machineLevel stri
 		v.Identity = "Identified by " + strconv.Itoa(n) + " keys that stay the same."
 	}
 	if v.Help {
-		if u, ok := discovery.MakeBundle(d, shared).IssueURL(); ok {
+		b := discovery.MakeBundle(d, shared)
+		raw, err := b.JSON()
+		if err != nil {
+			// Nothing is offered that the user could not see first.
+			v.Help = false
+			return v
+		}
+		v.Evidence = string(raw)
+		if u, ok := b.IssueURL(); ok {
 			v.IssueURL = u
 		}
 	}
@@ -107,7 +116,7 @@ func (a *app) evidence(w http.ResponseWriter, r *http.Request, cur *auth.Current
 			continue
 		}
 		if d, shared, ok := a.scannedDevice(s, &s.machines[i]); ok {
-			raw, err := json.MarshalIndent(discovery.MakeBundle(d, shared), "", "  ")
+			raw, err := discovery.MakeBundle(d, shared).JSON()
 			if err != nil {
 				a.fail(w, r, cur, err)
 				return

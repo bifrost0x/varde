@@ -169,3 +169,66 @@ func TestPanelShowsMachineLevel(t *testing.T) {
 		t.Error("help offered for a machine at software level")
 	}
 }
+
+// The panel shows the bundle before anything is sent, byte for byte what
+// the download and the issue link carry, and never the raw fields.
+func TestSystemPageShowsTheEvidence(t *testing.T) {
+	h := deviceHarness(t, discovery.Device{Address: "192.168.1.30", Hostname: "widgetbox", Kind: discovery.KindOther, Services: []discovery.Service{{Port: 80, Proto: discovery.ProtoHTTP,
+		Fields: []discovery.Field{stated(discovery.FieldModel, "WX-9000"), stated(discovery.FieldSerial, "SN123456")}}}})
+	_, page := h.do(t, "GET", "/systems/device:192.168.1.30", nil, nil)
+	m := regexp.MustCompile(`(?s)<details class="evidence-preview" open><summary>The evidence, exactly as it would be sent</summary><pre[^>]*>(.*?)</pre></details>`).FindStringSubmatchIndex(page)
+	if m == nil {
+		t.Fatalf("no evidence preview:\n%s", page)
+	}
+	shown := html.UnescapeString(page[m[2]:m[3]])
+	if !strings.Contains(shown, `"WX-9000"`) {
+		t.Errorf("preview lacks the model: %s", shown)
+	}
+	for _, leak := range []string{"192.168.1.30", "widgetbox", "SN123456"} {
+		if strings.Contains(shown, leak) {
+			t.Errorf("preview shows %q", leak)
+		}
+	}
+	_, file := h.do(t, "GET", "/systems/device:192.168.1.30/evidence.json", nil, nil)
+	if strings.TrimSpace(file) != strings.TrimSpace(shown) {
+		t.Errorf("preview differs from the download:\n%s\n---\n%s", shown, file)
+	}
+	link := regexp.MustCompile(`href="([^"]*issues/new\?[^"]*)"`).FindStringSubmatch(page)
+	if link == nil {
+		t.Fatal("no issue link")
+	}
+	u, err := url.Parse(html.UnescapeString(link[1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := u.Query().Get("evidence"); got != strings.TrimSpace(shown) {
+		t.Errorf("issue body differs from the preview:\n%s", got)
+	}
+	if actions := strings.Index(page, "Help recognise this device"); actions < m[0] {
+		t.Error("preview not above the actions")
+	}
+	if !strings.Contains(page, "Varde sends nothing by itself. Look at the evidence before you share it.") {
+		t.Error("page lacks the sentence on sending")
+	}
+}
+
+// A device only the scan knows is reached from its row on the network page,
+// which shows how far it is identified.
+func TestNetworkRowLinksScanOnlyDevice(t *testing.T) {
+	h := deviceHarness(t, discovery.Device{Address: "192.168.1.60", Kind: discovery.KindOther, Services: []discovery.Service{{Proto: discovery.ProtoARP,
+		Fields: []discovery.Field{stated(discovery.FieldMAC, "00:11:32:aa:bb:cc")}}}})
+	_, body := h.do(t, "GET", "/connections", nil, nil)
+	row := regexp.MustCompile(`(?s)<tr>\s*<td data-label="Address">.*?192\.168\.1\.60.*?</tr>`).FindString(body)
+	if row == "" {
+		t.Fatalf("no row for the device:\n%s", body)
+	}
+	if !strings.Contains(row, `href="/systems/device:192.168.1.60"`) {
+		t.Errorf("row does not link to the device page: %s", row)
+	}
+	if !strings.Contains(row, ">anchored<") {
+		t.Errorf("row lacks the level: %s", row)
+	}
+	if resp, _ := h.do(t, "GET", "/systems/device:192.168.1.60", nil, nil); resp.StatusCode != http.StatusOK {
+		t.Errorf("device page: %d", resp.StatusCode)
+	}
+}
