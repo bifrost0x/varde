@@ -472,7 +472,11 @@ func build(us []unit, workloads map[string]int, shared map[string]bool) Machine 
 			}
 		}
 		if u.dev != nil && level != discovery.LevelSoftware {
-			level = discovery.DeviceLevel(u.dev.Device, shared)
+			// Several scanned addresses of one machine: the one that
+			// states the most decides, whatever their order.
+			if l := discovery.DeviceLevel(u.dev.Device, shared); l > level {
+				level = l
+			}
 		}
 		if u.ev.ReadsWorkloads {
 			level = discovery.LevelSoftware

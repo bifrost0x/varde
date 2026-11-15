@@ -309,3 +309,28 @@ func TestBundleDropsUnderscoreSpellings(t *testing.T) {
 		t.Errorf("fields = %v", got)
 	}
 }
+
+// An SNMP object ID is kept although it looks like a dotted address; a
+// value that is not an enterprise OID is not.
+func TestBundleKeepsVendorOID(t *testing.T) {
+	mk := func(oid string) Device {
+		return Device{Address: "10.0.0.7", Services: []Service{{Port: 161, Proto: ProtoSNMP, Fields: []Field{
+			{Name: FieldVendorOID, Value: oid, Trust: TrustStated}}}}}
+	}
+	has := func(b Bundle, v string) bool {
+		for _, f := range b.Fields {
+			if f.Name == FieldVendorOID && f.Value == v {
+				return true
+			}
+		}
+		return false
+	}
+	if b := MakeBundle(mk("1.3.6.1.4.1.4526.100.4.1"), nil); !has(b, "1.3.6.1.4.1.4526.100.4.1") {
+		t.Errorf("enterprise OID dropped: %+v", b.Fields)
+	}
+	for _, v := range []string{"10.0.0.7", "192.168.1.1", "1.3.6.1.4.1.4526 10.0.0.1", "1.3.6.1.2.1.1"} {
+		if b := MakeBundle(mk(v), nil); has(b, v) {
+			t.Errorf("non-OID value %q kept", v)
+		}
+	}
+}

@@ -106,3 +106,19 @@ func TestAnchorKeys(t *testing.T) {
 		t.Errorf("UGREEN %v and Ugreen %v give different keys", a, b)
 	}
 }
+
+// A CA-signed certificate on one port is no anchor because another port
+// of the same address serves a self-signed one.
+func TestAnchorsSelfSignedPerService(t *testing.T) {
+	d := Device{Address: "10.0.0.9", Services: []Service{
+		{Port: 443, Proto: ProtoHTTPS, Fields: []Field{
+			{Name: FieldCertFingerprint, Value: "aaaa", Trust: TrustStated},
+			{Name: FieldCertSelfSigned, Value: "true", Trust: TrustStated}}},
+		{Port: 8443, Proto: ProtoHTTPS, Fields: []Field{
+			{Name: FieldCertFingerprint, Value: "bbbb", Trust: TrustStated}}},
+	}}
+	got := Anchors(d, nil)
+	if len(got) != 1 || got[0] != "cert:aaaa" {
+		t.Errorf("anchors %v, want only the self-signed certificate", got)
+	}
+}

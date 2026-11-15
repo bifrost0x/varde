@@ -200,3 +200,29 @@ func TestMachineLevelOfStoredHost(t *testing.T) {
 		t.Errorf("Proxmox guest without a scanned device: %q, want anchored", got)
 	}
 }
+
+// A machine with several scanned addresses takes the highest level any of
+// them reaches, whatever the order of the devices.
+func TestMachineLevelTakesTheHighestDevice(t *testing.T) {
+	stated := func(name, value string) discovery.Field {
+		return discovery.Field{Name: name, Value: value, Trust: discovery.TrustStated}
+	}
+	rich := device("10.10.1.30", "")
+	rich.Kind = discovery.KindNAS
+	rich.Services = []discovery.Service{{Port: 1900, Proto: discovery.ProtoSSDP, Fields: []discovery.Field{
+		stated(discovery.FieldManufacturer, "Example"), stated(discovery.FieldModel, "NAS-4"), stated(discovery.FieldFirmware, "1.2.0")}}}
+	poor := device("10.10.1.31", "")
+	poor.Kind = discovery.KindOther
+	for _, devs := range [][]store.StoredDevice{{rich, poor}, {poor, rich}} {
+		in := MachineInput{
+			Scope: scope(t),
+			Hosts: []inventory.Host{{ID: "pve-a-1", Name: "nas", Kind: inventory.HostProxmoxGuest, Source: inventory.SourceProxmox,
+				IntegrationID: "a", Addresses: []string{"10.10.1.30", "10.10.1.31"}}},
+			Devices:      devs,
+			Integrations: []store.Integration{{ID: "a", Enabled: true}},
+		}
+		if got := byID(Machines(in))["pve-a-1"].Level; got != "firmware" {
+			t.Errorf("order %s first: level %q, want firmware", devs[0].Address, got)
+		}
+	}
+}

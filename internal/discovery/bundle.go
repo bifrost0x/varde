@@ -131,10 +131,7 @@ func MakeBundle(d Device, shared map[string]bool) Bundle {
 		}
 	}
 
-	leaks := func(s string) bool {
-		if hasIPLiteral(s) {
-			return true
-		}
+	matches := func(s string) bool {
 		s = strings.ToLower(s)
 		compact := stripSeparators(s)
 		for _, n := range needles {
@@ -144,9 +141,18 @@ func MakeBundle(d Device, shared map[string]bool) Bundle {
 		}
 		return false
 	}
+	leaks := func(s string) bool { return hasIPLiteral(s) || matches(s) }
 
 	for _, f := range fields {
-		if bundleKeep[f.Name] && !leaks(f.Value) {
+		switch {
+		case !bundleKeep[f.Name]:
+		case f.Name == FieldVendorOID:
+			// An object identifier looks like a dotted address
+			// ("1.3.6.1..."); it is checked by its own shape instead.
+			if enterpriseOID.MatchString(f.Value) && !matches(f.Value) {
+				b.Fields = append(b.Fields, f)
+			}
+		case !leaks(f.Value):
 			b.Fields = append(b.Fields, f)
 		}
 	}
@@ -155,6 +161,10 @@ func MakeBundle(d Device, shared map[string]bool) Bundle {
 	}
 	return b
 }
+
+// enterpriseOID is the shape of an SNMP sysObjectID: a vendor's subtree
+// under the IANA enterprises arc, in plain dotted numbers.
+var enterpriseOID = regexp.MustCompile(`^1\.3\.6\.1\.4\.1(\.[0-9]{1,10}){1,32}$`)
 
 // stripSeparators removes the characters that separate the groups of a
 // MAC address, UUID or fingerprint.

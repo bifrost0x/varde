@@ -48,10 +48,24 @@ func Anchors(d Device, shared map[string]bool) []string {
 	}
 	fields := d.Fields()
 	manufacturer := statedManufacturer(fields)
-	selfSigned := false
-	for _, f := range fields {
-		if f.Name == FieldCertSelfSigned && f.Value == "true" {
-			selfSigned = true
+	// A certificate fingerprint is an anchor only when the service that
+	// presented it presented a certificate the device made for itself; a
+	// CA-signed certificate on another port of the same address may be a
+	// wildcard shared by unrelated services.
+	for _, s := range d.Services {
+		selfSigned := false
+		for _, f := range s.Fields {
+			if f.Name == FieldCertSelfSigned && f.Value == "true" {
+				selfSigned = true
+			}
+		}
+		if !selfSigned {
+			continue
+		}
+		for _, f := range s.Fields {
+			if f.Name == FieldCertFingerprint {
+				add("cert:" + f.Value)
+			}
 		}
 	}
 	for _, f := range fields {
@@ -68,10 +82,6 @@ func Anchors(d Device, shared map[string]bool) []string {
 			}
 		case FieldSSHHostKey:
 			add("ssh:" + f.Value)
-		case FieldCertFingerprint:
-			if selfSigned {
-				add("cert:" + f.Value)
-			}
 		}
 	}
 	sort.Strings(keys)
