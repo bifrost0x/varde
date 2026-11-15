@@ -636,6 +636,7 @@ components:
         app_id: { type: string }
         advisory_id: { type: string }
         state: { type: string, enum: [open, acknowledged, snoozed, suppressed, resolved] }
+        snooze_upstream: { type: boolean, description: "Snoozed until an image that fixes it appears (ADR 0045); it opens again by itself then." }
         match_state: { type: string, enum: [affected, unverified] }
         priority: { type: string, enum: [P1, P2, P3] }
         exposure: { type: string, enum: [public, lan, internal, unknown] }

@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A container with flawed packages in its image no longer gets "Pull a newer image" when no
+  newer image exists (ADR 0045). Varde decides for each such container whether a newer image
+  exists and what it fixes, from the data package and, with registry versions on, from the
+  registry (a `HEAD` request for the running tag, the newest tag of the same variant and major
+  version). It suggests an image only when that image fixes at least one flaw and says how many
+  it fixes and introduces; otherwise the card says "No fixed image upstream yet" or why Varde
+  cannot tell.
+- "Update now" needs an update that fixes an urgent flaw. Urgent flaws without one are under the
+  new state "Mitigate now", still notified at once, with steps to limit the risk: restrict who can
+  reach the container, a Dockerfile that builds the image with the distribution's package
+  updates, or a snooze until a fixed image appears.
+- A flaw known to be exploited in a package of an image is urgent only when the package serves
+  what the container exposes (the program it runs or a library such a program loads). Any other
+  package is "in the image" and at most "update soon"; the card names the package.
+- Notifications about image packages say what Varde knows of a newer image instead of asking to
+  pull one.
+
+### Added
+
+- Settings › Versions: **Read newer images from the registry before suggesting them** (off by
+  default) and **Also suggest a new major version of a pinned tag**. `VARDE_UPSTREAM_TTL` sets how
+  long a registry answer stands (default `6h`).
+
 ### Changed
 
 - The interface starts from apps instead of findings (ADR 0043). The front page lists what
