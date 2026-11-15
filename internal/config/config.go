@@ -82,6 +82,9 @@ type Config struct {
 
 	// AdvisoryRefresh is the period of scheduled advisory refreshes.
 	AdvisoryRefresh time.Duration
+	// UpstreamTTL is how long a registry's answer about a running image
+	// stands before Varde asks again (ADR 0045).
+	UpstreamTTL time.Duration
 	// GitHubToken raises GitHub API rate limits; optional.
 	GitHubToken Secret
 	// DirectOSV and DirectNVD enable sources that reveal which packages or
@@ -194,6 +197,7 @@ func Defaults() Config {
 		ResyncInterval:  6 * time.Hour,
 		CatalogDir:      "/catalog.d",
 		AdvisoryRefresh: 6 * time.Hour,
+		UpstreamTTL:     6 * time.Hour,
 		CookieSecure:    "auto",
 		Notify: NotifyConfig{
 			SMTPPort:      587,
@@ -296,6 +300,7 @@ func Load(lookup LookupFunc) (Config, error) {
 	}
 
 	l.duration("ADVISORY_REFRESH", &cfg.AdvisoryRefresh, time.Hour)
+	l.duration("UPSTREAM_TTL", &cfg.UpstreamTTL, 30*time.Minute)
 	l.secret("GITHUB_TOKEN", &cfg.GitHubToken)
 	l.boolean("DIRECT_OSV", &cfg.DirectOSV)
 	l.boolean("DIRECT_NVD", &cfg.DirectNVD)

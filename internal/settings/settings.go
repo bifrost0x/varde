@@ -52,6 +52,14 @@ type Effective struct {
 	// EOLData lets Varde read release lines from endoflife.date (off by
 	// default: a new outbound connection that reveals the products).
 	EOLData bool
+	// UpstreamCandidates lets Varde read the package list of a newer image
+	// from the registry, to tell what it fixes before suggesting it (off
+	// by default: it downloads image layers, up to a bound per image).
+	// Only with RegistryTags on.
+	UpstreamCandidates bool
+	// UpstreamCrossMajor lets the newer image of a pinned tag be of a new
+	// major version (off by default: a major version may break the app).
+	UpstreamCrossMajor bool
 }
 
 // ScanPeriods are the allowed periods of scheduled scans.
@@ -85,13 +93,19 @@ const (
 	// KeyEOLData switches reading release lines from endoflife.date;
 	// UI-only, off by default.
 	KeyEOLData = "EOL_DATA"
+	// KeyUpstreamCandidates switches reading newer images from the
+	// registry; UI-only, off by default.
+	KeyUpstreamCandidates = "UPSTREAM_CANDIDATES"
+	// KeyUpstreamCrossMajor lets a pinned tag's track cross a major
+	// version; UI-only, off by default.
+	KeyUpstreamCrossMajor = "UPSTREAM_CROSS_MAJOR"
 )
 
 // Keys lists every UI-editable key.
 var Keys = []string{
 	KeyPublicDomains, KeyInternalDomains, KeyDigestHour, KeyDigestWeekday, KeyDirectOSV, KeyDirectNVD,
 	KeyP1CVSSPublic, KeyP1CVSSPublicEPSS, KeyP1EPSS, KeyP2CVSS, KeyP2CVSSExposed, KeyNetworks, KeyScanEvery, KeyRegistryTags,
-	KeyContainerPackages, KeyEOLData, KeyDirectQueries,
+	KeyContainerPackages, KeyEOLData, KeyDirectQueries, KeyUpstreamCandidates, KeyUpstreamCrossMajor,
 }
 
 // Service provides the effective settings.
@@ -267,6 +281,20 @@ func (s *Service) merge(ui map[string]string) (Effective, error) {
 			errs = append(errs, errors.New("registry_tags must be true or false"))
 		}
 		eff.RegistryTags = b
+	}
+	if v, ok := use(KeyUpstreamCandidates); ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, errors.New("upstream_candidates must be true or false"))
+		}
+		eff.UpstreamCandidates = b
+	}
+	if v, ok := use(KeyUpstreamCrossMajor); ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, errors.New("upstream_cross_major must be true or false"))
+		}
+		eff.UpstreamCrossMajor = b
 	}
 	if v, ok := use(KeyEOLData); ok {
 		b, err := strconv.ParseBool(v)
