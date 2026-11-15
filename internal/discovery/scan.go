@@ -22,6 +22,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // Protocols a probed port is read with.
@@ -88,6 +90,9 @@ type Service struct {
 	// Insecure marks a service that grants access without authentication,
 	// such as a Docker API on port 2375.
 	Insecure bool `json:"insecure,omitempty"`
+	// Fields are what the service stated about its device, each with the
+	// trust it carries (fields.go).
+	Fields []Field `json:"fields,omitempty"`
 }
 
 // Device is a host that answered on at least one port.
@@ -391,6 +396,19 @@ func (s *Scanner) Scan(ctx context.Context, addrs []netip.Addr, progress func(do
 		})
 	}
 	nwg.Wait()
+
+	// The MAC comes from the kernel's ARP table, not from the device: it
+	// is stated by the link layer, and only hosts on the local segment
+	// have an entry.
+	if arp := readARP(); len(arp) > 0 {
+		for i := range res.Devices {
+			if mac, ok := arp[res.Devices[i].Address]; ok {
+				svc := Service{Proto: ProtoARP}
+				svc.Fields = addField(nil, FieldMAC, mac, TrustStated)
+				res.Devices[i].Services = append(res.Devices[i].Services, svc)
+			}
+		}
+	}
 	return res, nil
 }
 
@@ -454,12 +472,26 @@ func (s *Scanner) probe(ctx context.Context, p probe, timeout time.Duration) (sv
 
 var sshBanner = regexp.MustCompile(`^SSH-[0-9.]+-([!-~]{1,100})(?: ([ -~]{0,120}))?$`)
 
-// readSSH reads the greeting an SSH server sends on its own. Nothing is
-// sent.
+// readSSH reads the greeting an SSH server sends on its own, then the host
+// key. Nothing is sent on the greeting connection, and it is closed before
+// the key exchange dials, so the server never holds two connections.
 func (s *Scanner) readSSH(ctx context.Context, target string, svc *Service) {
+	line, ok := s.sshGreeting(ctx, target)
+	if !ok {
+		return
+	}
+	if m := sshBanner.FindStringSubmatch(strings.TrimRight(line, "\r\n")); m != nil {
+		svc.Product = strings.TrimSpace(m[1] + " " + m[2])
+		if fp, ok := s.sshHostKey(ctx, target); ok {
+			svc.Fields = addField(svc.Fields, FieldSSHHostKey, fp, TrustStated)
+		}
+	}
+}
+
+func (s *Scanner) sshGreeting(ctx context.Context, target string) (string, bool) {
 	conn, err := s.dial(ctx, "tcp", target)
 	if err != nil {
-		return
+		return "", false
 	}
 	defer func() { _ = conn.Close() }()
 	if dl, ok := ctx.Deadline(); ok {
@@ -467,11 +499,41 @@ func (s *Scanner) readSSH(ctx context.Context, target string, svc *Service) {
 	}
 	line, err := bufio.NewReaderSize(io.LimitReader(conn, 512), 512).ReadString('\n')
 	if err != nil && line == "" {
-		return
+		return "", false
 	}
-	if m := sshBanner.FindStringSubmatch(strings.TrimRight(line, "\r\n")); m != nil {
-		svc.Product = strings.TrimSpace(m[1] + " " + m[2])
+	return line, true
+}
+
+var errHostKeySeen = errors.New("host key read")
+
+// sshHostKey reads the server's host key fingerprint. The key exchange
+// happens before user authentication, so the handshake is aborted from the
+// host key callback and no authentication is ever attempted.
+func (s *Scanner) sshHostKey(ctx context.Context, target string) (string, bool) {
+	conn, err := s.dial(ctx, "tcp", target)
+	if err != nil {
+		return "", false
 	}
+	defer func() { _ = conn.Close() }()
+	if dl, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(dl)
+	}
+	// Closing the connection on cancellation unblocks a stalled handshake.
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	var fp string
+	cfg := &ssh.ClientConfig{
+		User: "varde",
+		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			fp = ssh.FingerprintSHA256(key)
+			return errHostKeySeen
+		},
+	}
+	c, _, _, err := ssh.NewClientConn(conn, target, cfg)
+	if err == nil { // cannot happen without authentication; never keep it
+		_ = c.Close()
+	}
+	return fp, fp != ""
 }
 
 var titleRe = regexp.MustCompile(`(?is)<title[^>]*>([^<]{1,200})</title>`)
@@ -521,6 +583,21 @@ func (s *Scanner) readHTTP(ctx context.Context, target string, tlsOn bool, svc *
 		issuer = strings.Join(append(c.Issuer.Organization, c.Issuer.CommonName), " ")
 	}
 	svc.Product = productFromHTTP(title, resp.Header.Get("Server"), issuer)
+	for _, f := range pageFields(title, resp.Header.Get("Server")) {
+		svc.Fields = addField(svc.Fields, f.Name, f.Value, f.Trust)
+	}
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		for _, f := range certFields(resp.TLS.PeerCertificates[0]) {
+			svc.Fields = addField(svc.Fields, f.Name, f.Value, f.Trust)
+		}
+	}
+	// Only a start page that answered is the device's own; behind an error
+	// or a redirect the favicon may belong to something else.
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if v, ok := s.favicon(ctx, scheme+"://"+target); ok {
+			svc.Fields = addField(svc.Fields, FieldFavicon, v, TrustDerived)
+		}
+	}
 	if svc.Product == "" && resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		if loc, err := resp.Location(); err == nil && loc.Path != "" && loc.Path != "/" && len(loc.Path) <= 40 {
 			svc.Product = "redirects to " + loc.Path
@@ -638,6 +715,9 @@ func (s *Scanner) readDockerTLS(ctx context.Context, target string, svc *Service
 
 // Classify derives a device kind and a short label from its services.
 func Classify(svcs []Service) (kind, label string) {
+	// The ARP pseudo service has no port and says nothing about what runs
+	// on the host.
+	svcs = slices.DeleteFunc(slices.Clone(svcs), func(s Service) bool { return s.Proto == ProtoARP })
 	for _, k := range knownProducts {
 		for _, s := range svcs {
 			if s.Product == k.product {

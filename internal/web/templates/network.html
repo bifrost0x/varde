@@ -47,9 +47,9 @@
   <table class="table"><thead><tr><th scope="col">Address</th><th scope="col">Detected</th><th scope="col">Services</th><th scope="col">Varde reads it as</th></tr></thead><tbody>
   {{range $d.Devices}}
   <tr>
-    <td data-label="Address"><span class="mono">{{.Address}}</span>{{if .Hostname}}<span class="cell-sub">{{.Hostname}}</span>{{end}}</td>
+    <td data-label="Address">{{if .Machine.ID}}<a href="/systems/{{.Machine.ID}}"><span class="mono">{{.Address}}</span></a> <span class="badge badge--muted">{{.Machine.Level}}</span>{{else}}<span class="mono">{{.Address}}</span>{{end}}{{if .Hostname}}<span class="cell-sub">{{.Hostname}}</span>{{end}}</td>
     <td data-label="Detected">{{.Label}}{{if .Insecure}} <span class="badge badge--kev">open without password</span>{{end}}<span class="cell-sub">last seen {{since .LastSeen}}{{if .Missed}}; did not answer the last scan{{end}}</span></td>
-    <td data-label="Services" class="small">{{if not .Services}}<span class="muted">none of the probed ports</span>{{end}}{{range $i, $s := .Services}}{{if $i}}, {{end}}<span class="mono">{{$s.Port}}</span>{{if $s.Product}} {{truncate $s.Product 40}}{{end}}{{end}}</td>
+    <td data-label="Services" class="small">{{if not .Ports}}<span class="muted">none of the probed ports</span>{{end}}{{range $i, $s := .Ports}}{{if $i}}, {{end}}<span class="mono">{{$s.Port}}</span>{{if $s.Product}} {{truncate $s.Product 40}}{{end}}{{end}}</td>
     <td data-label="Varde reads it as">
       {{if .Covered}}{{join .Covered ", "}}<span class="cell-sub">{{template "machineState" .Machine}}</span>{{else}}<span class="badge badge--muted">not read yet</span><span class="cell-sub">Varde knows it answers, not what runs on it.</span>{{end}}
       {{if .Hint}}<span class="cell-sub">{{.Hint}}</span>{{end}}

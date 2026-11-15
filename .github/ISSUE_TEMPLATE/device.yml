@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Device recognition
+description: Send the evidence of a device Varde could not identify.
+labels: [device]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The evidence comes from the device page in Varde. It holds no address, host name, serial number or full MAC address. Read it before you send it.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: product
+    attributes:
+      label: What is this device?
+      description: Manufacturer, model, firmware.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything else that helps to recognize it.
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Check
+      options:
+        - label: I checked that the evidence holds nothing I do not want to share.
+          required: true

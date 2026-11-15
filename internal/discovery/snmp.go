@@ -17,7 +17,7 @@ const ProtoSNMP = "snmp"
 
 // SNMP holds what the scan sends to read a device's system description:
 // a v2c community, or a v3 user with SHA-256 authentication and AES
-// privacy. Only reads of three system objects are sent.
+// privacy. Only reads of system and chassis objects are sent.
 type SNMP struct {
 	Community           string
 	User, Auth, Privacy string
@@ -28,12 +28,63 @@ func (c *SNMP) Enabled() bool {
 	return c != nil && (c.Community != "" || (c.User != "" && c.Auth != ""))
 }
 
-// The system group objects read: description, object ID, name.
+// The system group objects read: description, object ID, name; and the
+// ENTITY-MIB columns of the chassis entity (index 1).
 const (
 	oidSysDescr    = ".1.3.6.1.2.1.1.1.0"
 	oidSysObjectID = ".1.3.6.1.2.1.1.2.0"
 	oidSysName     = ".1.3.6.1.2.1.1.5.0"
+
+	oidEntHWRev    = ".1.3.6.1.2.1.47.1.1.1.1.8.1"
+	oidEntFirmware = ".1.3.6.1.2.1.47.1.1.1.1.9.1"
+	oidEntSoftware = ".1.3.6.1.2.1.47.1.1.1.1.10.1"
+	oidEntSerial   = ".1.3.6.1.2.1.47.1.1.1.1.11.1"
+	oidEntMfg      = ".1.3.6.1.2.1.47.1.1.1.1.12.1"
+	oidEntModel    = ".1.3.6.1.2.1.47.1.1.1.1.13.1"
 )
+
+// snmpFields turns the answer of the read into typed fields. Objects the
+// device lacks (NoSuchObject, NoSuchInstance) carry no usable value and are
+// skipped. The name is a display name only.
+func snmpFields(vars []gosnmp.SnmpPDU) []Field {
+	var fs []Field
+	for _, v := range vars {
+		var str string
+		switch val := v.Value.(type) {
+		case []byte:
+			str = string(val)
+		case string:
+			if v.Type != gosnmp.ObjectIdentifier {
+				continue
+			}
+			str = strings.TrimPrefix(val, ".")
+		default:
+			continue
+		}
+		switch v.Name {
+		case oidSysDescr:
+			first, _, _ := strings.Cut(str, "\n")
+			fs = addField(fs, FieldSysDescr, first, TrustDerived)
+		case oidSysObjectID:
+			fs = addField(fs, FieldVendorOID, str, TrustStated)
+		case oidSysName:
+			fs = addField(fs, FieldDisplayName, str, TrustStated)
+		case oidEntHWRev:
+			fs = addField(fs, FieldHWVersion, str, TrustStated)
+		case oidEntFirmware:
+			fs = addField(fs, FieldFirmware, str, TrustStated)
+		case oidEntSoftware:
+			fs = addField(fs, FieldOSVersion, str, TrustStated)
+		case oidEntSerial:
+			fs = addField(fs, FieldSerial, str, TrustStated)
+		case oidEntMfg:
+			fs = addField(fs, FieldManufacturer, str, TrustStated)
+		case oidEntModel:
+			fs = addField(fs, FieldModel, str, TrustStated)
+		}
+	}
+	return fs
+}
 
 const snmpTimeout = 1500 * time.Millisecond
 
@@ -47,7 +98,7 @@ func (s *Scanner) snmp(ctx context.Context, a netip.Addr) (Service, string, bool
 	defer cancel()
 	g := &gosnmp.GoSNMP{
 		Context: ctx, Target: a.String(), Port: portOr(s.snmpPort, 161), Transport: "udp",
-		Timeout: snmpTimeout, Retries: 0, MaxOids: 3, ExponentialTimeout: false,
+		Timeout: snmpTimeout, Retries: 0, MaxOids: 10, ExponentialTimeout: false,
 	}
 	if s.SNMP.User != "" && s.SNMP.Auth != "" {
 		level := gosnmp.AuthNoPriv
@@ -90,7 +141,14 @@ func (s *Scanner) snmp(ctx context.Context, a netip.Addr) (Service, string, bool
 	if descr == "" {
 		return Service{}, "", false
 	}
-	return Service{Port: 161, Proto: ProtoSNMP, Product: descr}, name, true
+	vars := res.Variables
+	// The chassis objects go in a request of their own: an agent that knows
+	// only the system group may fail a whole request over one missing object,
+	// and that must not cost the answer above.
+	if ent, err := g.Get([]string{oidEntHWRev, oidEntFirmware, oidEntSoftware, oidEntSerial, oidEntMfg, oidEntModel}); err == nil && ent != nil && ent.Error == gosnmp.NoError {
+		vars = append(vars, ent.Variables...)
+	}
+	return Service{Port: 161, Proto: ProtoSNMP, Product: descr, Fields: snmpFields(vars)}, name, true
 }
 
 type snmpAnswer struct {

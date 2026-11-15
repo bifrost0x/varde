@@ -28,6 +28,9 @@ type deviceRow struct {
 	// sources that know it.
 	Machine coverage.Machine
 	Covered []string
+	// Ports are the services with a port; the ARP entry carries a MAC
+	// address and is no port.
+	Ports []discovery.Service
 	// CanProxmox, CanDocker, CanPackages and CanLXC offer the matching
 	// setup.
 	CanProxmox, CanDocker, CanPackages, CanLXC bool
@@ -235,6 +238,9 @@ func (a *app) renderNetwork(w http.ResponseWriter, r *http.Request, cur *auth.Cu
 			}
 		}
 		for _, s := range dv.Services {
+			if s.Proto != discovery.ProtoARP {
+				row.Ports = append(row.Ports, s)
+			}
 			row.Insecure = row.Insecure || s.Insecure
 			if s.Proto == discovery.ProtoSSH && !hasDocker[dv.Address] && !m.Has(coverage.EvidenceSSH) && !m.Self {
 				row.CanDocker = true

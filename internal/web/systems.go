@@ -48,6 +48,8 @@ type systemView struct {
 	UnfixedTotal int
 	// Blind says what Varde cannot read on this machine, with the step.
 	Blind []blindSpot
+	// Device is the scanned device behind the machine, when there is one.
+	Device *deviceView
 }
 
 type blindSpot struct{ Text, Link, Action string }
@@ -163,6 +165,9 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 		for _, ad := range m.Addresses {
 			nodeKey = nodeKey || (in.Kind == "proxmox-lxc" && in.Address == ad)
 		}
+	}
+	if d, shared, ok := a.scannedDevice(s, m); ok {
+		v.Device = newDeviceView(d, shared, m.Level)
 	}
 	v.Blind = blindSpots(m, total, len(v.Containers), nodeKey, a.agentInstallReady())
 	// What needs doing on this machine, as on the front page: one row

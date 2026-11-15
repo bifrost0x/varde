@@ -256,3 +256,34 @@ func TestConnectInstallCommands(t *testing.T) {
 		t.Error("unsafe user name: commands shown or line missing")
 	}
 }
+
+// The ARP entry carries a MAC address, not a port: it is not listed as one.
+func TestNetworkPageHidesARPService(t *testing.T) {
+	h := newHarness(t, withNetwork(t))
+	csrf := h.signIn(t)
+	if resp, _ := h.do(t, "POST", "/connections/scope", url.Values{"csrf": {csrf}, "networks": {"192.168.1.0/24"}}, nil); resp.StatusCode != http.StatusSeeOther {
+		t.Fatal("scope")
+	}
+	arp := discovery.Service{Proto: discovery.ProtoARP, Fields: []discovery.Field{{Name: discovery.FieldMAC, Value: "aa:bb:cc:00:11:22", Trust: discovery.TrustStated}}}
+	_ = h.store.RecordDevices(t.Context(), []discovery.Device{
+		{Address: "192.168.1.40", Kind: discovery.KindOther, Label: "Device (no known service)", Services: []discovery.Service{arp}},
+		{Address: "192.168.1.41", Kind: discovery.KindSSH, Label: "SSH host", Services: []discovery.Service{{Port: 22, Proto: discovery.ProtoSSH}, arp}},
+	}, nil, time.Now())
+	_, body := h.do(t, "GET", "/connections", nil, nil)
+	row := func(addr string) string {
+		i := strings.Index(body, `<span class="mono">`+addr+`</span>`)
+		if i < 0 {
+			t.Fatalf("no row for %s", addr)
+		}
+		end := strings.Index(body[i:], "</tr>")
+		return body[i : i+end]
+	}
+	only := row("192.168.1.40")
+	if !strings.Contains(only, "none of the probed ports") || strings.Contains(only, `<span class="mono">0</span>`) {
+		t.Errorf("ARP-only device row: %s", only)
+	}
+	both := row("192.168.1.41")
+	if !strings.Contains(both, `<span class="mono">22</span>`) || strings.Contains(both, `<span class="mono">0</span>`) || strings.Contains(both, "none of the probed ports") {
+		t.Errorf("SSH device row: %s", both)
+	}
+}
