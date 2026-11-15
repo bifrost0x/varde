@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bifrost0x/varde/internal/inventory"
+	"github.com/bifrost0x/varde/internal/paths"
 )
 
 const (
@@ -305,27 +306,20 @@ func runtimeOf(ci ContainerInspect) *inventory.Runtime {
 	return rt
 }
 
-// Bounds of a kept command: enough to find the program behind wrappers,
-// short enough that a long inline script costs nothing.
+// Bounds of a kept command: enough to find the program behind wrappers.
 const (
 	maxCommandArgs = 8
 	maxCommandArg  = 256
 )
 
-// commandOf is the process a container runs, bounded; arguments that look
-// like credentials are left out, since only the program matters.
+// commandOf is what Varde keeps of the process a container runs: the
+// wrappers before the program and the program, never its arguments, which
+// may carry credentials (paths.CommandPrefix).
 func commandOf(path string, args []string) []string {
 	var out []string
-	for _, a := range append([]string{path}, args...) {
+	for _, a := range paths.CommandPrefix(append([]string{path}, args...)) {
 		if len(out) == maxCommandArgs {
 			break
-		}
-		if a == "" {
-			continue
-		}
-		if secretArg(a) {
-			out = append(out, "<redacted>")
-			continue
 		}
 		if len(a) > maxCommandArg {
 			a = a[:maxCommandArg]
@@ -333,20 +327,4 @@ func commandOf(path string, args []string) []string {
 		out = append(out, a)
 	}
 	return out
-}
-
-// secretArg reports whether an argument may carry a secret
-// ("--password=...", "TOKEN=...").
-func secretArg(a string) bool {
-	k, _, ok := strings.Cut(a, "=")
-	if !ok {
-		return false
-	}
-	k = strings.ToLower(k)
-	for _, w := range []string{"pass", "secret", "token", "key", "auth", "cred"} {
-		if strings.Contains(k, w) {
-			return true
-		}
-	}
-	return false
 }

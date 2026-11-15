@@ -2,7 +2,10 @@
 
 package paths
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestProgram(t *testing.T) {
 	cases := []struct {
@@ -50,6 +53,29 @@ func TestComponentOf(t *testing.T) {
 	for _, c := range cases {
 		if got := ComponentOf(c.pkg, c.command, c.exposed); got.Reach != c.want {
 			t.Errorf("%s: %q = %s, want %s", c.name, c.pkg, got.Reach, c.want)
+		}
+	}
+}
+
+// What an inventory keeps of a command never holds an argument.
+func TestCommandPrefixDropsArguments(t *testing.T) {
+	cases := []struct {
+		command, want []string
+	}{
+		{[]string{"redis-server", "--requirepass", "s3cret"}, []string{"redis-server"}},
+		{[]string{"/docker-entrypoint.sh", "nginx", "-g", "daemon off;"}, []string{"/docker-entrypoint.sh", "nginx"}},
+		{[]string{"tini", "--", "python", "-m", "app", "--token", "abc"}, []string{"tini", "python"}},
+		{[]string{"sh", "-c", "exec httpd --password=x -DFOREGROUND"}, []string{"sh", "exec", "httpd"}},
+		{[]string{"/init"}, []string{"/init"}},
+		{[]string{"/start.sh"}, []string{"/start.sh"}},
+	}
+	for _, c := range cases {
+		got := CommandPrefix(c.command)
+		if strings.Join(got, "|") != strings.Join(c.want, "|") {
+			t.Errorf("CommandPrefix(%q) = %q, want %q", c.command, got, c.want)
+		}
+		if Program(got) != Program(c.command) {
+			t.Errorf("prefix of %q names %q, the command %q", c.command, Program(got), Program(c.command))
 		}
 	}
 }

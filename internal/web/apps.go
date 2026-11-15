@@ -368,6 +368,9 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 				}
 			}
 		}
+		// sameImage is set when the image the card suggests is the one the
+		// upstream status judged: only then do its fixes count for it.
+		sameImage := false
 		if wl.Container != nil && known {
 			var tags []string
 			if ref, err := imageref.Parse(wl.Container.ImageRef); err == nil {
@@ -378,17 +381,25 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 				if sg.Compose != nil {
 					c.Command = sg.Compose.Pull()
 				}
+				sameImage = st != nil && !st.Rebuilt && st.TargetTag != "" && tagOf(sg.Image) == st.TargetTag
 			} else if ok && sg.Floating {
 				c.Action = "Pull the image again and recreate the container"
 				c.Compose = sg.Compose
 				if sg.Compose != nil {
 					c.Command = sg.Compose.Pull()
 				}
+				sameImage = st != nil && st.Rebuilt
 			}
 		}
+		if !sameImage {
+			// Another image than the one suggested fixes the flaws in
+			// the image's packages; the suggestion is not credited with
+			// them.
+			imageFix = upstream.NoFix
+		}
 		// What the update fixes of the most pressing findings decides:
-		// the app's own, or those in the image when Varde knows an image
-		// that fixes them.
+		// the app's own, or those in the image when the suggested image is
+		// known to fix them.
 		switch {
 		case fixedTop || imageFix == upstream.FixesTop:
 			return upstream.FixesTop
@@ -407,6 +418,15 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 		c.Action = "Look at the " + plural(g.Count, "finding") + " Varde cannot confirm"
 	}
 	return upstream.NoFix
+}
+
+// tagOf is the tag of an image reference ("nginx:1.28" gives "1.28").
+func tagOf(ref string) string {
+	name, _, _ := strings.Cut(ref, "@")
+	if i := strings.LastIndexByte(name, ':'); i > strings.LastIndexByte(name, '/') {
+		return name[i+1:]
+	}
+	return ""
 }
 
 // allOf words "all N flaws" for one and for several.

@@ -243,3 +243,54 @@ func TestCheckerCandidateTooLarge(t *testing.T) {
 		t.Errorf("status %+v", s)
 	}
 }
+
+// A candidate read that failed for a passing reason is tried again once
+// the answer is due; one the image itself causes is not.
+func TestCheckerRetriesTransientReadFailures(t *testing.T) {
+	st, now := checkerLab(t, "mpepping/cyberchef:latest", "mpepping/cyberchef")
+	reg := &fakeRegistry{digests: map[string]string{"docker.io/mpepping/cyberchef:latest": rebuilt}}
+	rd := &fakeReader{err: &httpx.StatusError{Status: http.StatusTooManyRequests}}
+	if _, err := newChecker(st, reg, rd, now).Once(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if ck := onlyCheck(t, st); ck.CandidateError == "" || ck.Candidate != nil {
+		t.Fatalf("check %+v", ck)
+	}
+	// Within the TTL it is not asked again.
+	if _, err := newChecker(st, reg, rd, now.Add(time.Hour)).Once(t.Context()); err != nil || rd.reads != 1 {
+		t.Fatalf("read within the TTL: %d reads, %v", rd.reads, err)
+	}
+	rd.err = nil
+	rd.cand = remedy.Candidate{Distro: "debian-12", Packages: []inventory.Package{{Manager: "dpkg", Name: "openssl", Version: "3.0.15-1"}}}
+	if _, err := newChecker(st, reg, rd, now.Add(DefaultTTL)).Once(t.Context()); err != nil || rd.reads != 2 {
+		t.Fatalf("after the TTL: %d reads, %v", rd.reads, err)
+	}
+	if ck := onlyCheck(t, st); ck.Candidate == nil || ck.CandidateError != "" {
+		t.Errorf("check %+v", ck)
+	}
+	// A failure the image causes stands.
+	st2, now2 := checkerLab(t, "mpepping/cyberchef:latest", "mpepping/cyberchef")
+	big := &fakeReader{err: remedy.ErrImageTooLarge}
+	if _, err := newChecker(st2, reg, big, now2).Once(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newChecker(st2, reg, big, now2.Add(DefaultTTL)).Once(t.Context()); err != nil || big.reads != 1 {
+		t.Errorf("a too large image read again: %d reads, %v", big.reads, err)
+	}
+}
+
+// A rebuilt version tag does not hide a newer release on its track.
+func TestCheckerPrefersNewerTagOverRebuild(t *testing.T) {
+	repo := "ghcr.io/immich-app/immich-machine-learning"
+	st, now := checkerLab(t, repo+":v3.4.1", repo)
+	reg := &fakeRegistry{
+		digests: map[string]string{repo + ":v3.4.1": rebuilt, repo + ":v3.5.0": newer},
+		tags:    map[string][]string{repo: {"v3.4.1", "v3.5.0"}},
+	}
+	if _, err := newChecker(st, reg, nil, now).Once(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if ck := onlyCheck(t, st); ck.CandidateTag != "v3.5.0" || ck.CandidateDigest != newer || ck.HeadDigest != rebuilt {
+		t.Errorf("check %+v", ck)
+	}
+}

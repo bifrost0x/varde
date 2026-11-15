@@ -69,9 +69,18 @@ func (a *app) imagePlan(c *appCard, wl inventory.Workload, fs []store.Finding, s
 	switch {
 	case st != nil && st.Actionable():
 		c.Fixes = "fixes " + strconv.Itoa(len(st.Fixed)) + " of " + plural(st.Total(), "flaw") + " in packages inside the image"
-		if st.Rebuilt {
+		switch {
+		case pinned(wl.Container.ImageRef) && st.TargetDigest != "":
+			// A digest pin keeps the old image however often it is
+			// pulled: the pin itself has to change.
+			c.Action = "Update the image's digest pin"
+			if !st.Rebuilt {
+				c.Action = "Update to " + st.TargetTag
+			}
+			c.Line, c.Verified = "image: "+withTag(wl.Container.ImageRef, st.TargetTag)+"@"+st.TargetDigest, true
+		case st.Rebuilt:
 			c.Action = "Pull the rebuilt image and recreate the container"
-		} else {
+		default:
 			c.Action = "Update to " + st.TargetTag
 			c.Line, c.Verified = "image: "+withTag(wl.Container.ImageRef, st.TargetTag), true
 		}
@@ -135,6 +144,10 @@ func (c appCard) UpstreamText() string {
 	}
 	return text
 }
+
+// pinned reports whether an image reference names a digest besides its tag
+// ("app:1.2@sha256:..."): pulling it again never changes the image.
+func pinned(ref string) bool { return strings.Contains(ref, "@") }
 
 // withTag is an image reference with another tag ("nginx:1.27" and
 // "1.28" give "nginx:1.28").

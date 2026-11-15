@@ -359,3 +359,16 @@ func TestComponentPriority(t *testing.T) {
 		t.Errorf("P2 became %s", got)
 	}
 }
+
+// A digest pin is changed, not pulled again.
+func TestImageActionOfPinnedImage(t *testing.T) {
+	st := upstream.Status{Kind: upstream.UpdateAvailable, TargetTag: "1.2", TargetDigest: newDigest, Rebuilt: true,
+		Fixed: []remedy.Flaw{{AdvisoryID: "A", Package: "Debian:12/openssl"}}}
+	m := match.Finding{AdvisoryID: "A", Image: true, Evidence: match.Evidence{Package: "Debian:12/openssl"}}
+	if a, _ := imageAction(st, m, true); !strings.Contains(a, "digest pin to 1.2@"+newDigest) {
+		t.Errorf("pinned: %q", a)
+	}
+	if a, _ := imageAction(st, m, false); !strings.Contains(a, "pull the rebuilt image") {
+		t.Errorf("not pinned: %q", a)
+	}
+}

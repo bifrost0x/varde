@@ -308,9 +308,13 @@ func (p *Pipeline) upstreamStatuses(ctx context.Context) map[string]upstream.Sta
 }
 
 // imageAction words what to do about one image finding from the upstream
-// status of its container, and the tag of an image that fixes it.
-func imageAction(st upstream.Status, m match.Finding) (action, update string) {
+// status of its container, and the tag of an image that fixes it. pinned
+// is set for an image reference with a digest pin, which pulling never
+// changes.
+func imageAction(st upstream.Status, m match.Finding, pinned bool) (action, update string) {
 	switch {
+	case st.Fixes(m.AdvisoryID, m.Evidence.Package) && pinned && st.TargetDigest != "":
+		return fmt.Sprintf("change the image's digest pin to %s@%s and recreate the container (it fixes %d of %d flaws in the image's packages)", st.TargetTag, st.TargetDigest, len(st.Fixed), st.Total()), st.TargetTag
 	case st.Fixes(m.AdvisoryID, m.Evidence.Package) && st.Rebuilt:
 		return fmt.Sprintf("pull the rebuilt image and recreate the container (it fixes %d of %d flaws in the image's packages)", len(st.Fixed), st.Total()), st.TargetTag
 	case st.Fixes(m.AdvisoryID, m.Evidence.Package):

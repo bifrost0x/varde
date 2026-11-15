@@ -3,6 +3,7 @@
 package web
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -242,4 +243,73 @@ func TestSnoozeUntilFixedImage(t *testing.T) {
 			t.Errorf("finding %s is %s (upstream %v)", f.AppID, f.State, f.SnoozeUpstream)
 		}
 	}
+}
+
+// A card whose app update and fixed image differ is credited only with
+// what the suggested update fixes: an urgent image flaw fixed by another
+// tag keeps it from "update now".
+func TestCardCreditsOnlyTheSuggestedImage(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	if err := h.store.UpsertHost(ctx, inventory.Host{ID: "nas", Name: "nas", Kind: inventory.HostDocker, Source: inventory.SourceLocal, LastContact: now}); err != nil {
+		t.Fatal(err)
+	}
+	c := inventory.Container{ImageRef: "ghcr.io/immich-app/immich-server:v1.120.0", RepoDigests: []string{"ghcr.io/immich-app/immich-server@" + runDigest}}
+	if _, err := h.store.ApplySnapshot(ctx, "nas", inventory.KindContainer, []inventory.Workload{{Kind: inventory.KindContainer, RuntimeID: "c1", Name: "immich_server", Container: &c}}, now); err != nil {
+		t.Fatal(err)
+	}
+	wid := inventory.WorkloadID("nas", inventory.KindContainer, "c1")
+	appDetail := map[string]any{"advisory_id": "GHSA-app", "match_state": "affected", "fixed_in": "1.121.0", "evidence": map[string]any{"version": "1.120.0"}}
+	imgDetail := map[string]any{"advisory_id": "DEBIAN-CVE-2099-2", "match_state": "affected", "fixed_in": "3.0.15-1", "image": true, "kev": true,
+		"evidence": map[string]any{"package": "Debian:12/openssl", "version": "3.0.11-1"}}
+	if _, err := h.store.SyncFindings(ctx, []store.FindingInput{
+		{WorkloadID: wid, AppID: "immich", AdvisoryID: "GHSA-app", MatchState: "affected", FixedIn: "1.121.0", Detail: appDetail},
+		{WorkloadID: wid, AppID: "os:Debian:12/openssl", AdvisoryID: "DEBIAN-CVE-2099-2", MatchState: "affected", FixedIn: "3.0.15-1", Detail: imgDetail},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := h.store.Findings(ctx, store.FindingFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var as []store.Assessment
+	for _, f := range fs {
+		prio := "P2"
+		if f.AdvisoryID == "DEBIAN-CVE-2099-2" {
+			prio = "P1"
+		}
+		as = append(as, store.Assessment{ID: f.ID, Priority: prio, Reason: "test", Exposure: "lan"})
+	}
+	if err := h.store.SetAssessments(ctx, as); err != nil {
+		t.Fatal(err)
+	}
+	st := upstream.Status{Kind: upstream.UpdateAvailable, TargetTag: "v1.125.0", TargetDigest: newDigest, Source: upstream.SourceRegistry,
+		Fixed: []remedy.Flaw{{AdvisoryID: "DEBIAN-CVE-2099-2", Package: "Debian:12/openssl"}}}
+	b, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.ReplaceUpstreamStatus(ctx, map[string]json.RawMessage{wid: b}, now); err != nil {
+		t.Fatal(err)
+	}
+	card := overviewCard(t, h)
+	mustContain(t, "card", card, "Update to 1.121.0", "Mitigate now")
+	mustNotContain(t, "card", card, "app--now")
+}
+
+// A container pinned by tag and digest gets a new pin, not a pull.
+func TestCardDigestPinnedRebuild(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	cand := remedy.Candidate{Distro: "debian-12", Packages: []inventory.Package{debPkg("nginx", "1.22.1-9"), debPkg("openssl", "3.0.15-1~deb12u1"), debPkg("busybox", "1:1.35.0-4")}}
+	b, err := upstream.EncodeCandidate(cand)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chefLab(t, h, "mpepping/cyberchef:v10.19.0@"+runDigest, "openssl",
+		&store.UpstreamCheck{HeadDigest: newDigest, CandidateTag: "v10.19.0", CandidateDigest: newDigest, Candidate: b, CandidateReadAt: time.Now()})
+	card := overviewCard(t, h)
+	mustContain(t, "card", card, "Update the image&#39;s digest pin", "image: mpepping/cyberchef:v10.19.0@"+newDigest)
+	mustNotContain(t, "card", card, "Pull the rebuilt image")
 }

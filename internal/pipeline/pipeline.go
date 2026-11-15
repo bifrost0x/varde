@@ -412,7 +412,7 @@ func (p *Pipeline) Candidates(ctx context.Context) ([]notify.Candidate, error) {
 			it.Update = m.Step.Version
 		}
 		if st, ok := ups[f.WorkloadID]; ok && m.Image {
-			it.ImageAction, it.ImageUpdate = imageAction(st, m)
+			it.ImageAction, it.ImageUpdate = imageAction(st, m, w.Container != nil && strings.Contains(w.Container.ImageRef, "@"))
 		}
 		if p.opts.BaseURL != "" {
 			it.FindingURL = strings.TrimRight(p.opts.BaseURL, "/") + "/findings/" + f.ID

@@ -76,6 +76,31 @@ func Program(command []string) string {
 	return ""
 }
 
+// CommandPrefix is the part of a command Program reads: the wrappers and
+// entrypoint scripts before the program, and the program itself, without
+// any flag or argument. It is what an inventory keeps of a command, since
+// arguments may carry credentials ("--requirepass secret"). An inline
+// shell script is reduced to its words up to the program.
+func CommandPrefix(command []string) []string {
+	var out []string
+	for _, arg := range command {
+		if arg == "" || arg == "--" || strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if strings.ContainsAny(arg, " 	;|&") {
+			words := strings.Fields(strings.NewReplacer(";", " ", "&", " ", "|", " ").Replace(arg))
+			return append(out, CommandPrefix(words)...)
+		}
+		out = append(out, arg)
+		base := path.Base(arg)
+		if !slices.Contains(components.Wrappers, base) && !strings.HasSuffix(base, ".sh") {
+			return out
+		}
+	}
+	// No program found: only wrappers and scripts, which name no secret.
+	return out
+}
+
 // ComponentOf says whether the image package pkg (a source package name)
 // is reachable through what the container exposes: exposed reports whether
 // anything outside the host reaches the container (published port, proxy

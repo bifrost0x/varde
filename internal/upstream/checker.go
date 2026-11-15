@@ -245,13 +245,14 @@ func (c *Checker) check(ctx context.Context, j job, prev store.UpstreamCheck, ta
 		return fail("tag digest not read", err)
 	}
 	rec.HeadDigest = head
-	switch {
-	case head != j.key.RunningDigest:
+	if head != j.key.RunningDigest {
 		// The tag was moved: a rebuilt floating tag, or a re-pushed one.
 		rec.CandidateTag, rec.CandidateDigest = j.key.Tag, head
-	case Floating(j.key.Tag):
-		// A floating tag has no track: what it points to is all there is.
-	default:
+	}
+	if !Floating(j.key.Tag) {
+		// A version tag may have a newer release on its track, which
+		// stands above a rebuild of the running one: a rebuild that fixes
+		// nothing must not hide a release that does.
 		tags, err := c.tags(ctx, j.key.Repository, tagLists, listed)
 		if err != nil {
 			return fail("tag list not read", err)
@@ -269,8 +270,9 @@ func (c *Checker) check(ctx context.Context, j job, prev store.UpstreamCheck, ta
 		return rec
 	}
 	// A candidate read stands as long as the candidate does: an image
-	// under one digest never changes.
-	if prev.CandidateDigest == rec.CandidateDigest && (prev.Candidate != nil || prev.CandidateError != "") {
+	// under one digest never changes. So does a failure that a read of the
+	// same image would repeat; any other is tried again.
+	if prev.CandidateDigest == rec.CandidateDigest && (prev.Candidate != nil || lasting(prev.CandidateError)) {
 		rec.Candidate, rec.CandidateReadAt, rec.CandidateError = prev.Candidate, prev.CandidateReadAt, prev.CandidateError
 		return rec
 	}
@@ -294,13 +296,23 @@ func (c *Checker) check(ctx context.Context, j job, prev store.UpstreamCheck, ta
 	return rec
 }
 
+// Reasons of a failed candidate read that a read of the same image repeats.
+const (
+	readTooLarge   = "it is larger than Varde reads"
+	readNoPlatform = "it has no build for the host's platform"
+)
+
+// lasting reports whether a candidate read failed for a reason the image
+// itself gives, rather than the registry or the network.
+func lasting(reason string) bool { return reason == readTooLarge || reason == readNoPlatform }
+
 // readReason words why a candidate read failed.
 func readReason(err error) string {
 	switch {
 	case errors.Is(err, remedy.ErrImageTooLarge):
-		return "it is larger than Varde reads"
+		return readTooLarge
 	case errors.Is(err, remedy.ErrNoPlatform):
-		return "it has no build for the host's platform"
+		return readNoPlatform
 	}
 	return "reading it failed: " + registry.Reason(err)
 }

@@ -131,9 +131,11 @@ func fromDataPackage(in Input, running string) (Status, bool) {
 	case newer:
 		base.TargetTag, base.TargetDigest = fix.Tag, lineDigest(line)
 		return classify(base, in, cand), true
-	case fix.Newest && fix.Tag != "":
-		// The same release as the one running, under another digest: the
-		// release was rebuilt and the running tag pulls the rebuild.
+	case fix.Newest && fix.Tag != "" && fix.Tag == in.Running.Tag:
+		// The very release tag the container runs, under another digest:
+		// the release was rebuilt and the running tag pulls the rebuild.
+		// A data package that read an older release says nothing about
+		// what the running tag points to.
 		ref, err := imageref.Parse(in.Container.ImageRef)
 		if err != nil {
 			return Status{}, false
