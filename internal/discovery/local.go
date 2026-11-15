@@ -219,8 +219,9 @@ func (s *Scanner) ssdp(ctx context.Context, a netip.Addr) (Service, bool) {
 	_ = resp.Body.Close()
 	svc := Service{Port: 1900, Proto: ProtoSSDP, Product: printable(resp.Header.Get("Server"), 96)}
 	if loc, err := url.Parse(resp.Header.Get("Location")); err == nil && (loc.Scheme == "http" || loc.Scheme == "https") && loc.Hostname() == a.String() {
-		if d, ok := s.upnpDescription(ctx, loc.String()); ok {
+		if d, fields, ok := s.upnpDescription(ctx, loc.String()); ok {
 			svc.Product = d
+			svc.Fields = fields
 		}
 	}
 	if svc.Product == "" {
@@ -229,36 +230,47 @@ func (s *Scanner) ssdp(ctx context.Context, a netip.Addr) (Service, bool) {
 	return svc, true
 }
 
-// upnpDescription reads manufacturer and model from a UPnP device
-// description.
-func (s *Scanner) upnpDescription(ctx context.Context, loc string) (string, bool) {
+// upnpDescription reads manufacturer, model and the other stated fields
+// from a UPnP device description.
+func (s *Scanner) upnpDescription(ctx context.Context, loc string) (string, []Field, bool) {
 	ctx, cancel := context.WithTimeout(ctx, 2*localTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loc, nil)
 	if err != nil {
-		return "", false
+		return "", nil, false
 	}
 	client := &http.Client{Transport: s.fingerprintTransport(), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", false
+		return "", nil, false
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", false
+		return "", nil, false
 	}
+	return parseUPnPDescription(resp.Body)
+}
+
+// parseUPnPDescription turns a UPnP device description into the product
+// label and the fields it states. The friendly name is a display name only;
+// it becomes the label when nothing else is stated.
+func parseUPnPDescription(r io.Reader) (string, []Field, bool) {
 	var doc struct {
 		Device struct {
-			FriendlyName string `xml:"friendlyName"`
-			Manufacturer string `xml:"manufacturer"`
-			ModelName    string `xml:"modelName"`
-			ModelNumber  string `xml:"modelNumber"`
+			FriendlyName    string `xml:"friendlyName"`
+			Manufacturer    string `xml:"manufacturer"`
+			ModelName       string `xml:"modelName"`
+			ModelNumber     string `xml:"modelNumber"`
+			SerialNumber    string `xml:"serialNumber"`
+			UDN             string `xml:"UDN"`
+			SoftwareVersion string `xml:"softwareVersion"`
+			FirmwareVersion string `xml:"firmwareVersion"`
 		} `xml:"device"`
 	}
-	dec := xml.NewDecoder(io.LimitReader(resp.Body, descriptionLimit))
+	dec := xml.NewDecoder(io.LimitReader(r, descriptionLimit))
 	dec.Strict = false
 	if err := dec.Decode(&doc); err != nil {
-		return "", false
+		return "", nil, false
 	}
 	d := doc.Device
 	parts := []string{printable(d.Manufacturer, 48), printable(d.ModelName, 64), printable(d.ModelNumber, 32)}
@@ -266,7 +278,16 @@ func (s *Scanner) upnpDescription(ctx context.Context, loc string) (string, bool
 	if label == "" {
 		label = printable(d.FriendlyName, 64)
 	}
-	return label, label != ""
+	var fields []Field
+	fields = addField(fields, FieldManufacturer, d.Manufacturer, TrustStated)
+	fields = addField(fields, FieldModel, d.ModelName, TrustStated)
+	fields = addField(fields, FieldModelNumber, d.ModelNumber, TrustStated)
+	fields = addField(fields, FieldSerial, d.SerialNumber, TrustStated)
+	fields = addField(fields, FieldUUID, strings.TrimPrefix(strings.TrimSpace(d.UDN), "uuid:"), TrustStated)
+	fields = addField(fields, FieldDisplayName, d.FriendlyName, TrustDerived)
+	fields = addField(fields, FieldFirmware, d.SoftwareVersion, TrustStated)
+	fields = addField(fields, FieldFirmware, d.FirmwareVersion, TrustStated)
+	return label, fields, label != ""
 }
 
 // udpExchange sends one datagram and returns the first answer from the

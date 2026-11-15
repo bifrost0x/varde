@@ -110,3 +110,76 @@ func TestLocalDiscoverySilentAndForeign(t *testing.T) {
 		t.Errorf("took %s", time.Since(start))
 	}
 }
+
+const upnpFixture = `<?xml version="1.0"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0"><device>
+<friendlyName>my-nas</friendlyName>
+<manufacturer>UGREEN</manufacturer>
+<modelName>DXP4800 Plus</modelName>
+<modelNumber>DXP4800</modelNumber>
+<serialNumber>SN123</serialNumber>
+<UDN>uuid:abcd-1</UDN>
+<firmwareVersion>1.0.0.1234</firmwareVersion>
+</device></root>`
+
+func TestParseUPnPDescription(t *testing.T) {
+	label, fields, ok := parseUPnPDescription(strings.NewReader(upnpFixture))
+	if !ok || label != "UGREEN DXP4800 Plus DXP4800" {
+		t.Fatalf("label = %q ok = %v", label, ok)
+	}
+	want := []Field{
+		{FieldManufacturer, "UGREEN", TrustStated},
+		{FieldModel, "DXP4800 Plus", TrustStated},
+		{FieldModelNumber, "DXP4800", TrustStated},
+		{FieldSerial, "SN123", TrustStated},
+		{FieldUUID, "abcd-1", TrustStated},
+		{FieldDisplayName, "my-nas", TrustDerived},
+		{FieldFirmware, "1.0.0.1234", TrustStated},
+	}
+	if len(fields) != len(want) {
+		t.Fatalf("fields = %+v", fields)
+	}
+	for _, w := range want {
+		found := false
+		for _, f := range fields {
+			if f == w {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("missing %+v in %+v", w, fields)
+		}
+	}
+}
+
+func TestParseUPnPDescriptionFriendlyNameFallback(t *testing.T) {
+	label, _, ok := parseUPnPDescription(strings.NewReader(`<root><device><friendlyName>box</friendlyName></device></root>`))
+	if !ok || label != "box" {
+		t.Fatalf("label = %q ok = %v", label, ok)
+	}
+}
+
+func TestParseUPnPDescriptionHostile(t *testing.T) {
+	big := `<root><device><manufacturer>` + strings.Repeat("A", 300<<10) + `</manufacturer></device></root>`
+	if _, fields, ok := parseUPnPDescription(strings.NewReader(big)); ok && len(fields) > fieldsPerList {
+		t.Fatalf("unbounded fields: %d", len(fields))
+	}
+
+	ent := `<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x "EXPANDED">]><root><device><modelName>&x;</modelName><manufacturer>Acme</manufacturer></device></root>`
+	_, fields, _ := parseUPnPDescription(strings.NewReader(ent))
+	for _, f := range fields {
+		if strings.Contains(f.Value, "EXPANDED") {
+			t.Fatalf("entity expanded: %+v", f)
+		}
+	}
+
+	bad := "<root><device><modelName>ab\xff\xfecd</modelName><manufacturer>Acme</manufacturer></device></root>"
+	_, fields, ok := parseUPnPDescription(strings.NewReader(bad))
+	if ok {
+		for _, f := range fields {
+			if f.Value != printable(f.Value, 128) {
+				t.Fatalf("value not printable: %q", f.Value)
+			}
+		}
+	}
+}
