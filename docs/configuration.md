@@ -170,9 +170,10 @@ and never sends a credential; a value is cut to 128 characters, at most 32 are k
 - **SNMP**, with the configured community: the object ID of the vendor and, in a second request
   that system-only agents may ignore, the ENTITY-MIB of the chassis (manufacturer, model,
   hardware, firmware and software version, serial number).
-- **Certificate and web page**: issuer, subject and fingerprint of the certificate and whether
-  it is self-signed; the page title and the `Server` header; a hash of `/favicon.ico` (at most
-  64 KiB), not the icon.
+- **Certificate and web page**: the issuer and subject organization and the fingerprint of the
+  certificate and whether it is self-signed (the subject's common name, often a host name under
+  your own domain, is kept as a name only); the page title and the `Server` header; a hash of
+  `/favicon.ico` (at most 64 KiB, and only when the start page answered), not the icon.
 - **SSH**: the host key, read from the key exchange. Varde does not authenticate and sends no
   login attempt.
 - **ARP table**: the MAC address of a host on the same network segment, read from the kernel's
@@ -180,22 +181,24 @@ and never sends a credential; a value is cut to 128 characters, at most 32 are k
 
 A host name, UPnP friendly name, mDNS instance name or SNMP system name is shown as a name and
 never identifies a device. Varde rates each machine from "seen" over "anchored" (a key that
-stays the same across addresses), "class", "model" and "firmware" to "software"; the system page
-shows the level, the fields and what would take it a step further, and the API lists the level
-of each machine. Devices stored by an earlier version show as before until the next scan.
+stays the same across addresses; a machine a source reports is at least anchored), "class",
+"model" and "firmware" to "software"; the system page shows the level, the fields and what
+would take it a step further, the network page links each found device to its page with its
+level, and the API lists the level of each machine. Devices stored by an earlier version show as before until the next scan.
 
-Below the model level the system page offers "Help recognise this device". It opens the
-device issue form of the project in your browser with the evidence filled in, or, when the link
-would be too long, offers the file `GET /systems/{id}/evidence.json` to attach. Varde sends
-nothing itself. The evidence holds the device class, the open ports, the first three octets of
-the MAC address (not for a locally administered address) and the model facts: manufacturer,
-model, model number, firmware, operating system, hardware version, vendor OID, service type,
-system description, certificate issuer and subject, whether it is self-signed, page title,
-`Server` header and favicon hash. It leaves out the address, host name, serial number, UUID, MAC
-address, certificate and host key fingerprints and display names. A kept value is dropped too
-when it contains one of them (also without separators, with a MAC suffix or with the host name
-spelled differently) or any IP address, so a four-part version such as 1.2.3.4 goes as well.
-Read the file before you share it.
+Below the model level the system page shows the evidence in full, exactly as it would be sent,
+and offers "Help recognise this device" and the file `GET /systems/{id}/evidence.json`. The
+button opens the device issue form of the project in your browser with the evidence filled in;
+it is left out when the link would be too long, and the file is always offered to attach. Varde
+sends nothing itself. The evidence holds the device class, its label and level, the open ports,
+the first three octets of the MAC address (not for a locally administered address) and the
+model facts: manufacturer, model, model number, firmware, operating system, hardware version,
+vendor OID, service type, system description, certificate issuer and subject organization,
+whether it is self-signed, page title, `Server` header and favicon hash. It leaves out the
+address, host name, serial number, UUID, MAC address, certificate and host key fingerprints and
+display names. A kept value is dropped too when it contains one of them (also without
+separators, with a MAC suffix or with the host name spelled differently) or any IP address, so
+a four-part version such as 1.2.3.4 goes as well. Read the evidence before you share it.
 
 Each integration can be switched off or removed; removing it deletes the hosts it reported. An
 integration that has not read successfully for three of its intervals (Proxmox every 10 minutes,

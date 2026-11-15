@@ -57,7 +57,9 @@ func TestCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Counts.DeviceCases != 7 || r.Counts.DeviceFieldsWrong != 0 || r.Counts.DeviceLevelWrong != 0 {
+	// Every device case in the corpus is run, and the corpus keeps at least
+	// the seven it started with.
+	if r.Counts.DeviceCases != len(c.Devices) || len(c.Devices) < 7 || r.Counts.DeviceFieldsWrong != 0 || r.Counts.DeviceLevelWrong != 0 {
 		t.Errorf("device cases: %+v", r.Counts)
 	}
 	report := Markdown(r, len(c.Containers), len(c.Topologies), len(c.Packages), len(c.Matching.Cases)+len(c.Distro.Cases))

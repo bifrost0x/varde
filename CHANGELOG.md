@@ -28,10 +28,11 @@ All notable changes to this project are documented here. The format follows
   the certificate, the page title and a favicon hash, the SSH host key (without logging in) and
   the MAC address from the ARP table where Varde runs on the segment. Each machine shows how
   far it is identified, the system page lists the fields, and the API has a `level` on
-  machines.
-- A device Varde does not recognise can be reported: the system page offers an issue link and a
-  download of the evidence, which holds the model facts and drops address, host name, serial
-  number, MAC address and fingerprints. Varde sends nothing itself.
+  machines; where Varde reads the ARP table, a device's services in the API include an `arp`
+  entry with port 0.
+- A device Varde does not recognise can be reported: the system page shows the evidence and
+  offers an issue link and a download of it. The evidence holds the model facts and drops
+  address, host name, serial number, MAC address and fingerprints. Varde sends nothing itself.
 - The data package carries the security fixes that projects name only in their release notes
   (ADR 0044). For apps whose advisories are not complete, a version below such a release gets
   a finding to check yourself, with the release that fixes it and the lines of the notes that
