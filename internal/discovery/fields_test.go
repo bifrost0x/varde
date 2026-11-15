@@ -4,6 +4,7 @@ package discovery
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -43,5 +44,21 @@ func TestDeviceFieldsDeduplicated(t *testing.T) {
 	}}
 	if got := d.Fields(); len(got) != 2 {
 		t.Fatalf("got %v, want 2 fields", got)
+	}
+}
+
+// The evaluation corpus writes fields in YAML; the keys are part of that
+// format and must not follow a rename of the Go fields.
+func TestFieldTags(t *testing.T) {
+	typ := reflect.TypeFor[Field]()
+	for i := range typ.NumField() {
+		f := typ.Field(i)
+		want := strings.ToLower(f.Name)
+		if got := f.Tag.Get("yaml"); got != want {
+			t.Errorf("%s: yaml tag %q, want %q", f.Name, got, want)
+		}
+		if got := f.Tag.Get("json"); got != want {
+			t.Errorf("%s: json tag %q, want %q", f.Name, got, want)
+		}
 	}
 }

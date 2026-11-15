@@ -62,7 +62,9 @@ func Anchors(d Device, shared map[string]bool) []string {
 			add("uuid:" + strings.ToLower(f.Value))
 		case FieldSerial:
 			if manufacturer != "" {
-				add("serial:" + manufacturer + "/" + f.Value)
+				// Protocols of one device spell the maker in different
+				// letter case; the serial itself is kept as stated.
+				add("serial:" + strings.ToLower(manufacturer) + "/" + f.Value)
 			}
 		case FieldSSHHostKey:
 			add("ssh:" + f.Value)
@@ -174,7 +176,7 @@ func mdnsClass(typ string) bool {
 func NextStep(l Level) string {
 	switch l {
 	case LevelSeen:
-		return "Varde sees only an address. Run Varde on the same network segment, or connect the router, so it can read the device's MAC."
+		return "Varde sees only an address. Run Varde on the same network segment so it can read the device's MAC."
 	case LevelAnchored, LevelClass, LevelModel:
 		return "Help recognise this device: send its evidence, and the next data package names it for everyone."
 	case LevelFirmware:

@@ -14,9 +14,9 @@ const (
 
 // Field is one typed fact a device stated about itself.
 type Field struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-	Trust Trust  `json:"trust"`
+	Name  string `json:"name" yaml:"name"`
+	Value string `json:"value" yaml:"value"`
+	Trust Trust  `json:"trust" yaml:"trust"`
 }
 
 // Field names. Readers use these and nothing else.

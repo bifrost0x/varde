@@ -50,6 +50,9 @@ func TestLevelStringAndNextStep(t *testing.T) {
 			t.Errorf("Level(%d) = %q, want %q", i, got, n)
 		}
 	}
+	if got, want := NextStep(LevelSeen), "Varde sees only an address. Run Varde on the same network segment so it can read the device's MAC."; got != want {
+		t.Errorf("seen: %q", got)
+	}
 	if NextStep(LevelSoftware) != "" {
 		t.Error("software has a next step")
 	}
@@ -93,7 +96,13 @@ func TestAnchorKeys(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	d = dev(KindOther, st(FieldManufacturer, "UGREEN"), st(FieldSerial, "S1"))
-	if got := Anchors(d, nil); !reflect.DeepEqual(got, []string{"serial:UGREEN/S1"}) {
+	if got := Anchors(d, nil); !reflect.DeepEqual(got, []string{"serial:ugreen/S1"}) {
 		t.Fatalf("serial: %v", got)
+	}
+	// The same device states its maker in other letter case on another
+	// protocol; the key must not change with it.
+	other := dev(KindOther, st(FieldManufacturer, "Ugreen"), st(FieldSerial, "S1"))
+	if a, b := Anchors(d, nil), Anchors(other, nil); !reflect.DeepEqual(a, b) {
+		t.Errorf("UGREEN %v and Ugreen %v give different keys", a, b)
 	}
 }
