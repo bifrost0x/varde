@@ -153,7 +153,9 @@ func (s *Scanner) mdns(ctx context.Context, a netip.Addr) (Service, bool) {
 	if len(types) == 0 {
 		return Service{}, false
 	}
-	return Service{Port: 5353, Proto: ProtoMDNS, Product: mdnsLabel(types)}, true
+	to := netip.AddrPortFrom(a, portOr(s.mdnsPort, 5353))
+	fields := mdnsTypeFields(s.mdnsInfoFields(ctx, to, types), types)
+	return Service{Port: 5353, Proto: ProtoMDNS, Product: mdnsLabel(types), Fields: fields}, true
 }
 
 // mdnsServiceTypes reads the service types of an enumeration answer.
@@ -396,7 +398,7 @@ func (s *Scanner) multicast(ctx context.Context) map[netip.Addr]Service {
 		case portOr(s.mdnsPort, 5353):
 			if types := mdnsServiceTypes(msg); len(types) > 0 {
 				if prev, ok := out[a]; !ok || prev.Proto != ProtoMDNS {
-					out[a] = Service{Port: 5353, Proto: ProtoMDNS, Product: mdnsLabel(types)}
+					out[a] = Service{Port: 5353, Proto: ProtoMDNS, Product: mdnsLabel(types), Fields: mdnsTypeFields(nil, types)}
 				}
 			}
 		case portOr(s.ssdpPort, 1900):
