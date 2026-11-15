@@ -84,6 +84,31 @@ func TestCertFields(t *testing.T) {
 	}
 }
 
+func TestCertFieldsSelfSignedLeaf(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(7),
+		Subject:      pkix.Name{Organization: []string{"UGREEN"}},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fieldValue(certFields(c), FieldCertSelfSigned); got != "true" {
+		t.Errorf("self-signed leaf: self_signed = %q", got)
+	}
+}
+
 func TestPageFields(t *testing.T) {
 	fs := pageFields("UGOS Pro", "nginx")
 	if fieldValue(fs, FieldHTTPTitle) != "UGOS Pro" || fieldValue(fs, FieldHTTPServer) != "nginx" {

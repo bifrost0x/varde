@@ -22,7 +22,7 @@ func certFields(c *x509.Certificate) []Field {
 	fs = addField(fs, FieldCertSubject, orgOrCN(c.Subject.Organization, c.Subject.CommonName), TrustDerived)
 	sum := sha256.Sum256(c.Raw)
 	fs = addField(fs, FieldCertFingerprint, hex.EncodeToString(sum[:]), TrustStated)
-	if string(c.RawIssuer) == string(c.RawSubject) && c.CheckSignatureFrom(c) == nil {
+	if string(c.RawIssuer) == string(c.RawSubject) && c.CheckSignature(c.SignatureAlgorithm, c.RawTBSCertificate, c.Signature) == nil {
 		fs = addField(fs, FieldCertSelfSigned, "true", TrustStated)
 	}
 	return fs

@@ -524,7 +524,9 @@ func (s *Scanner) readHTTP(ctx context.Context, target string, tlsOn bool, svc *
 		issuer = strings.Join(append(c.Issuer.Organization, c.Issuer.CommonName), " ")
 	}
 	svc.Product = productFromHTTP(title, resp.Header.Get("Server"), issuer)
-	svc.Fields = pageFields(title, resp.Header.Get("Server"))
+	for _, f := range pageFields(title, resp.Header.Get("Server")) {
+		svc.Fields = addField(svc.Fields, f.Name, f.Value, f.Trust)
+	}
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		for _, f := range certFields(resp.TLS.PeerCertificates[0]) {
 			svc.Fields = addField(svc.Fields, f.Name, f.Value, f.Trust)
