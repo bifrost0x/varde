@@ -184,3 +184,19 @@ func TestMachineLevelIgnoresStaleRows(t *testing.T) {
 		t.Errorf("moved device: %q", got)
 	}
 }
+
+// A stored host is an anchor of its own (host: and mid: keys), so a machine
+// with one is at least anchored even without a scanned device; reading
+// software stays reserved for sources that read workloads.
+func TestMachineLevelOfStoredHost(t *testing.T) {
+	in := MachineInput{
+		Scope: scope(t),
+		Hosts: []inventory.Host{
+			{ID: "pve-a-1", Name: "guest", Kind: inventory.HostProxmoxGuest, Source: inventory.SourceProxmox, IntegrationID: "a", OS: "LXC container"},
+		},
+		Integrations: []store.Integration{{ID: "a", Enabled: true}},
+	}
+	if got := byID(Machines(in))["pve-a-1"].Level; got != "anchored" {
+		t.Errorf("Proxmox guest without a scanned device: %q, want anchored", got)
+	}
+}

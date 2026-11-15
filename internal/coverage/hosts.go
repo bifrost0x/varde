@@ -95,7 +95,7 @@ type Machine struct {
 	LastSeen  time.Time `json:"last_seen"`
 	// Level says how far the machine is identified: "software" where a
 	// source reads what runs on it, else the level of its scanned device,
-	// "seen" without one.
+	// at least "anchored" with a stored host and "seen" without either.
 	Level string `json:"level"`
 	// Self marks the machine Varde runs on.
 	Self bool `json:"self,omitempty"`
@@ -431,7 +431,8 @@ func overlaps(a, b map[string]bool) bool {
 
 func build(us []unit, workloads map[string]int, shared map[string]bool) Machine {
 	sort.SliceStable(us, func(i, j int) bool { return sourceRank[us[i].ev.Source] < sourceRank[us[j].ev.Source] })
-	m := Machine{State: MachineSeen, Level: discovery.LevelSeen.String()}
+	m := Machine{State: MachineSeen}
+	level := discovery.LevelSeen
 	addrSeen := map[string]bool{}
 	var reading, stale, pausedOnly bool
 	for _, u := range us {
@@ -470,11 +471,11 @@ func build(us []unit, workloads map[string]int, shared map[string]bool) Machine 
 				m.OS = u.host.OS
 			}
 		}
-		if u.dev != nil && m.Level != discovery.LevelSoftware.String() {
-			m.Level = discovery.DeviceLevel(u.dev.Device, shared).String()
+		if u.dev != nil && level != discovery.LevelSoftware {
+			level = discovery.DeviceLevel(u.dev.Device, shared)
 		}
 		if u.ev.ReadsWorkloads {
-			m.Level = discovery.LevelSoftware.String()
+			level = discovery.LevelSoftware
 			switch u.ev.State {
 			case EvidenceActive:
 				reading = true
@@ -485,6 +486,12 @@ func build(us []unit, workloads map[string]int, shared map[string]bool) Machine 
 			}
 		}
 	}
+	// A stored host is an anchor itself: its record (host:) and any
+	// machine ID (mid:) keep the machine apart from its addresses.
+	if len(m.HostIDs) > 0 && level < discovery.LevelAnchored {
+		level = discovery.LevelAnchored
+	}
+	m.Level = level.String()
 	switch {
 	case reading:
 		m.State = MachineInventoried
