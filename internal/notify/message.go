@@ -54,9 +54,15 @@ type Item struct {
 	Priority       policy.Priority `json:"priority"`
 	PriorityReason string          `json:"priority_reason,omitempty"`
 	MatchState     string          `json:"match_state"`
-	// Image marks a package of a container's image: a newer image fixes
-	// it (ADR 0033).
+	// Image marks a package of a container's image: an image built with
+	// the fixed package fixes it (ADR 0033).
 	Image bool `json:"image,omitempty"`
+	// ImageAction is what to do about an image finding, from what Varde
+	// knows about a newer image (ADR 0045); ImageUpdate the tag of an
+	// image that fixes it, when Varde knows one. Empty when the analysis
+	// decided nothing about the image.
+	ImageAction string `json:"image_action,omitempty"`
+	ImageUpdate string `json:"image_update,omitempty"`
 	// PathClass and PathReason relate the finding to the attack paths
 	// (ADR 0034).
 	PathClass  string `json:"path_class,omitempty"`
@@ -207,8 +213,10 @@ func writeItem(b *strings.Builder, it Item, verbose bool) {
 		fmt.Fprintf(b, "Attack path: %s\n", clean(it.PathReason, 200))
 	}
 	switch {
+	case it.Image && it.ImageAction != "":
+		fmt.Fprintf(b, "Action: %s\n", clean(it.ImageAction, 300))
 	case it.FixedIn != "" && it.Image:
-		fmt.Fprintf(b, "Action: pull a newer image whose %s is %s or later and recreate the container\n", clean(packageName(it), 128), clean(it.FixedIn, 64))
+		fmt.Fprintf(b, "Action: the fix needs an image built with %s %s or later; Varde has not compared newer images yet\n", clean(packageName(it), 128), clean(it.FixedIn, 64))
 	case it.Update != "" && it.Update != it.FixedIn:
 		fmt.Fprintf(b, "Action: update to %s (this advisory is fixed from %s on)\n", clean(it.Update, 64), clean(it.FixedIn, 64))
 	case it.FixedIn != "":
@@ -232,7 +240,12 @@ func headline(it Item) string {
 			break
 		}
 	}
-	if it.FixedIn != "" {
+	switch {
+	case it.Image && it.ImageUpdate != "":
+		return s + ", update the image to " + it.ImageUpdate
+	case it.Image && it.FixedIn != "":
+		return s + ", fixed in " + packageName(it) + " " + it.FixedIn
+	case it.FixedIn != "":
 		return s + ", update to " + it.FixedIn
 	}
 	return s

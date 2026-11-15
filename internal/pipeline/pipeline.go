@@ -67,6 +67,9 @@ type Options struct {
 	Scope func() discovery.Scope
 	// BaseURL, when set, is used to link findings in notifications.
 	BaseURL string
+	// RegistryChecks reads the setting that lets Varde ask registries;
+	// the upstream status says so when they are off (ADR 0045).
+	RegistryChecks func() bool
 }
 
 // Pipeline analyses the inventory.
@@ -269,7 +272,7 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 	if err := p.store.ApplySuppressions(ctx, start); err != nil {
 		return Summary{}, err
 	}
-	if err := p.assess(ctx, ws); err != nil {
+	if err := p.assess(ctx, ws, results); err != nil {
 		return Summary{}, err
 	}
 
@@ -288,7 +291,7 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 }
 
 // assess computes exposure and priority for every non-resolved finding.
-func (p *Pipeline) assess(ctx context.Context, ws []inventory.Workload) error {
+func (p *Pipeline) assess(ctx context.Context, ws []inventory.Workload, results []identify.Result) error {
 	fs, err := p.store.Findings(ctx, store.FindingFilter{})
 	if err != nil {
 		return err
@@ -331,13 +334,24 @@ func (p *Pipeline) assess(ctx context.Context, ws []inventory.Workload) error {
 		})
 		pl := res.Placements[f.ID]
 		prio, reason = pathPriority(prio, reason, pl, m, e.Exposure)
+		prio, reason = componentPriority(prio, reason, m, imagePackageName(f.AppID), byID[f.WorkloadID].Container, e.Exposure)
 		as = append(as, store.Assessment{ID: f.ID, Priority: string(prio), Reason: reason, Exposure: string(e.Exposure), ExposureEvidence: e.Evidence,
 			PathClass: string(pl.Class), PathReason: pl.Reason})
 	}
 	if err := p.store.SetAssessments(ctx, as); err != nil {
 		return err
 	}
-	return p.store.ReplacePaths(ctx, res.Paths, p.now())
+	if err := p.store.ReplacePaths(ctx, res.Paths, p.now()); err != nil {
+		return err
+	}
+	ids := make(map[string]identify.Result, len(results))
+	for _, r := range results {
+		ids[r.WorkloadID] = r
+	}
+	if err := p.assessUpstream(ctx, ws, hosts, fs, details, ids); err != nil {
+		return fmt.Errorf("upstream status: %w", err)
+	}
+	return nil
 }
 
 // Candidates returns all non-resolved findings prepared for notification
@@ -372,6 +386,7 @@ func (p *Pipeline) Candidates(ctx context.Context) ([]notify.Candidate, error) {
 	for _, h := range hosts {
 		hostName[h.ID] = h.Name
 	}
+	ups := p.upstreamStatuses(ctx)
 	out := make([]notify.Candidate, 0, len(fs))
 	for _, f := range fs {
 		var m match.Finding
@@ -395,6 +410,9 @@ func (p *Pipeline) Candidates(ctx context.Context) ([]notify.Candidate, error) {
 		}
 		if m.Step != nil && !m.Image {
 			it.Update = m.Step.Version
+		}
+		if st, ok := ups[f.WorkloadID]; ok && m.Image {
+			it.ImageAction, it.ImageUpdate = imageAction(st, m)
 		}
 		if p.opts.BaseURL != "" {
 			it.FindingURL = strings.TrimRight(p.opts.BaseURL, "/") + "/findings/" + f.ID
