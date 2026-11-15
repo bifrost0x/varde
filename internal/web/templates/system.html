@@ -34,6 +34,19 @@
   </section>
 </div>
 
+{{with $d.Device}}
+<section class="panel" aria-labelledby="device-title">
+  <div class="panel__head"><h2 id="device-title">What the device states</h2><span class="badge badge--muted">{{.Level}}</span></div>
+  {{if .Stated}}<dl class="evidence">{{range .Stated}}<dt>{{.Label}}</dt><dd class="mono">{{.Value}}</dd>{{end}}</dl>{{else}}<p class="muted small">The device states nothing about itself that Varde can read.</p>{{end}}
+  {{if .Derived}}<h3>Recognised from its web interface</h3><dl class="evidence">{{range .Derived}}<dt>{{.Label}}</dt><dd class="mono">{{.Value}}</dd>{{end}}</dl>{{end}}
+  {{if .Names}}<h3>Names (not used to identify it)</h3><dl class="evidence">{{range .Names}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}</dl>{{end}}
+  <p class="small">{{.Identity}}</p>
+  {{if .NextStep}}<p class="small">{{.NextStep}}</p>{{end}}
+  {{if .Help}}<p>{{if .IssueURL}}<a class="btn btn--primary" href="{{.IssueURL}}" target="_blank" rel="noopener">Help recognise this device</a> {{end}}<a class="btn" href="/systems/{{$m.ID}}/evidence.json">Download its evidence</a></p>{{end}}
+  <p class="small muted">Varde sends nothing by itself. Look at the evidence before you share it.</p>
+</section>
+{{end}}
+
 {{if $d.Apps}}
 <section class="panel" aria-labelledby="apps-title">
   <h2 id="apps-title">Apps</h2>

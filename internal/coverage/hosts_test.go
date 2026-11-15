@@ -146,3 +146,25 @@ func TestAssessWorkloads(t *testing.T) {
 			c.Total, len(c.NotApps), len(c.NotInCatalog), len(c.PublicRoutes), c.BlindSpots())
 	}
 }
+
+func TestMachineLevel(t *testing.T) {
+	d := device("10.10.1.20", "")
+	d.Services = []discovery.Service{{Port: 80, Proto: discovery.ProtoARP, Fields: []discovery.Field{{Name: discovery.FieldMAC, Value: "02:aa:bb:cc:dd:ee", Trust: discovery.TrustStated}}}}
+	d.Kind = discovery.KindOther
+	in := MachineInput{
+		Scope:   scope(t, "10.10.1.0/24"),
+		Hosts:   []inventory.Host{{ID: "agent-1", Name: "far", Kind: inventory.HostDocker, Source: inventory.SourceAgent, Addresses: []string{"10.10.1.30"}}},
+		Devices: []store.StoredDevice{d, device("10.10.1.30", ""), device("10.10.1.40", "")},
+	}
+	in.Devices[2].Kind = discovery.KindOther
+	ms := byID(Machines(in))
+	if got := ms["agent-1"].Level; got != "software" {
+		t.Errorf("host reading workloads: %q", got)
+	}
+	if got := ms["device:10.10.1.20"].Level; got != "anchored" {
+		t.Errorf("device with a MAC: %q", got)
+	}
+	if got := ms["device:10.10.1.40"].Level; got != "seen" {
+		t.Errorf("bare device: %q", got)
+	}
+}

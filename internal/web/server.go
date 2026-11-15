@@ -149,6 +149,7 @@ func New(d Deps) (http.Handler, error) {
 	// Systems: what runs where.
 	mux.Handle("GET /systems", a.user(a.systems))
 	mux.Handle("GET /systems/{id}", a.user(a.system))
+	mux.Handle("GET /systems/{id}/evidence.json", a.user(a.evidence))
 	mux.Handle("GET /systems/apps", a.user(a.inventory))
 	mux.Handle("POST /systems/apps/manual", a.user(a.addManual))
 	mux.Handle("POST /systems/apps/{id}/delete", a.user(a.removeManual))

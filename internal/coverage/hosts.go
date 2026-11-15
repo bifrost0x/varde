@@ -93,6 +93,10 @@ type Machine struct {
 	Workloads int       `json:"workloads"`
 	State     string    `json:"state"`
 	LastSeen  time.Time `json:"last_seen"`
+	// Level says how far the machine is identified: "software" where a
+	// source reads what runs on it, else the level of its scanned device,
+	// "seen" without one.
+	Level string `json:"level"`
 	// Self marks the machine Varde runs on.
 	Self bool `json:"self,omitempty"`
 	// MACs and MachineID are identity keys reported by the sources.
@@ -325,9 +329,14 @@ func Machines(in MachineInput) []Machine {
 		}
 		groups[r] = append(groups[r], units[i])
 	}
+	devs := make([]discovery.Device, len(in.Devices))
+	for i, d := range in.Devices {
+		devs[i] = d.Device
+	}
+	shared := discovery.SharedKeys(devs)
 	out := make([]Machine, 0, len(roots))
 	for _, r := range roots {
-		out = append(out, build(groups[r], in.Workloads))
+		out = append(out, build(groups[r], in.Workloads, shared))
 	}
 	resolveParents(out)
 	sort.SliceStable(out, func(i, j int) bool {
@@ -411,9 +420,9 @@ func overlaps(a, b map[string]bool) bool {
 	return false
 }
 
-func build(us []unit, workloads map[string]int) Machine {
+func build(us []unit, workloads map[string]int, shared map[string]bool) Machine {
 	sort.SliceStable(us, func(i, j int) bool { return sourceRank[us[i].ev.Source] < sourceRank[us[j].ev.Source] })
-	m := Machine{State: MachineSeen}
+	m := Machine{State: MachineSeen, Level: discovery.LevelSeen.String()}
 	addrSeen := map[string]bool{}
 	var reading, stale, pausedOnly bool
 	for _, u := range us {
@@ -452,7 +461,11 @@ func build(us []unit, workloads map[string]int) Machine {
 				m.OS = u.host.OS
 			}
 		}
+		if u.dev != nil && m.Level != discovery.LevelSoftware.String() {
+			m.Level = discovery.DeviceLevel(u.dev.Device, shared).String()
+		}
 		if u.ev.ReadsWorkloads {
+			m.Level = discovery.LevelSoftware.String()
 			switch u.ev.State {
 			case EvidenceActive:
 				reading = true
