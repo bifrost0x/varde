@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bifrost0x/varde/internal/inventory"
+	"github.com/bifrost0x/varde/internal/paths"
 )
 
 const (
@@ -301,5 +302,29 @@ func runtimeOf(ci ContainerInspect) *inventory.Runtime {
 	if len(rt.NetworkMode) > 128 {
 		rt.NetworkMode = rt.NetworkMode[:128]
 	}
+	rt.Command = commandOf(ci.Path, ci.Args)
 	return rt
+}
+
+// Bounds of a kept command: enough to find the program behind wrappers.
+const (
+	maxCommandArgs = 8
+	maxCommandArg  = 256
+)
+
+// commandOf is what Varde keeps of the process a container runs: the
+// wrappers before the program and the program, never its arguments, which
+// may carry credentials (paths.CommandPrefix).
+func commandOf(path string, args []string) []string {
+	var out []string
+	for _, a := range paths.CommandPrefix(append([]string{path}, args...)) {
+		if len(out) == maxCommandArgs {
+			break
+		}
+		if len(a) > maxCommandArg {
+			a = a[:maxCommandArg]
+		}
+		out = append(out, a)
+	}
+	return out
 }

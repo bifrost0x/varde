@@ -7,8 +7,13 @@
 <section class="hero hero--alert" aria-labelledby="status-title">
   <img class="hero__mark" src="/static/brand/mark.svg" alt="">
   <div>
+    {{if $d.Apps.Now}}
     <h1 class="hero__title" id="status-title">{{if eq $d.Apps.Now 1}}1 app needs an update now{{else}}{{$d.Apps.Now}} apps need an update now{{end}}</h1>
-    <p class="hero__text">{{if eq $d.Apps.Now 1}}It is{{else}}They are{{end}} reachable or already being exploited. Each card names the one update that fixes it; install it and Varde clears the card by itself.</p>
+    <p class="hero__text">{{if eq $d.Apps.Now 1}}It is{{else}}They are{{end}} reachable or already being exploited. Each card names the one update that fixes it; install it and Varde clears the card by itself.{{if $d.Apps.Mitigate}} {{plural $d.Apps.Mitigate "more app"}} {{if eq $d.Apps.Mitigate 1}}is{{else}}are{{end}} just as urgent, but no update fixes {{if eq $d.Apps.Mitigate 1}}it{{else}}them{{end}} yet.{{end}}</p>
+    {{else}}
+    <h1 class="hero__title" id="status-title">{{if eq $d.Apps.Mitigate 1}}1 app needs attention now{{else}}{{$d.Apps.Mitigate}} apps need attention now{{end}}</h1>
+    <p class="hero__text">{{if eq $d.Apps.Mitigate 1}}It is{{else}}They are{{end}} reachable or already being exploited, and no update fixes {{if eq $d.Apps.Mitigate 1}}it{{else}}them{{end}} yet. Each card says how to limit the risk until one does.</p>
+    {{end}}
   </div>
 </section>
 {{else if $d.NotUrgent}}
@@ -42,6 +47,7 @@
 {{if not $d.Empty}}
 <nav class="chips" aria-label="Apps by what they need">
   {{if $d.Apps.Now}}<a class="chip chip--now" href="#now"><strong>{{$d.Apps.Now}}</strong> update now</a>{{end}}
+  {{if $d.Apps.Mitigate}}<a class="chip chip--now" href="#mitigate"><strong>{{$d.Apps.Mitigate}}</strong> mitigate now</a>{{end}}
   {{if $d.Apps.Soon}}<a class="chip chip--soon" href="#soon"><strong>{{$d.Apps.Soon}}</strong> update soon</a>{{end}}
   {{if $d.Apps.Later}}<a class="chip chip--later" href="#later"><strong>{{$d.Apps.Later}}</strong> with the next update</a>{{end}}
   {{if $d.Apps.Check}}<a class="chip chip--check" href="#check"><strong>{{$d.Apps.Check}}</strong> to check yourself</a>{{end}}

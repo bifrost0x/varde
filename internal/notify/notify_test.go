@@ -596,8 +596,20 @@ func TestImageFindingAction(t *testing.T) {
 		Version: "2.36-9", AdvisoryID: "DEBIAN-CVE-2023-4911", FixedIn: "2.36-9+deb12u3", Priority: policy.P3, MatchState: "affected", Image: true}
 	d, ok := Digest(KindDigestWeekly, []Item{it}, nil, nil, nil)
 	if !ok || !strings.Contains(d.Body, "glibc (Debian 12 package) in the image of immich_server on nas, version 2.36-9") ||
-		!strings.Contains(d.Body, "pull a newer image whose glibc is 2.36-9+deb12u3 or later and recreate the container") {
+		!strings.Contains(d.Body, "the fix needs an image built with glibc 2.36-9+deb12u3 or later") || strings.Contains(d.Body, "pull a newer image") {
 		t.Fatalf("digest:\n%s", d.Body)
+	}
+	// With an upstream status the action is what Varde knows of a newer
+	// image.
+	it.ImageAction = "no fixed image upstream yet: limit who can reach the container, or build an image with the package updates"
+	it.Priority = policy.P1
+	m := Immediate([]Item{it})
+	if !strings.Contains(m.Body, "Action: no fixed image upstream yet") || strings.Contains(m.Title, "update to") {
+		t.Fatalf("message %q:\n%s", m.Title, m.Body)
+	}
+	it.ImageAction, it.ImageUpdate = "update the image to v1.121.0 and recreate the container (fixes 3 of 4 flaws in its packages)", "v1.121.0"
+	if m = Immediate([]Item{it}); !strings.Contains(m.Title, "update the image to v1.121.0") {
+		t.Fatalf("message %q", m.Title)
 	}
 }
 

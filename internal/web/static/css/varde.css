@@ -492,6 +492,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 
 .app__dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); background: transparent; }
 .app__dot--now { background: var(--ember); border-color: var(--ember); box-shadow: 0 0 0 4px var(--glow); }
+.app__dot--mitigate { background: transparent; border-color: var(--ember); box-shadow: 0 0 0 4px var(--glow); }
 .app__dot--soon { background: var(--amber); border-color: var(--amber); }
 .app__dot--later { background: var(--info); border-color: var(--info); }
 .app__dot--ok { background: var(--ok); border-color: var(--ok); }
@@ -509,6 +510,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   border-left: 4px solid var(--border-strong);
 }
 .app--now { border-left-color: var(--ember); box-shadow: var(--shadow); }
+.app--mitigate { border-left-color: var(--ember); border-left-style: dashed; box-shadow: var(--shadow); }
 .app--soon { border-left-color: var(--amber); }
 .app--later { border-left-color: var(--info); }
 .app__head { display: flex; align-items: center; gap: 10px; }
@@ -518,7 +520,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .app__title strong { font-size: 17px; }
 .app__sub { display: block; font-size: var(--fs-xs); color: var(--text-muted); }
 .app__state { flex: none; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted); white-space: nowrap; }
-.app--now .app__state, .apphead--now .app__state { color: var(--ember); }
+.app--now .app__state, .apphead--now .app__state, .app--mitigate .app__state, .apphead--mitigate .app__state { color: var(--ember); }
 .app__why { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
 .app__action { margin: 0; }
 .app .secret { margin: 0; }

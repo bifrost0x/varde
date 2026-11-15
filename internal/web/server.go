@@ -153,6 +153,7 @@ func New(d Deps) (http.Handler, error) {
 	mux.Handle("POST /systems/apps/manual", a.user(a.addManual))
 	mux.Handle("POST /systems/apps/{id}/delete", a.user(a.removeManual))
 	mux.Handle("GET /apps/{id}", a.user(a.appPage))
+	mux.Handle("POST /apps/{id}/snooze-upstream", a.user(a.snoozeUpstream))
 	mux.Handle("GET /systems/gaps", a.user(a.coverage))
 	mux.Handle("GET /systems/gaps/unrecognised.txt", a.user(a.unrecognised))
 	mux.Handle("POST /systems/gaps/not-an-app", a.user(a.markNotAnApp))
@@ -354,35 +355,36 @@ func (a *app) page(w http.ResponseWriter, r *http.Request, cur *auth.Current, st
 // notices are fixed messages selected by code, so no request data is
 // reflected into the page.
 var notices = map[string]string{
-	"saved":           "Settings saved.",
-	"uplink":          "Uplink switched on.",
-	"uplink-off":      "Uplink switched off.",
-	"package":         "Data package updated.",
-	"package-current": "The data package is already current.",
-	"ack":             "Finding acknowledged.",
-	"snoozed":         "Finding snoozed.",
-	"reopened":        "Finding reopened.",
-	"suppressed":      "Advisory suppressed.",
-	"unsuppressed":    "Suppression lifted. The findings it covered are open again.",
-	"manual-added":    "Manual entry added.",
-	"manual-gone":     "Manual entry removed.",
-	"not-an-app":      "Marked as not an app. It no longer counts as a gap.",
-	"is-an-app":       "Mark removed. The container counts as a gap again.",
-	"scope":           "Network ranges saved.",
-	"scan-started":    "Scan started. This page updates until it is done.",
-	"connected":       "Connected. The inventory appears within a minute.",
-	"removed":         "Integration removed with the hosts it reported.",
-	"enabled":         "Integration switched on.",
-	"disabled":        "Integration switched off.",
-	"synced":          "Collection started.",
-	"not-running":     "The integration is switched off. Switch it on to read it.",
-	"scan":            "Check started. Results appear within a minute.",
-	"test-sent":       "Test notification sent.",
-	"test-failed":     "Test notification failed. The notification log has details.",
-	"token-revoked":   "Token revoked.",
-	"user-added":      "User added.",
-	"user-deleted":    "User deleted.",
-	"password":        "Password changed. Other sessions were signed out.",
+	"saved":            "Settings saved.",
+	"uplink":           "Uplink switched on.",
+	"uplink-off":       "Uplink switched off.",
+	"package":          "Data package updated.",
+	"package-current":  "The data package is already current.",
+	"ack":              "Finding acknowledged.",
+	"snoozed":          "Finding snoozed.",
+	"snoozed-upstream": "Snoozed until a fixed image appears. The flaws come back by themselves once one does, or after 180 days.",
+	"reopened":         "Finding reopened.",
+	"suppressed":       "Advisory suppressed.",
+	"unsuppressed":     "Suppression lifted. The findings it covered are open again.",
+	"manual-added":     "Manual entry added.",
+	"manual-gone":      "Manual entry removed.",
+	"not-an-app":       "Marked as not an app. It no longer counts as a gap.",
+	"is-an-app":        "Mark removed. The container counts as a gap again.",
+	"scope":            "Network ranges saved.",
+	"scan-started":     "Scan started. This page updates until it is done.",
+	"connected":        "Connected. The inventory appears within a minute.",
+	"removed":          "Integration removed with the hosts it reported.",
+	"enabled":          "Integration switched on.",
+	"disabled":         "Integration switched off.",
+	"synced":           "Collection started.",
+	"not-running":      "The integration is switched off. Switch it on to read it.",
+	"scan":             "Check started. Results appear within a minute.",
+	"test-sent":        "Test notification sent.",
+	"test-failed":      "Test notification failed. The notification log has details.",
+	"token-revoked":    "Token revoked.",
+	"user-added":       "User added.",
+	"user-deleted":     "User deleted.",
+	"password":         "Password changed. Other sessions were signed out.",
 }
 
 // newP1 counts P1 findings nobody has acknowledged yet; they light the

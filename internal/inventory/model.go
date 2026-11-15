@@ -260,6 +260,11 @@ type Runtime struct {
 	PidMode     string   `json:"pid_mode,omitempty"`
 	User        string   `json:"user,omitempty"`
 	Devices     int      `json:"devices,omitempty"`
+	// Command is the program the container runs and the wrappers before
+	// it (tini, sh, entrypoint scripts), without any argument: it tells
+	// which package of the image serves what the container exposes.
+	// Records from before it was kept have none.
+	Command []string `json:"command,omitempty"`
 }
 
 // Mount is a volume or bind mount of a container. A bind of the Docker

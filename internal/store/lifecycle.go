@@ -71,7 +71,7 @@ func (s *Store) SetAssessments(ctx context.Context, as []Assessment) error {
 // Acknowledge marks an open or snoozed finding as acknowledged.
 func (s *Store) Acknowledge(ctx context.Context, id string, now time.Time) error {
 	return s.transition(ctx, id, []string{StateOpen, StateSnoozed},
-		`UPDATE findings SET state = 'acknowledged', acknowledged_at = ?, snoozed_until = NULL, last_changed = ? WHERE id = ?`,
+		`UPDATE findings SET state = 'acknowledged', acknowledged_at = ?, snoozed_until = NULL, snooze_upstream = 0, last_changed = ? WHERE id = ?`,
 		millis(now), millis(now), id)
 }
 
@@ -81,14 +81,73 @@ func (s *Store) Snooze(ctx context.Context, id string, until, now time.Time) err
 		return fmt.Errorf("%w: snooze end must be in the future", ErrInvalidState)
 	}
 	return s.transition(ctx, id, []string{StateOpen, StateAcknowledged, StateSnoozed},
-		`UPDATE findings SET state = 'snoozed', snoozed_until = ?, last_changed = ? WHERE id = ?`,
+		`UPDATE findings SET state = 'snoozed', snoozed_until = ?, snooze_upstream = 0, last_changed = ? WHERE id = ?`,
 		millis(until), millis(now), id)
+}
+
+// MaxUpstreamSnooze bounds a snooze until a fixed image appears: an image
+// that is never rebuilt must not silence a finding for good.
+const MaxUpstreamSnooze = 180 * 24 * time.Hour
+
+// SnoozeUntilUpstream hides open findings of one workload until an image
+// that fixes them appears (WakeUpstreamSnoozes), at most MaxUpstreamSnooze.
+// Only open and acknowledged findings move; it returns how many did.
+func (s *Store) SnoozeUntilUpstream(ctx context.Context, workloadID string, ids []string, now time.Time) (int, error) {
+	n := 0
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		stmt, err := tx.PrepareContext(ctx, `UPDATE findings SET state = 'snoozed', snoozed_until = ?, snooze_upstream = 1, last_changed = ?
+			WHERE id = ? AND workload_id = ? AND state IN ('open', 'acknowledged')`)
+		if err != nil {
+			return fmt.Errorf("prepare upstream snooze: %w", err)
+		}
+		defer func() { _ = stmt.Close() }()
+		for _, id := range ids {
+			res, err := stmt.ExecContext(ctx, millis(now.Add(MaxUpstreamSnooze)), millis(now), id, workloadID)
+			if err != nil {
+				return fmt.Errorf("snooze finding %s: %w", id, err)
+			}
+			c, err := res.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("snooze finding %s: %w", id, err)
+			}
+			n += int(c)
+		}
+		return nil
+	})
+	return n, err
+}
+
+// WakeUpstreamSnoozes reopens findings snoozed until a fixed image
+// appears, among ids: those the upstream status now says an image fixes.
+func (s *Store) WakeUpstreamSnoozes(ctx context.Context, ids []string, now time.Time) (int64, error) {
+	var n int64
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		stmt, err := tx.PrepareContext(ctx, `UPDATE findings SET state = 'open', snoozed_until = NULL, snooze_upstream = 0, last_changed = ?
+			WHERE id = ? AND state = 'snoozed' AND snooze_upstream = 1`)
+		if err != nil {
+			return fmt.Errorf("prepare upstream wake: %w", err)
+		}
+		defer func() { _ = stmt.Close() }()
+		for _, id := range ids {
+			res, err := stmt.ExecContext(ctx, millis(now), id)
+			if err != nil {
+				return fmt.Errorf("wake finding %s: %w", id, err)
+			}
+			c, err := res.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("wake finding %s: %w", id, err)
+			}
+			n += c
+		}
+		return nil
+	})
+	return n, err
 }
 
 // Reopen returns an acknowledged or snoozed finding to open.
 func (s *Store) Reopen(ctx context.Context, id string, now time.Time) error {
 	return s.transition(ctx, id, []string{StateAcknowledged, StateSnoozed},
-		`UPDATE findings SET state = 'open', snoozed_until = NULL, acknowledged_at = NULL, last_changed = ? WHERE id = ?`,
+		`UPDATE findings SET state = 'open', snoozed_until = NULL, snooze_upstream = 0, acknowledged_at = NULL, last_changed = ? WHERE id = ?`,
 		millis(now), id)
 }
 
@@ -118,7 +177,7 @@ func (s *Store) transition(ctx context.Context, id string, from []string, update
 
 // ExpireSnoozes reopens findings whose snooze ended.
 func (s *Store) ExpireSnoozes(ctx context.Context, now time.Time) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE findings SET state = 'open', snoozed_until = NULL, last_changed = ?
+	res, err := s.db.ExecContext(ctx, `UPDATE findings SET state = 'open', snoozed_until = NULL, snooze_upstream = 0, last_changed = ?
 		WHERE state = 'snoozed' AND snoozed_until <= ?`, millis(now), millis(now))
 	if err != nil {
 		return 0, fmt.Errorf("expire snoozes: %w", err)

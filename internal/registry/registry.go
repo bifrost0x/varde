@@ -43,6 +43,11 @@ const (
 	pageSize = 1000
 )
 
+// ErrAuthentication marks a registry that answered with an authentication
+// challenge Varde cannot meet: a private repository, or a scheme other
+// than an anonymous or configured bearer token.
+var ErrAuthentication = errors.New("registry: authentication failed")
+
 // Client resolves digests to tags and reads image manifests and layers.
 type Client struct {
 	http *httpx.Client
@@ -178,7 +183,7 @@ func (s *session) withAuth(ctx context.Context, hdr http.Header, call func(h htt
 		}
 		return err
 	}
-	return errors.New("registry: authentication failed")
+	return ErrAuthentication
 }
 
 func (s *session) do(ctx context.Context, method, path string, hdr http.Header, max int64) (*httpx.Response, error) {
@@ -220,7 +225,7 @@ func (s *session) open(ctx context.Context, path string) (*httpx.Stream, error) 
 // for the configured registry, with Basic credentials.
 func (s *session) authenticate(ctx context.Context, challenge string) error {
 	if !strings.HasPrefix(challenge, "Bearer ") {
-		return errors.New("registry: unsupported authentication challenge")
+		return fmt.Errorf("%w: unsupported challenge", ErrAuthentication)
 	}
 	params := map[string]string{}
 	for _, part := range splitChallenge(strings.TrimPrefix(challenge, "Bearer ")) {
@@ -268,7 +273,7 @@ func (s *session) authenticate(ctx context.Context, challenge string) error {
 		s.token = tok.AccessToken
 	}
 	if s.token == "" {
-		return errors.New("registry: no token")
+		return fmt.Errorf("%w: no token", ErrAuthentication)
 	}
 	return nil
 }

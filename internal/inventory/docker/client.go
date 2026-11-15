@@ -209,7 +209,10 @@ func (c *Client) Containers(ctx context.Context) ([]ContainerSummary, error) {
 
 // ContainerInspect is the subset of GET /containers/{id}/json that Varde uses.
 type ContainerInspect struct {
-	ID     string `json:"Id"`
+	ID string `json:"Id"`
+	// Path and Args are the process the container runs.
+	Path   string   `json:"Path"`
+	Args   []string `json:"Args"`
 	Config struct {
 		Image string `json:"Image"`
 		User  string `json:"User"`

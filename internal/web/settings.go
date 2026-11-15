@@ -24,20 +24,23 @@ type settingsData struct {
 	// ContainerPackages mirrors the setting of the same name.
 	ContainerPackages bool
 	// EOLData mirrors the setting of the same name.
-	EOLData       bool
-	ScanPeriods   []scanPeriod
-	Locked        map[string]bool
-	Policy        policy.Thresholds
-	DigestHour    int
-	DigestWeekday string
-	OSV, NVD      bool
-	Channels      []string
-	Tokens        []store.APIToken
-	Users         []store.User
-	Me            string
-	Audit         []store.AuditEntry
-	NewToken      string
-	Error         string
+	EOLData bool
+	// UpstreamCandidates and UpstreamCrossMajor mirror the settings of
+	// the same names.
+	UpstreamCandidates, UpstreamCrossMajor bool
+	ScanPeriods                            []scanPeriod
+	Locked                                 map[string]bool
+	Policy                                 policy.Thresholds
+	DigestHour                             int
+	DigestWeekday                          string
+	OSV, NVD                               bool
+	Channels                               []string
+	Tokens                                 []store.APIToken
+	Users                                  []store.User
+	Me                                     string
+	Audit                                  []store.AuditEntry
+	NewToken                               string
+	Error                                  string
 	// Uplink is the state of the uplink switch.
 	Uplink uplink.Status
 	// Package is the state of the data package; Direct the switch that
@@ -57,6 +60,7 @@ func (a *app) settingsView(r *http.Request, cur *auth.Current, newToken, errMsg 
 			settings.KeyScanEvery:       scanEveryValue(a.d.Settings),
 		},
 		RegistryTags: eff.RegistryTags, ContainerPackages: eff.ContainerPackages, EOLData: eff.EOLData,
+		UpstreamCandidates: eff.UpstreamCandidates, UpstreamCrossMajor: eff.UpstreamCrossMajor,
 		ScanPeriods: scanPeriods, Locked: map[string]bool{}, Policy: eff.Policy, DigestHour: eff.DigestHour,
 		DigestWeekday: strings.ToLower(eff.DigestWeekday.String()), OSV: eff.DirectOSV, NVD: eff.DirectNVD,
 		Channels: a.d.Channels, Me: cur.User.ID, NewToken: newToken, Error: errMsg,

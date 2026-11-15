@@ -40,10 +40,12 @@ import (
 	"github.com/bifrost0x/varde/internal/pipeline"
 	"github.com/bifrost0x/varde/internal/policy"
 	"github.com/bifrost0x/varde/internal/registry"
+	"github.com/bifrost0x/varde/internal/releases"
 	"github.com/bifrost0x/varde/internal/settings"
 	findingstatus "github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/uplink"
+	"github.com/bifrost0x/varde/internal/upstream"
 	"github.com/bifrost0x/varde/internal/web"
 )
 
@@ -89,6 +91,8 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger, deps ser
 		Policy:   func() policy.Thresholds { return settingsSvc.Get().Policy },
 		Scope:    func() discovery.Scope { return settingsSvc.Get().Networks },
 		BaseURL:  cfg.BaseURL,
+		// The upstream status says when registry checks are off.
+		RegistryChecks: func() bool { return settingsSvc.Get().RegistryTags },
 	})
 
 	caPool, err := rootCAs(cfg)
@@ -179,13 +183,28 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger, deps ser
 		workers.Go(func() { syncer.Run(runCtx) })
 	}
 	workers.Go(func() { refresher.Run(runCtx) })
+	regClient := registry.New(httpx.New(httpx.Options{AllowHosts: cfg.EgressAllowlist, Timeout: 20 * time.Second, RootCAs: caPool}))
 	resolver := &registry.Resolver{
-		Client: registry.New(httpx.New(httpx.Options{AllowHosts: cfg.EgressAllowlist, Timeout: 20 * time.Second, RootCAs: caPool})),
+		Client: regClient,
 		Store:  st, Catalog: func() *catalog.Catalog { return analysis.Catalog().Current() },
 		Enabled: func() bool { return settingsSvc.Get().RegistryTags },
 		Changed: analysis.RunLogged, Log: logger, Now: time.Now,
 	}
 	workers.Go(func() { resolver.Run(runCtx, 30*time.Minute) })
+	// Whether a newer image exists and what it fixes (ADR 0045): read-only
+	// registry requests, never a pull; candidate images are read only with
+	// their own switch on.
+	checker := &upstream.Checker{
+		Client:         regClient,
+		Reader:         &releases.Reader{Store: st, Registry: regClient, Now: time.Now, Log: logger},
+		Store:          st,
+		Enabled:        func() bool { return settingsSvc.Get().RegistryTags },
+		ReadCandidates: func() bool { return settingsSvc.Get().UpstreamCandidates },
+		CrossMajor:     func() bool { return settingsSvc.Get().UpstreamCrossMajor },
+		TTL:            cfg.UpstreamTTL,
+		Changed:        analysis.RunLogged, Log: logger, Now: time.Now,
+	}
+	workers.Go(func() { checker.Run(runCtx, 30*time.Minute) })
 	workers.Go(func() { network.Run(runCtx) })
 	workers.Go(func() { notifier.Run(runCtx) })
 	workers.Go(func() { housekeeping(runCtx, st, analysis, logger) })
