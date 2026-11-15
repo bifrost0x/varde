@@ -33,10 +33,12 @@ func TestSSHHostKeyNoAuth(t *testing.T) {
 			authTried.Store(true)
 			return nil, ssh.ErrNoAuth
 		},
+		NoClientAuth: true,
 		NoClientAuthCallback: func(ssh.ConnMetadata) (*ssh.Permissions, error) {
 			authTried.Store(true)
 			return nil, ssh.ErrNoAuth
 		},
+		AuthLogCallback: func(ssh.ConnMetadata, string, error) { authTried.Store(true) },
 	}
 	cfg.AddHostKey(signer)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
