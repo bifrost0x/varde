@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -160,7 +161,7 @@ func MakeBundle(d Device, shared map[string]bool) Bundle {
 func stripSeparators(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch r {
-		case ':', '-', '.', ' ':
+		case ':', '-', '.', ' ', '_':
 			return -1
 		}
 		return r
@@ -199,20 +200,36 @@ func ouiOf(mac string) string {
 	return mac[:2] + ":" + mac[3:5] + ":" + mac[6:8]
 }
 
+// ipv4Pattern matches four dot separated groups of digits anywhere in a
+// value, without word boundaries, so a port, a URL, zero padding or a
+// prefix such as "dead10.0.0.1" do not hide the address.
+var ipv4Pattern = regexp.MustCompile(`\d{1,3}(?:\.\d{1,3}){3}`)
+
 // hasIPLiteral reports whether s holds an IPv4 or IPv6 address, any
-// address and not only the device's own. A four part version string that
-// is a valid dotted quad, such as 1.2.3.4, counts as an address and is
-// dropped with it; three part versions are kept.
+// address and not only the device's own. A four part version string such
+// as 1.2.3.4 looks like an address and is dropped with it; three part
+// versions are kept.
 func hasIPLiteral(s string) bool {
+	if ipv4Pattern.MatchString(s) {
+		return true
+	}
 	tokens := strings.FieldsFunc(s, func(r rune) bool {
 		return !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F' || r == ':' || r == '.')
 	})
 	for _, t := range tokens {
-		for _, cand := range []string{t, strings.Trim(t, ".:")} {
-			if cand == "" || strings.Trim(cand, ":.") == "" {
+		cands := []string{t, strings.Trim(t, ".:")}
+		// A port after an IPv6 address, bracketed or not.
+		if i := strings.LastIndexByte(t, ':'); i > 0 {
+			cands = append(cands, strings.Trim(t[:i], ".:"))
+		}
+		for _, c := range cands {
+			if strings.Trim(c, ":.") == "" {
 				continue
 			}
-			if _, err := netip.ParseAddr(cand); err == nil {
+			if _, err := netip.ParseAddr(c); err == nil {
+				return true
+			}
+			if _, err := netip.ParseAddrPort(c); err == nil {
 				return true
 			}
 		}

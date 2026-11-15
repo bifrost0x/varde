@@ -273,3 +273,39 @@ func TestBundleDropsLabelWithAddress(t *testing.T) {
 		t.Errorf("label = %q", b.Label)
 	}
 }
+
+func TestBundleDropsIPv4Spellings(t *testing.T) {
+	for _, v := range []string{
+		"Login 10.0.0.1:8080", "http://192.168.1.1:5000/", "192.168.001.002",
+		"dead10.0.0.1", "[2001:db8::1]:8080", "2001:db8::1",
+	} {
+		d := Device{Address: "10.9.9.9", Services: []Service{{Port: 80, Proto: ProtoHTTP, Fields: []Field{
+			{Name: FieldHTTPTitle, Value: v, Trust: TrustStated},
+			{Name: FieldFirmware, Value: "Firmware 1.2.3", Trust: TrustStated},
+			{Name: FieldOSVersion, Value: "Linux 5.15.0-91", Trust: TrustStated},
+		}}}}
+		got := fieldNames(MakeBundle(d, nil))
+		if got[FieldHTTPTitle] {
+			t.Errorf("%q kept", v)
+		}
+		if !got[FieldFirmware] || !got[FieldOSVersion] {
+			t.Errorf("versions dropped with %q: %v", v, got)
+		}
+	}
+}
+
+func TestBundleDropsUnderscoreSpellings(t *testing.T) {
+	d := Device{Address: "10.0.0.5", Hostname: "marcels-nas", Services: []Service{
+		{Proto: ProtoARP, Fields: []Field{{Name: FieldMAC, Value: "a8:bb:cc:dd:ee:ff", Trust: TrustStated}}},
+		{Port: 80, Proto: ProtoHTTP, Fields: []Field{
+			{Name: FieldHTTPTitle, Value: "marcels_nas", Trust: TrustStated},
+			{Name: FieldHTTPServer, Value: "a8_bb_cc_dd_ee_ff", Trust: TrustStated},
+			{Name: FieldSysDescr, Value: "Dev DD_EE_FF", Trust: TrustStated},
+			{Name: FieldModel, Value: "Z1", Trust: TrustStated},
+		}},
+	}}
+	got := fieldNames(MakeBundle(d, nil))
+	if got[FieldHTTPTitle] || got[FieldHTTPServer] || got[FieldSysDescr] || !got[FieldModel] {
+		t.Errorf("fields = %v", got)
+	}
+}
