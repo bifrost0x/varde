@@ -22,6 +22,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // Protocols a probed port is read with.
@@ -394,6 +396,19 @@ func (s *Scanner) Scan(ctx context.Context, addrs []netip.Addr, progress func(do
 		})
 	}
 	nwg.Wait()
+
+	// The MAC comes from the kernel's ARP table, not from the device: it
+	// is stated by the link layer, and only hosts on the local segment
+	// have an entry.
+	if arp := readARP(); len(arp) > 0 {
+		for i := range res.Devices {
+			if mac, ok := arp[res.Devices[i].Address]; ok {
+				svc := Service{Proto: ProtoARP}
+				svc.Fields = addField(nil, FieldMAC, mac, TrustStated)
+				res.Devices[i].Services = append(res.Devices[i].Services, svc)
+			}
+		}
+	}
 	return res, nil
 }
 
@@ -474,7 +489,42 @@ func (s *Scanner) readSSH(ctx context.Context, target string, svc *Service) {
 	}
 	if m := sshBanner.FindStringSubmatch(strings.TrimRight(line, "\r\n")); m != nil {
 		svc.Product = strings.TrimSpace(m[1] + " " + m[2])
+		if fp, ok := s.sshHostKey(ctx, target); ok {
+			svc.Fields = addField(svc.Fields, FieldSSHHostKey, fp, TrustStated)
+		}
 	}
+}
+
+var errHostKeySeen = errors.New("host key read")
+
+// sshHostKey reads the server's host key fingerprint. The key exchange
+// happens before user authentication, so the handshake is aborted from the
+// host key callback and no authentication is ever attempted.
+func (s *Scanner) sshHostKey(ctx context.Context, target string) (string, bool) {
+	conn, err := s.dial(ctx, "tcp", target)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = conn.Close() }()
+	if dl, ok := ctx.Deadline(); ok {
+		_ = conn.SetDeadline(dl)
+	}
+	// Closing the connection on cancellation unblocks a stalled handshake.
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	var fp string
+	cfg := &ssh.ClientConfig{
+		User: "varde",
+		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			fp = ssh.FingerprintSHA256(key)
+			return errHostKeySeen
+		},
+	}
+	c, _, _, err := ssh.NewClientConn(conn, target, cfg)
+	if err == nil { // cannot happen without authentication; never keep it
+		_ = c.Close()
+	}
+	return fp, fp != ""
 }
 
 var titleRe = regexp.MustCompile(`(?is)<title[^>]*>([^<]{1,200})</title>`)
@@ -652,6 +702,9 @@ func (s *Scanner) readDockerTLS(ctx context.Context, target string, svc *Service
 
 // Classify derives a device kind and a short label from its services.
 func Classify(svcs []Service) (kind, label string) {
+	// The ARP pseudo service has no port and says nothing about what runs
+	// on the host.
+	svcs = slices.DeleteFunc(slices.Clone(svcs), func(s Service) bool { return s.Proto == ProtoARP })
 	for _, k := range knownProducts {
 		for _, s := range svcs {
 			if s.Product == k.product {
