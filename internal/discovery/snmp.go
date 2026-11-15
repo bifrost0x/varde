@@ -118,8 +118,7 @@ func (s *Scanner) snmp(ctx context.Context, a netip.Addr) (Service, string, bool
 		return Service{}, "", false
 	}
 	defer func() { _ = g.Conn.Close() }()
-	res, err := g.Get([]string{oidSysDescr, oidSysObjectID, oidSysName,
-		oidEntHWRev, oidEntFirmware, oidEntSoftware, oidEntSerial, oidEntMfg, oidEntModel})
+	res, err := g.Get([]string{oidSysDescr, oidSysObjectID, oidSysName})
 	if err != nil || res == nil || res.Error != gosnmp.NoError {
 		return Service{}, "", false
 	}
@@ -142,7 +141,14 @@ func (s *Scanner) snmp(ctx context.Context, a netip.Addr) (Service, string, bool
 	if descr == "" {
 		return Service{}, "", false
 	}
-	return Service{Port: 161, Proto: ProtoSNMP, Product: descr, Fields: snmpFields(res.Variables)}, name, true
+	vars := res.Variables
+	// The chassis objects go in a request of their own: an agent that knows
+	// only the system group may fail a whole request over one missing object,
+	// and that must not cost the answer above.
+	if ent, err := g.Get([]string{oidEntHWRev, oidEntFirmware, oidEntSoftware, oidEntSerial, oidEntMfg, oidEntModel}); err == nil && ent != nil && ent.Error == gosnmp.NoError {
+		vars = append(vars, ent.Variables...)
+	}
+	return Service{Port: 161, Proto: ProtoSNMP, Product: descr, Fields: snmpFields(vars)}, name, true
 }
 
 type snmpAnswer struct {
