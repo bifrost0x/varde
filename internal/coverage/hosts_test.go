@@ -168,3 +168,19 @@ func TestMachineLevel(t *testing.T) {
 		t.Errorf("bare device: %q", got)
 	}
 }
+
+// After a DHCP move the stale row of the old address presents the same MAC;
+// it must not make the key shared.
+func TestMachineLevelIgnoresStaleRows(t *testing.T) {
+	mk := func(addr string, missed bool) store.StoredDevice {
+		d := device(addr, "")
+		d.Kind = discovery.KindOther
+		d.Services = []discovery.Service{{Proto: discovery.ProtoARP, Fields: []discovery.Field{{Name: discovery.FieldMAC, Value: "02:aa:bb:cc:dd:ee", Trust: discovery.TrustStated}}}}
+		d.Missed = missed
+		return d
+	}
+	ms := byID(Machines(MachineInput{Scope: scope(t, "10.10.1.0/24"), Devices: []store.StoredDevice{mk("10.10.1.21", false), mk("10.10.1.20", true)}}))
+	if got := ms["device:10.10.1.21"].Level; got != "anchored" {
+		t.Errorf("moved device: %q", got)
+	}
+}

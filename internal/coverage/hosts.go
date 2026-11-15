@@ -183,6 +183,19 @@ func (m Machine) Has(source string) bool {
 	return false
 }
 
+// SharedKeys returns the anchor keys several addresses of the scan present.
+// A row that missed the last scan is the stale record of a device that
+// moved, not a second device, so it does not count.
+func SharedKeys(ds []store.StoredDevice) map[string]bool {
+	var live []discovery.Device
+	for _, d := range ds {
+		if !d.Missed {
+			live = append(live, d.Device)
+		}
+	}
+	return discovery.SharedKeys(live)
+}
+
 // MachineInput is what building the machines needs.
 type MachineInput struct {
 	Hosts        []inventory.Host
@@ -329,11 +342,7 @@ func Machines(in MachineInput) []Machine {
 		}
 		groups[r] = append(groups[r], units[i])
 	}
-	devs := make([]discovery.Device, len(in.Devices))
-	for i, d := range in.Devices {
-		devs[i] = d.Device
-	}
-	shared := discovery.SharedKeys(devs)
+	shared := SharedKeys(in.Devices)
 	out := make([]Machine, 0, len(roots))
 	for _, r := range roots {
 		out = append(out, build(groups[r], in.Workloads, shared))

@@ -36,18 +36,14 @@ type fieldRow struct{ Label, Value string }
 // scannedDevice returns the scanned device behind a machine, and the keys
 // shared by several addresses of the scan.
 func (a *app) scannedDevice(s *snapshot, m *coverage.Machine) (discovery.Device, map[string]bool, bool) {
-	devs := make([]discovery.Device, len(s.devices))
-	for i, d := range s.devices {
-		devs[i] = d.Device
-	}
 	for _, e := range m.Evidence {
 		if e.Source != coverage.EvidenceScan {
 			continue
 		}
 		for _, addr := range e.Addresses {
-			for _, d := range devs {
+			for _, d := range s.devices {
 				if d.Address == addr {
-					return d, discovery.SharedKeys(devs), true
+					return d.Device, coverage.SharedKeys(s.devices), true
 				}
 			}
 		}
@@ -55,8 +51,20 @@ func (a *app) scannedDevice(s *snapshot, m *coverage.Machine) (discovery.Device,
 	return discovery.Device{}, nil, false
 }
 
-func newDeviceView(d discovery.Device, shared map[string]bool) *deviceView {
-	l := discovery.DeviceLevel(d, shared)
+// levelOf parses the level word of a machine.
+func levelOf(word string) discovery.Level {
+	for l := discovery.LevelSeen; l <= discovery.LevelSoftware; l++ {
+		if l.String() == word {
+			return l
+		}
+	}
+	return discovery.LevelSeen
+}
+
+// newDeviceView shows the device under the level of its machine, so the
+// list and the page agree; the device's own fields are listed as stated.
+func newDeviceView(d discovery.Device, shared map[string]bool, machineLevel string) *deviceView {
+	l := levelOf(machineLevel)
 	v := &deviceView{Level: l.String(), NextStep: discovery.NextStep(l), Help: l < discovery.LevelModel}
 	for _, f := range d.Fields() {
 		row := fieldRow{Label: strings.ReplaceAll(f.Name, "_", " "), Value: f.Value}

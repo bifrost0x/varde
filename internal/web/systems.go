@@ -167,7 +167,7 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 		}
 	}
 	if d, shared, ok := a.scannedDevice(s, m); ok {
-		v.Device = newDeviceView(d, shared)
+		v.Device = newDeviceView(d, shared, m.Level)
 	}
 	v.Blind = blindSpots(m, total, len(v.Containers), nodeKey, a.agentInstallReady())
 	// What needs doing on this machine, as on the front page: one row
