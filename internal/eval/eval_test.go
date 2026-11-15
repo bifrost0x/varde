@@ -38,6 +38,8 @@ type Gate struct {
 	DeviceFieldPrecision float64 `yaml:"device_field_precision"`
 	DeviceLevelAccuracy  float64 `yaml:"device_level_accuracy"`
 	MaxDeviceFieldWrong  int     `yaml:"max_device_field_wrong"`
+	// A field a reader stops stating is a regression too.
+	MaxDeviceFieldMissing int `yaml:"max_device_field_missing"`
 }
 
 // TestCorpus runs the evaluation and fails on a regression. With
@@ -55,7 +57,7 @@ func TestCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Counts.DeviceCases != 6 || r.Counts.DeviceFieldsWrong != 0 || r.Counts.DeviceLevelWrong != 0 {
+	if r.Counts.DeviceCases != 7 || r.Counts.DeviceFieldsWrong != 0 || r.Counts.DeviceLevelWrong != 0 {
 		t.Errorf("device cases: %+v", r.Counts)
 	}
 	report := Markdown(r, len(c.Containers), len(c.Topologies), len(c.Packages), len(c.Matching.Cases)+len(c.Distro.Cases))
@@ -97,6 +99,7 @@ func TestCorpus(t *testing.T) {
 		{"wrong trust levels", k.TrustWrong, g.MaxTrustWrong},
 		{"wrong parent links", k.RelationsWrong, g.MaxRelationWrong},
 		{"wrong device fields", k.DeviceFieldsWrong, g.MaxDeviceFieldWrong},
+		{"missing device fields", k.DeviceFieldsMissing, g.MaxDeviceFieldMissing},
 	} {
 		if m.got > m.max {
 			t.Errorf("%s: %d (gate %d)", m.name, m.got, m.max)

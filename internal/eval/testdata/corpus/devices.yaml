@@ -58,3 +58,12 @@ devices:
     why: A device that only answered a port states nothing.
     kind: other
     truth: {level: seen}
+  - name: snmp-switch
+    why: Fields given directly, as the SNMP reader yields them, with their trust.
+    kind: network
+    fields:
+      - {name: vendor_oid, value: "1.3.6.1.4.1.4526.100.4.1", trust: stated}
+      - {name: manufacturer, value: Example Networks, trust: stated}
+      - {name: model, value: ES-8, trust: stated}
+      - {name: firmware, value: 2.0.1, trust: stated}
+    truth: {manufacturer: Example Networks, model: ES-8, firmware: 2.0.1, level: firmware}
