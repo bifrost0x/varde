@@ -4,6 +4,7 @@ package discovery
 
 import (
 	"encoding/json"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -99,10 +100,15 @@ func MakeBundle(d Device, shared map[string]bool) Bundle {
 	}
 	if h := strings.ToLower(strings.TrimSpace(d.Hostname)); h != "" {
 		needles = append(needles, h)
+		if c := stripSeparators(h); c != "" {
+			needles = append(needles, c)
+		}
 		if short, _, ok := strings.Cut(h, "."); ok && short != "" {
 			addNeedle(short)
+			addNeedle(stripSeparators(short))
 		}
 	}
+	seenMAC := false
 	for _, f := range fields {
 		if bundleKeep[f.Name] {
 			continue
@@ -111,12 +117,23 @@ func MakeBundle(d Device, shared map[string]bool) Bundle {
 		// The same value written without separators: a MAC as
 		// aabbccddeeff, a UUID or fingerprint without dashes or colons.
 		addNeedle(stripSeparators(f.Value))
-		if f.Name == FieldMAC && b.OUI == "" {
-			b.OUI = ouiOf(f.Value)
+		if f.Name == FieldMAC {
+			// The emitted OUI plus a MAC suffix in another field would
+			// rebuild the full address, so the device part is a needle too.
+			if c := stripSeparators(strings.ToLower(f.Value)); len(c) == 12 {
+				addNeedle(c[6:])
+			}
+			if !seenMAC {
+				seenMAC = true
+				b.OUI = ouiOf(f.Value)
+			}
 		}
 	}
 
 	leaks := func(s string) bool {
+		if hasIPLiteral(s) {
+			return true
+		}
 		s = strings.ToLower(s)
 		compact := stripSeparators(s)
 		for _, n := range needles {
@@ -150,14 +167,57 @@ func stripSeparators(s string) string {
 	}, s)
 }
 
-// ouiOf returns the first three octets of a colon separated MAC address,
-// or "" for anything else.
+// ouiOf returns the manufacturer prefix of a MAC address written as six
+// hex octets separated by colons or dashes. It returns "" for anything
+// else and for a locally administered address, whose prefix is random and
+// belongs to the device alone.
 func ouiOf(mac string) string {
 	mac = strings.ToLower(strings.TrimSpace(mac))
 	if len(mac) != 17 {
 		return ""
 	}
-	return mac[:8]
+	sep := mac[2]
+	if sep != ':' && sep != '-' {
+		return ""
+	}
+	for i := 0; i < 17; i++ {
+		c := mac[i]
+		if i%3 == 2 {
+			if c != sep {
+				return ""
+			}
+			continue
+		}
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return ""
+		}
+	}
+	first, err := strconv.ParseUint(mac[:2], 16, 8)
+	if err != nil || first&0x02 != 0 {
+		return ""
+	}
+	return mac[:2] + ":" + mac[3:5] + ":" + mac[6:8]
+}
+
+// hasIPLiteral reports whether s holds an IPv4 or IPv6 address, any
+// address and not only the device's own. A four part version string that
+// is a valid dotted quad, such as 1.2.3.4, counts as an address and is
+// dropped with it; three part versions are kept.
+func hasIPLiteral(s string) bool {
+	tokens := strings.FieldsFunc(s, func(r rune) bool {
+		return !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F' || r == ':' || r == '.')
+	})
+	for _, t := range tokens {
+		for _, cand := range []string{t, strings.Trim(t, ".:")} {
+			if cand == "" || strings.Trim(cand, ":.") == "" {
+				continue
+			}
+			if _, err := netip.ParseAddr(cand); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // IssueURL returns a link that opens the device issue form with the bundle

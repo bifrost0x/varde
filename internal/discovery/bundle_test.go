@@ -18,7 +18,7 @@ func bundleDevice() Device {
 		Label:    "NAS marcels-nas",
 		Services: []Service{
 			{Proto: ProtoARP, Fields: []Field{
-				{Name: FieldMAC, Value: "aa:bb:cc:dd:ee:ff", Trust: TrustStated},
+				{Name: FieldMAC, Value: "a8:bb:cc:dd:ee:ff", Trust: TrustStated},
 			}},
 			{Port: 443, Proto: ProtoHTTPS, Fields: []Field{
 				{Name: FieldHTTPTitle, Value: "marcels-nas - UGOS Pro", Trust: TrustStated},
@@ -48,14 +48,14 @@ func TestBundleDropsIdentity(t *testing.T) {
 	}
 	js := strings.ToLower(string(raw))
 	for _, secret := range []string{
-		"sn123", "192.168.1.20", "marcels-nas", "aa:bb:cc:dd:ee:ff", "dd:ee:ff",
+		"sn123", "192.168.1.20", "marcels-nas", "a8:bb:cc:dd:ee:ff", "dd:ee:ff",
 		"0f1e2d3c", "abcdefghijklmnop", "11111111-2222",
 	} {
 		if strings.Contains(js, secret) {
 			t.Errorf("bundle leaks %q: %s", secret, raw)
 		}
 	}
-	if b.OUI != "aa:bb:cc" {
+	if b.OUI != "a8:bb:cc" {
 		t.Errorf("OUI = %q", b.OUI)
 	}
 	if b.Label != "" {
@@ -117,9 +117,9 @@ func TestBundleContainmentIsCaseInsensitive(t *testing.T) {
 
 func TestBundleDropsMACWithoutColons(t *testing.T) {
 	d := Device{Address: "10.0.0.5", Services: []Service{
-		{Proto: ProtoARP, Fields: []Field{{Name: FieldMAC, Value: "aa:bb:cc:dd:ee:ff", Trust: TrustStated}}},
+		{Proto: ProtoARP, Fields: []Field{{Name: FieldMAC, Value: "a8:bb:cc:dd:ee:ff", Trust: TrustStated}}},
 		{Port: 80, Proto: ProtoHTTP, Fields: []Field{
-			{Name: FieldHTTPTitle, Value: "AABBCCDDEEFF setup", Trust: TrustStated},
+			{Name: FieldHTTPTitle, Value: "A8BBCCDDEEFF setup", Trust: TrustStated},
 			{Name: FieldModel, Value: "Z", Trust: TrustStated},
 		}},
 	}}
@@ -165,5 +165,111 @@ func TestBundleIssueURLTitleFallsBackToLabel(t *testing.T) {
 	u, ok := Bundle{Format: 1, Label: "Router"}.IssueURL()
 	if !ok || !strings.Contains(u, "title=Device%3A+Router") {
 		t.Errorf("url = %s", u)
+	}
+}
+
+func fieldNames(b Bundle) map[string]bool {
+	m := map[string]bool{}
+	for _, f := range b.Fields {
+		m[f.Name] = true
+	}
+	return m
+}
+
+func TestBundleDropsHostnameSpellings(t *testing.T) {
+	d := Device{Address: "10.0.0.5", Hostname: "marcels-nas.lan", Services: []Service{
+		{Port: 80, Proto: ProtoHTTP, Fields: []Field{
+			{Name: FieldHTTPTitle, Value: "Marcels NAS - UGOS Pro", Trust: TrustStated},
+			{Name: FieldHTTPServer, Value: "nginx", Trust: TrustStated},
+		}},
+	}}
+	got := fieldNames(MakeBundle(d, nil))
+	if got[FieldHTTPTitle] || !got[FieldHTTPServer] {
+		t.Errorf("fields = %v", got)
+	}
+}
+
+func TestBundleDropsMACSuffix(t *testing.T) {
+	d := Device{Address: "10.0.0.5", Services: []Service{
+		{Proto: ProtoARP, Fields: []Field{{Name: FieldMAC, Value: "a8:bb:cc:dd:ee:ff", Trust: TrustStated}}},
+		{Port: 443, Proto: ProtoHTTPS, Fields: []Field{
+			{Name: FieldCertSubject, Value: "CN=Device-DDEEFF", Trust: TrustStated},
+			{Name: FieldSysDescr, Value: "ESP_ddeeff", Trust: TrustStated},
+			{Name: FieldModel, Value: "Z1", Trust: TrustStated},
+		}},
+	}}
+	b := MakeBundle(d, nil)
+	got := fieldNames(b)
+	if got[FieldCertSubject] || got[FieldSysDescr] || !got[FieldModel] {
+		t.Errorf("fields = %v", got)
+	}
+	if b.OUI != "a8:bb:cc" {
+		t.Errorf("OUI = %q", b.OUI)
+	}
+}
+
+func TestBundleOUI(t *testing.T) {
+	for mac, want := range map[string]string{
+		"a8:bb:cc:dd:ee:ff": "a8:bb:cc",
+		"A8-BB-CC-DD-EE-FF": "a8:bb:cc",
+		"aa:bb:cc:dd:ee:ff": "", // locally administered (bit 0x02)
+		"02:bb:cc:dd:ee:ff": "", // locally administered
+		"ae:bb:cc:dd:ee:ff": "", // locally administered
+		"zz:bb:cc:dd:ee:ff": "",
+		"aabbccddeeff0":     "",
+		"aa.bb.cc.dd.ee.ff": "",
+	} {
+		d := Device{Address: "10.0.0.5", Services: []Service{
+			{Proto: ProtoARP, Fields: []Field{{Name: FieldMAC, Value: mac, Trust: TrustStated}}},
+		}}
+		if got := MakeBundle(d, nil).OUI; got != want {
+			t.Errorf("OUI(%q) = %q, want %q", mac, got, want)
+		}
+	}
+}
+
+func TestBundleDropsIPLiterals(t *testing.T) {
+	d := Device{Address: "10.0.0.5", Label: "gateway 172.16.0.1", Services: []Service{
+		{Port: 80, Proto: ProtoHTTP, Fields: []Field{
+			{Name: FieldSysDescr, Value: "eth1 192.168.5.7 up", Trust: TrustStated},
+			{Name: FieldHTTPTitle, Value: "peer fe80::1 ok", Trust: TrustStated},
+			{Name: FieldHTTPServer, Value: "peer 2001:db8::5", Trust: TrustStated},
+			{Name: FieldFirmware, Value: "Firmware 1.2.3", Trust: TrustStated},
+			{Name: FieldOSVersion, Value: "Linux 5.15.0-91", Trust: TrustStated},
+		}},
+	}}
+	b := MakeBundle(d, nil)
+	got := fieldNames(b)
+	if got[FieldSysDescr] || got[FieldHTTPTitle] || got[FieldHTTPServer] {
+		t.Errorf("fields = %v", got)
+	}
+	if !got[FieldFirmware] || !got[FieldOSVersion] {
+		t.Errorf("versions dropped: %v", got)
+	}
+	if b.Label != "" {
+		t.Errorf("label = %q", b.Label)
+	}
+}
+
+func TestBundleDropsDashedMACAndPlainUUID(t *testing.T) {
+	d := Device{Address: "10.0.0.5", Services: []Service{
+		{Proto: ProtoARP, Fields: []Field{{Name: FieldMAC, Value: "a8:bb:cc:dd:ee:ff", Trust: TrustStated}}},
+		{Port: 1900, Proto: ProtoSSDP, Fields: []Field{
+			{Name: FieldUUID, Value: "11111111-2222-3333-4444-555555555555", Trust: TrustStated},
+			{Name: FieldHTTPTitle, Value: "A8-BB-CC-DD-EE-FF setup", Trust: TrustStated},
+			{Name: FieldHTTPServer, Value: "srv 11111111222233334444555555555555", Trust: TrustStated},
+			{Name: FieldModel, Value: "Z1", Trust: TrustStated},
+		}},
+	}}
+	got := fieldNames(MakeBundle(d, nil))
+	if got[FieldHTTPTitle] || got[FieldHTTPServer] || !got[FieldModel] {
+		t.Errorf("fields = %v", got)
+	}
+}
+
+func TestBundleDropsLabelWithAddress(t *testing.T) {
+	d := Device{Address: "10.0.0.5", Label: "Device at 10.0.0.5"}
+	if b := MakeBundle(d, nil); b.Label != "" {
+		t.Errorf("label = %q", b.Label)
 	}
 }
