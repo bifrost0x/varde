@@ -88,6 +88,9 @@ type Service struct {
 	// Insecure marks a service that grants access without authentication,
 	// such as a Docker API on port 2375.
 	Insecure bool `json:"insecure,omitempty"`
+	// Fields are what the service stated about its device, each with the
+	// trust it carries (fields.go).
+	Fields []Field `json:"fields,omitempty"`
 }
 
 // Device is a host that answered on at least one port.
