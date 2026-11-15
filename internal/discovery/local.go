@@ -267,7 +267,13 @@ func parseUPnPDescription(r io.Reader) (string, []Field, bool) {
 			FirmwareVersion string `xml:"firmwareVersion"`
 		} `xml:"device"`
 	}
-	dec := xml.NewDecoder(io.LimitReader(r, descriptionLimit))
+	// Devices send Latin-1 bytes in descriptions that declare UTF-8; the
+	// decoder rejects those, so drop invalid sequences before decoding.
+	raw, err := io.ReadAll(io.LimitReader(r, descriptionLimit))
+	if err != nil {
+		return "", nil, false
+	}
+	dec := xml.NewDecoder(bytes.NewReader(bytes.ToValidUTF8(raw, nil)))
 	dec.Strict = false
 	if err := dec.Decode(&doc); err != nil {
 		return "", nil, false

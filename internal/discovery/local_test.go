@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -161,8 +162,8 @@ func TestParseUPnPDescriptionFriendlyNameFallback(t *testing.T) {
 
 func TestParseUPnPDescriptionHostile(t *testing.T) {
 	big := `<root><device><manufacturer>` + strings.Repeat("A", 300<<10) + `</manufacturer></device></root>`
-	if _, fields, ok := parseUPnPDescription(strings.NewReader(big)); ok && len(fields) > fieldsPerList {
-		t.Fatalf("unbounded fields: %d", len(fields))
+	if _, fields, ok := parseUPnPDescription(strings.NewReader(big)); ok || len(fields) != 0 {
+		t.Fatalf("oversized document: ok = %v fields = %d", ok, len(fields))
 	}
 
 	ent := `<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x "EXPANDED">]><root><device><modelName>&x;</modelName><manufacturer>Acme</manufacturer></device></root>`
@@ -174,12 +175,20 @@ func TestParseUPnPDescriptionHostile(t *testing.T) {
 	}
 
 	bad := "<root><device><modelName>ab\xff\xfecd</modelName><manufacturer>Acme</manufacturer></device></root>"
-	_, fields, ok := parseUPnPDescription(strings.NewReader(bad))
-	if ok {
-		for _, f := range fields {
-			if f.Value != printable(f.Value, 128) {
-				t.Fatalf("value not printable: %q", f.Value)
-			}
+	label, fields, ok := parseUPnPDescription(strings.NewReader(bad))
+	if !ok || label != "Acme abcd" {
+		t.Fatalf("invalid UTF-8: label = %q ok = %v", label, ok)
+	}
+	for _, f := range fields {
+		if !utf8.ValidString(f.Value) || f.Value != printable(f.Value, 128) {
+			t.Fatalf("value not printable: %q", f.Value)
 		}
+	}
+}
+
+func TestParseUPnPDescriptionSoftwareVersion(t *testing.T) {
+	_, fields, ok := parseUPnPDescription(strings.NewReader(`<root><device><manufacturer>A</manufacturer><softwareVersion>2.1</softwareVersion></device></root>`))
+	if !ok || len(fields) != 2 || fields[1] != (Field{FieldFirmware, "2.1", TrustStated}) {
+		t.Fatalf("fields = %+v ok = %v", fields, ok)
 	}
 }
