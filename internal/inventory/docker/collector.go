@@ -301,5 +301,52 @@ func runtimeOf(ci ContainerInspect) *inventory.Runtime {
 	if len(rt.NetworkMode) > 128 {
 		rt.NetworkMode = rt.NetworkMode[:128]
 	}
+	rt.Command = commandOf(ci.Path, ci.Args)
 	return rt
+}
+
+// Bounds of a kept command: enough to find the program behind wrappers,
+// short enough that a long inline script costs nothing.
+const (
+	maxCommandArgs = 8
+	maxCommandArg  = 256
+)
+
+// commandOf is the process a container runs, bounded; arguments that look
+// like credentials are left out, since only the program matters.
+func commandOf(path string, args []string) []string {
+	var out []string
+	for _, a := range append([]string{path}, args...) {
+		if len(out) == maxCommandArgs {
+			break
+		}
+		if a == "" {
+			continue
+		}
+		if secretArg(a) {
+			out = append(out, "<redacted>")
+			continue
+		}
+		if len(a) > maxCommandArg {
+			a = a[:maxCommandArg]
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// secretArg reports whether an argument may carry a secret
+// ("--password=...", "TOKEN=...").
+func secretArg(a string) bool {
+	k, _, ok := strings.Cut(a, "=")
+	if !ok {
+		return false
+	}
+	k = strings.ToLower(k)
+	for _, w := range []string{"pass", "secret", "token", "key", "auth", "cred"} {
+		if strings.Contains(k, w) {
+			return true
+		}
+	}
+	return false
 }
