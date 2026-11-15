@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: Apache-2.0
+# Devices as their services answered. Every case is shaped like the public
+# documentation of its format and holds no real serial, MAC or address.
+# Real bundles (the evidence a user exports from the device page) are added
+# as they arrive, the UGREEN NAS first.
+devices:
+  - name: upnp-printer
+    why: A UPnP device description states manufacturer, model, model number and firmware; the friendly name is only a display name.
+    kind: other
+    upnp: |
+      <?xml version="1.0"?>
+      <root xmlns="urn:schemas-upnp-org:device-1-0">
+        <specVersion><major>1</major><minor>0</minor></specVersion>
+        <device>
+          <deviceType>urn:schemas-upnp-org:device:Printer:1</deviceType>
+          <friendlyName>Office printer</friendlyName>
+          <manufacturer>Example Imaging</manufacturer>
+          <modelName>LaserJet Example</modelName>
+          <modelNumber>EX-4200</modelNumber>
+          <serialNumber>SN-0000001</serialNumber>
+          <UDN>uuid:00000000-0000-4000-8000-000000000001</UDN>
+          <firmwareVersion>2.1.4</firmwareVersion>
+        </device>
+      </root>
+    truth: {manufacturer: Example Imaging, model: LaserJet Example, firmware: 2.1.4, level: firmware}
+  - name: chromecast-txt
+    why: A Google Cast TXT record states a model (md) but no manufacturer, so the level stays below model; the friendly name fn is not read.
+    kind: other
+    txt: ["id=0123456789abcdef0123456789abcdef", "md=Chromecast", "fn=Living room", "ve=05", "ca=201221"]
+    truth: {model: Chromecast, level: seen}
+  - name: ipp-printer-txt
+    why: An IPP TXT record states manufacturer and model through usb_MFG, usb_MDL and ty (the first model key wins), and the firmware through fw.
+    kind: other
+    txt: ["txtvers=1", "ty=Example Press 100", "usb_MFG=Example Imaging", "usb_MDL=Press 100", "fw=1.0.3", "adminurl=http://printer.local/"]
+    truth: {manufacturer: Example Imaging, model: Example Press 100, firmware: 1.0.3, level: firmware}
+  - name: self-signed-nas-certificate
+    why: A self-signed certificate names an issuer and a subject, but a certificate states no manufacturer or model.
+    kind: other
+    cert_pem: |
+      -----BEGIN CERTIFICATE-----
+      MIIBeDCCAR6gAwIBAgIBATAKBggqhkjOPQQDAjA1MRgwFgYDVQQKEw9FeGFtcGxl
+      IFN0b3JhZ2UxGTAXBgNVBAMTEG5hcy5leGFtcGxlLnRlc3QwHhcNMjYwMTAxMDAw
+      MDAwWhcNNDYwMTAxMDAwMDAwWjA1MRgwFgYDVQQKEw9FeGFtcGxlIFN0b3JhZ2Ux
+      GTAXBgNVBAMTEG5hcy5leGFtcGxlLnRlc3QwWTATBgcqhkjOPQIBBggqhkjOPQMB
+      BwNCAAQMVgCUAdnqIWEe4gg9rjj9rsIeEAChjFgYjAc549QEDB+naGvT8F1obyT+
+      o7VycbNmChd+7GNmHdGgAOXAEOigox8wHTAbBgNVHREEFDASghBuYXMuZXhhbXBs
+      ZS50ZXN0MAoGCCqGSM49BAMCA0gAMEUCIQD5NJn7bwhX2xdwDytsxnzB4Ae2LiuJ
+      MoE97UI4BwrXzwIgSnlKIs7gnP7jfPgOllUXSX1vUi62p1Hrl7s8wz+7A94=
+      -----END CERTIFICATE-----
+    truth: {level: anchored}
+  - name: router-page-title
+    why: A router page title and Server header are derived and never become a manufacturer or model; the class comes from the scan.
+    kind: network
+    title: Wireless Router Login
+    server: lighttpd
+    truth: {level: class}
+  - name: nothing-stated
+    why: A device that only answered a port states nothing.
+    kind: other
+    truth: {level: seen}

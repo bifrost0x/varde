@@ -138,11 +138,41 @@ type DistroUpstream struct {
 	Fixed   string   `yaml:"fixed"`
 }
 
+// DeviceTruth is what a device case states: the manufacturer, model and
+// firmware the readers must yield (empty: none may be stated) and the
+// identification level that follows.
+type DeviceTruth struct {
+	Manufacturer string `yaml:"manufacturer"`
+	Model        string `yaml:"model"`
+	Firmware     string `yaml:"firmware"`
+	Level        string `yaml:"level"`
+}
+
+// DeviceCase is one device as its services answered: recorded answers of
+// the readers, each given in the form the parser reads, or fields directly
+// (SNMP and other sources).
+type DeviceCase struct {
+	Name string `yaml:"name"`
+	Why  string `yaml:"why"`
+	// UPnP is a device description, TXT the key=value strings of an mDNS
+	// TXT record, CertPEM a TLS certificate, Title and Server a page.
+	UPnP    string            `yaml:"upnp"`
+	TXT     []string          `yaml:"txt"`
+	CertPEM string            `yaml:"cert_pem"`
+	Title   string            `yaml:"title"`
+	Server  string            `yaml:"server"`
+	Fields  []discovery.Field `yaml:"fields"`
+	// Kind is the class the scan derived for the device.
+	Kind  string      `yaml:"kind"`
+	Truth DeviceTruth `yaml:"truth"`
+}
+
 // Corpus is the whole test corpus.
 type Corpus struct {
 	Containers []ContainerCase `yaml:"containers"`
 	Topologies []TopologyCase  `yaml:"topologies"`
 	Packages   []PackageCase   `yaml:"packages"`
+	Devices    []DeviceCase    `yaml:"devices"`
 	Matching   struct {
 		Advisories map[string][]MatchAdvisory `yaml:"advisories"`
 		Cases      []MatchCase                `yaml:"cases"`
@@ -222,6 +252,7 @@ func (c *Corpus) add(name string, raw []byte) error {
 	c.Containers = append(c.Containers, part.Cases...)
 	c.Topologies = append(c.Topologies, part.Topologies...)
 	c.Packages = append(c.Packages, part.Packages...)
+	c.Devices = append(c.Devices, part.Devices...)
 	if part.Distro.Records != "" {
 		c.Distro.Records = part.Distro.Records
 	}
@@ -259,6 +290,11 @@ type Counts struct {
 	// Advisories: affected results that must be there, that must not, and
 	// expected ones that are missing.
 	MatchTP, MatchFP, MatchFN int
+	// Devices: cases, and per stated manufacturer, model and firmware the
+	// values that are right, wrong (a value that is not the truth, or any
+	// value where nothing may be stated) and missing; cases whose level
+	// differs from the truth.
+	DeviceCases, DeviceFieldsRight, DeviceFieldsWrong, DeviceFieldsMissing, DeviceLevelWrong int
 }
 
 // Precision of app identification.
@@ -281,6 +317,16 @@ func (c Counts) MatchPrecision() float64 { return ratio(c.MatchTP, c.MatchTP+c.M
 
 // MatchRecall of affected findings.
 func (c Counts) MatchRecall() float64 { return ratio(c.MatchTP, c.MatchTP+c.MatchFN) }
+
+// DeviceFieldPrecision is the share of stated values that are right.
+func (c Counts) DeviceFieldPrecision() float64 {
+	return ratio(c.DeviceFieldsRight, c.DeviceFieldsRight+c.DeviceFieldsWrong)
+}
+
+// DeviceLevelAccuracy is the share of devices at the expected level.
+func (c Counts) DeviceLevelAccuracy() float64 {
+	return ratio(c.DeviceCases-c.DeviceLevelWrong, c.DeviceCases)
+}
 
 func ratio(a, b int) float64 {
 	if b == 0 {
@@ -341,12 +387,72 @@ func Run(c *Corpus, cat *catalog.Catalog) (Report, error) {
 	for _, mc := range c.Matching.Cases {
 		scoreMatch(&r, mc, c.Matching.Advisories[mc.App], cat, fail)
 	}
+	for _, dc := range c.Devices {
+		if err := scoreDevice(&r, dc, fail); err != nil {
+			return r, err
+		}
+	}
 	if len(c.Distro.Cases) > 0 {
 		if err := scoreDistro(&r, c, cat, fail); err != nil {
 			return r, err
 		}
 	}
 	return r, nil
+}
+
+// scoreDevice reads the recorded answers with the production parsers and
+// compares what they state, and the level that follows, with the truth.
+func scoreDevice(r *Report, dc DeviceCase, fail func(string, string, string, string)) error {
+	var fields []discovery.Field
+	if dc.UPnP != "" {
+		_, fs, _ := discovery.ParseUPnP(strings.NewReader(dc.UPnP))
+		fields = append(fields, fs...)
+	}
+	fields = append(fields, discovery.TXTFields(dc.TXT)...)
+	if dc.CertPEM != "" {
+		fs, err := discovery.CertFieldsPEM([]byte(dc.CertPEM))
+		if err != nil {
+			return fmt.Errorf("device %s: %w", dc.Name, err)
+		}
+		fields = append(fields, fs...)
+	}
+	if dc.Title != "" || dc.Server != "" {
+		fields = append(fields, discovery.PageFields(dc.Title, dc.Server)...)
+	}
+	fields = append(fields, dc.Fields...)
+	d := discovery.Device{Address: "192.0.2.1", Kind: dc.Kind, Services: []discovery.Service{{Fields: fields}}}
+
+	r.Counts.DeviceCases++
+	for _, f := range []struct{ name, want string }{
+		{discovery.FieldManufacturer, dc.Truth.Manufacturer},
+		{discovery.FieldModel, dc.Truth.Model},
+		{discovery.FieldFirmware, dc.Truth.Firmware},
+	} {
+		got := ""
+		for _, x := range fields {
+			if x.Name == f.name && x.Trust == discovery.TrustStated {
+				got = x.Value
+				break
+			}
+		}
+		switch {
+		case got == f.want:
+			if got != "" {
+				r.Counts.DeviceFieldsRight++
+			}
+		case got == "":
+			r.Counts.DeviceFieldsMissing++
+			fail(dc.Name, "device-field", f.name+": none", f.want)
+		default:
+			r.Counts.DeviceFieldsWrong++
+			fail(dc.Name, "device-field", f.name+": "+got, f.want)
+		}
+	}
+	if got := discovery.DeviceLevel(d, nil).String(); got != dc.Truth.Level {
+		r.Counts.DeviceLevelWrong++
+		fail(dc.Name, "device-level", got, dc.Truth.Level)
+	}
+	return nil
 }
 
 // scoreDistro identifies each package as the analysis does and matches it

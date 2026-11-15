@@ -14,3 +14,6 @@ max_duplicates: 0
 max_false_merges: 0
 max_trust_wrong: 0
 max_relation_wrong: 0
+device_field_precision: 1.0
+device_level_accuracy: 1.0
+max_device_field_wrong: 0

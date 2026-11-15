@@ -32,6 +32,12 @@ type Gate struct {
 	MaxFalseMerges   int `yaml:"max_false_merges"`
 	MaxTrustWrong    int `yaml:"max_trust_wrong"`
 	MaxRelationWrong int `yaml:"max_relation_wrong"`
+	// Devices: the share of stated manufacturer, model and firmware values
+	// that are right, the share of devices at the expected level, and the
+	// number of wrong values.
+	DeviceFieldPrecision float64 `yaml:"device_field_precision"`
+	DeviceLevelAccuracy  float64 `yaml:"device_level_accuracy"`
+	MaxDeviceFieldWrong  int     `yaml:"max_device_field_wrong"`
 }
 
 // TestCorpus runs the evaluation and fails on a regression. With
@@ -48,6 +54,9 @@ func TestCorpus(t *testing.T) {
 	r, err := Run(c, cat)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if r.Counts.DeviceCases != 6 || r.Counts.DeviceFieldsWrong != 0 || r.Counts.DeviceLevelWrong != 0 {
+		t.Errorf("device cases: %+v", r.Counts)
 	}
 	report := Markdown(r, len(c.Containers), len(c.Topologies), len(c.Packages), len(c.Matching.Cases)+len(c.Distro.Cases))
 	t.Log("\n" + report)
@@ -76,6 +85,8 @@ func TestCorpus(t *testing.T) {
 	check("version coverage", k.VersionCoverage(), g.VersionCoverage)
 	check("match precision", k.MatchPrecision(), g.MatchPrecision)
 	check("match recall", k.MatchRecall(), g.MatchRecall)
+	check("device field precision", k.DeviceFieldPrecision(), g.DeviceFieldPrecision)
+	check("device level accuracy", k.DeviceLevelAccuracy(), g.DeviceLevelAccuracy)
 	for _, m := range []struct {
 		name     string
 		got, max int
@@ -85,6 +96,7 @@ func TestCorpus(t *testing.T) {
 		{"false merges", k.FalseMerges, g.MaxFalseMerges},
 		{"wrong trust levels", k.TrustWrong, g.MaxTrustWrong},
 		{"wrong parent links", k.RelationsWrong, g.MaxRelationWrong},
+		{"wrong device fields", k.DeviceFieldsWrong, g.MaxDeviceFieldWrong},
 	} {
 		if m.got > m.max {
 			t.Errorf("%s: %d (gate %d)", m.name, m.got, m.max)
@@ -144,6 +156,16 @@ func TestHarnessDetectsErrors(t *testing.T) {
 			Groups: [][]string{{"c"}, {"d"}},
 		}},
 	}
+	c.Devices = []DeviceCase{
+		{Name: "wrong model", TXT: []string{"mfg=Example", "md=Press 100"}, Kind: "other",
+			Truth: DeviceTruth{Manufacturer: "Example", Model: "Press 200", Level: "model"}},
+		{Name: "wrong level", TXT: []string{"mfg=Example", "md=Press 100"}, Kind: "other",
+			Truth: DeviceTruth{Manufacturer: "Example", Model: "Press 100", Level: "seen"}},
+		{Name: "unstated model", Title: "Router", Kind: "network",
+			Truth: DeviceTruth{Manufacturer: "Example", Level: "class"}},
+		{Name: "unexpected manufacturer", TXT: []string{"mfg=Example"}, Kind: "other",
+			Truth: DeviceTruth{Level: "seen"}},
+	}
 	c.Matching.Advisories = map[string][]MatchAdvisory{"vaultwarden": {{ID: "GHSA-x", Fixed: "1.33.0"}}}
 	c.Matching.Cases = []MatchCase{
 		{Name: "expects a finding that is not there", App: "vaultwarden", Version: "1.40.0", Trust: "confirmed", Expect: []string{"GHSA-x"}},
@@ -154,6 +176,9 @@ func TestHarnessDetectsErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	k := r.Counts
+	if k.DeviceFieldsWrong < 2 || k.DeviceFieldsMissing < 1 || k.DeviceLevelWrong < 1 {
+		t.Errorf("harness missed injected device errors: %+v", k)
+	}
 	if k.VersionWrong < 2 || k.AppFP < 1 || k.AppFN < 2 || k.Duplicates < 1 || k.FalseMerges < 1 || k.MatchFP < 1 || k.MatchFN < 1 || k.RelationsWrong < 1 {
 		t.Errorf("harness missed injected errors: %+v", k)
 	}
