@@ -12,6 +12,7 @@ import (
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/store"
+	"github.com/bifrost0x/varde/internal/upstream"
 )
 
 // todoGroup is one thing to do on one system: pull a newer image of a
@@ -111,7 +112,11 @@ func (a *app) todoGroups(s *snapshot, fs []store.Finding) []todoGroup {
 				g.PathClass = fg.PathClass
 			}
 		}
-		g.Action, g.Command = todoAction(*g, members[i])
+		var st *upstream.Status
+		if id, ok := strings.CutPrefix(g.Key, "w:"); ok && g.Kind == "image" {
+			st = s.upstreamOf(id)
+		}
+		g.Action, g.Command = todoAction(*g, members[i], st)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -160,10 +165,10 @@ func (a *app) withReleases(ctx context.Context, s *snapshot, groups []todoGroup)
 // todoAction says what fixes a group's findings and how. The cards of
 // containers and apps name a version of their own (app.plan); this is what
 // they say for the packages of a system.
-func todoAction(g todoGroup, fs []store.Finding) (action, command string) {
+func todoAction(g todoGroup, fs []store.Finding, st *upstream.Status) (action, command string) {
 	switch g.Kind {
 	case "image":
-		return "Pull a newer image and recreate the container", "docker compose pull && docker compose up -d"
+		return imageAction(st)
 	case "packages":
 		eco := ""
 		for _, f := range fs {
@@ -180,6 +185,20 @@ func todoAction(g todoGroup, fs []store.Finding) (action, command string) {
 		}
 	}
 	return "No fixed version yet: see the advisories", ""
+}
+
+// imageAction is what to do about a container's image findings: an image
+// only when Varde knows one that fixes some of them (ADR 0045).
+func imageAction(st *upstream.Status) (action, command string) {
+	switch {
+	case st != nil && st.Actionable() && st.Rebuilt:
+		return "Pull the rebuilt image and recreate the container", "docker compose pull && docker compose up -d"
+	case st != nil && st.Actionable():
+		return "Update the image to " + st.TargetTag + " and recreate the container", "docker compose pull && docker compose up -d"
+	case st != nil && (st.Kind == upstream.NoUpstreamFix || st.Kind == upstream.UpdateNoEffect):
+		return "No fixed image upstream yet: limit who can reach it, or build an image with the package updates", ""
+	}
+	return "Varde cannot tell whether a fixed image exists yet", ""
 }
 
 // upgradeCommand is how a distribution installs its updates.

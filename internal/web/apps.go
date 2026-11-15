@@ -12,13 +12,16 @@ import (
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/coverage"
+	"github.com/bifrost0x/varde/internal/distro"
 	"github.com/bifrost0x/varde/internal/identify"
 	"github.com/bifrost0x/varde/internal/imageref"
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
+	"github.com/bifrost0x/varde/internal/paths"
 	"github.com/bifrost0x/varde/internal/remedy"
 	"github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
+	"github.com/bifrost0x/varde/internal/upstream"
 	"github.com/bifrost0x/varde/internal/version"
 )
 
@@ -31,17 +34,18 @@ import (
 // words the pages use; the priorities P1 to P3 stay the names of the
 // policy and of the notifications.
 const (
-	appNow     = "now"     // a confirmed P1 finding: update now
-	appSoon    = "soon"    // P2: update soon
-	appLater   = "later"   // P3: with the next regular update
-	appCheck   = "check"   // only findings Varde cannot confirm
-	appOK      = "ok"      // compared with complete data, nothing found
-	appKnown   = "known"   // compared, but the advisory data is incomplete
-	appUnknown = "unknown" // nothing could be compared
+	appNow      = "now"      // a confirmed P1 finding an update fixes: update now
+	appMitigate = "mitigate" // a confirmed P1 finding no known update fixes
+	appSoon     = "soon"     // P2: update soon
+	appLater    = "later"    // P3: with the next regular update
+	appCheck    = "check"    // only findings Varde cannot confirm
+	appOK       = "ok"       // compared with complete data, nothing found
+	appKnown    = "known"    // compared, but the advisory data is incomplete
+	appUnknown  = "unknown"  // nothing could be compared
 )
 
 // appStateRank orders the states for the list.
-var appStateRank = map[string]int{appNow: 0, appSoon: 1, appLater: 2, appCheck: 3, appUnknown: 4, appKnown: 5, appOK: 6}
+var appStateRank = map[string]int{appNow: 0, appMitigate: 1, appSoon: 2, appLater: 3, appCheck: 4, appUnknown: 5, appKnown: 6, appOK: 7}
 
 // appCard is one app on the front page and the head of its own page.
 type appCard struct {
@@ -74,6 +78,14 @@ type appCard struct {
 	Newer string
 	// Note says what "nothing found" rests on, when that needs saying.
 	Note string
+	// Upstream is what Varde knows about a newer image, for cards of
+	// containers with findings in their image's packages.
+	Upstream *upstream.Status
+	// Introduced says what the suggested image brings that the running
+	// one does not have, when it brings something.
+	Introduced string
+	// Mitigation is what to do while no update fixes the findings.
+	Mitigation *mitigation
 	// Release says which flaws in the image's packages the newest release
 	// of the app fixes, Groups are the app and package versions behind
 	// the card; both are set on the list of updates only.
@@ -83,7 +95,7 @@ type appCard struct {
 
 // appLabels are the states in the words of the pages.
 var appLabels = map[string]string{
-	appNow: "Update now", appSoon: "Update soon", appLater: "With the next update", appCheck: "Check yourself",
+	appNow: "Update now", appMitigate: "Mitigate now", appSoon: "Update soon", appLater: "With the next update", appCheck: "Check yourself",
 	appOK: "Nothing found", appKnown: "Nothing known", appUnknown: "Not checked",
 }
 
@@ -185,7 +197,8 @@ func (a *app) updateCards(s *snapshot, groups []todoGroup, fs []store.Finding) [
 					c.Exposure = f.Exposure
 				}
 			}
-			a.plan(&c, s, wl, byWorkload[id], g)
+			fix := a.plan(&c, s, wl, byWorkload[id], g)
+			c.State = string(upstream.Decide(upstream.UrgencyOf(g.Priority), fix))
 		} else {
 			// The packages of a system: its page lists them.
 			host := strings.TrimPrefix(g.Key, "h:")
@@ -197,7 +210,7 @@ func (a *app) updateCards(s *snapshot, groups []todoGroup, fs []store.Finding) [
 			c.Fixes = plural(g.Count, "flaw") + " in installed packages"
 		}
 		c.Label = appLabels[c.State]
-		c.Why = why(c, g)
+		c.Why = why(c, g, workloadOf(s, c.Key), byWorkload[c.Key])
 		out = append(out, c)
 	}
 	return out
@@ -237,8 +250,12 @@ func (a *app) describe(c *appCard, s *snapshot, wl inventory.Workload, hostNames
 
 // plan chooses the one update of a container or app: the version that
 // fixes every finding of the card's highest priority, and says how many
-// of all its findings that version fixes.
-func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Finding, g todoGroup) {
+// of all its findings that version fixes. For the packages inside an image
+// it suggests an image only when Varde knows one that fixes them
+// (upstream.Status); otherwise it says so and how to limit the risk. It
+// returns what the update does to the card's most pressing findings, from
+// which the card's state follows (upstream.Decide).
+func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Finding, g todoGroup) upstream.Fix {
 	// The app as the findings name it; the identification may be gone
 	// while its findings are still open. Versions of an app the catalog
 	// no longer knows compare as plain numbers.
@@ -262,7 +279,8 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 	}
 	var fixes []fix
 	open, noFix, image := 0, 0, 0
-	var all *match.Target // the update that fixes the most, on any line
+	var topImage []match.Finding // the image findings of the top priority
+	var all *match.Target        // the update that fixes the most, on any line
 	for _, f := range fs {
 		if f.MatchState != string(match.Affected) {
 			continue
@@ -281,7 +299,10 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 		}
 		switch {
 		case m.Image:
-			image++ // a package inside the image: a newer image brings it
+			image++
+			if top {
+				topImage = append(topImage, m)
+			}
 		case f.FixedIn == "":
 			noFix++
 		default:
@@ -308,12 +329,29 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 			}
 		}
 	}
+	var st *upstream.Status
+	if wl.Container != nil && image > 0 {
+		st = s.upstreamOf(wl.ID)
+		c.Upstream = st
+	}
+	// imageFix is what the upstream image does to the image findings.
+	imageFix := upstream.NoFix
+	if st != nil && st.Actionable() {
+		imageFix = upstream.FixesOther
+		for _, m := range topImage {
+			if st.Fixes(m.AdvisoryID, m.Evidence.Package) {
+				imageFix = upstream.FixesTop
+				break
+			}
+		}
+	}
 	switch {
 	case target != "":
-		fixed := 0
+		fixed, fixedTop := 0, false
 		for _, f := range fixes {
 			if match.AtLeast(scheme, target, f.fixedIn) {
 				fixed++
+				fixedTop = fixedTop || f.top
 			}
 		}
 		c.Action = "Update to " + target
@@ -348,19 +386,27 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 				}
 			}
 		}
-	case image > 0 && wl.Container != nil:
-		c.Action = "Pull a newer image and recreate the container"
-		c.Fixes = plural(image, "flaw") + " in packages inside the image"
-		c.Compose = remedy.ComposeOf(wl.Container)
-		if c.Compose != nil {
-			c.Command = c.Compose.Pull()
+		// What the update fixes of the most pressing findings decides:
+		// the app's own, or those in the image when Varde knows an image
+		// that fixes them.
+		switch {
+		case fixedTop || imageFix == upstream.FixesTop:
+			return upstream.FixesTop
+		case fixed > 0 || imageFix == upstream.FixesOther:
+			return upstream.FixesOther
 		}
+		return upstream.NoFix
+	case image > 0 && wl.Container != nil:
+		a.imagePlan(c, wl, fs, st, image)
+		return imageFix
 	case open > 0:
 		c.Action = "No fixed version is published yet"
 		c.Fixes = "limit who can reach it until one is"
+		c.Mitigation = mitigationOf(c, wl, fs, nil)
 	default:
 		c.Action = "Look at the " + plural(g.Count, "finding") + " Varde cannot confirm"
 	}
+	return upstream.NoFix
 }
 
 // allOf words "all N flaws" for one and for several.
@@ -371,17 +417,32 @@ func allOf(n int) string {
 	return "all " + strconv.Itoa(n) + " flaws"
 }
 
-// why says in one line what makes a card pressing.
-func why(c appCard, g todoGroup) string {
+// why says in one line what makes a card pressing. A flaw known to be
+// exploited is named with its component: what the container serves, or a
+// package that is only in the image (ADR 0045).
+func why(c appCard, g todoGroup, wl *inventory.Workload, fs []store.Finding) string {
 	var parts []string
 	if g.KEV {
-		parts = append(parts, "a flaw is known to be exploited")
+		text, whole := exploitedWhy(c, g, wl, fs)
+		if whole {
+			return text
+		}
+		parts = append(parts, text)
 	}
+	imageOnly := c.Upstream != nil && onlyImage(fs)
 	switch c.Exposure {
 	case "public":
-		parts = append(parts, "reachable from the internet")
+		if imageOnly && !g.KEV {
+			parts = append(parts, "flaws in packages of the image; the container is reachable from the internet")
+		} else {
+			parts = append(parts, "reachable from the internet")
+		}
 	case "lan":
-		parts = append(parts, "reachable in your network")
+		if imageOnly && !g.KEV {
+			parts = append(parts, "flaws in packages of the image; the container is reachable in your network")
+		} else {
+			parts = append(parts, "reachable in your network")
+		}
 	}
 	if len(parts) == 0 {
 		switch c.State {
@@ -396,9 +457,76 @@ func why(c appCard, g todoGroup) string {
 	return strings.Join(parts, ", ")
 }
 
+// exploitedWhy words the flaw known to be exploited that makes a card
+// pressing; whole is set when the text says all there is, reachability
+// included.
+func exploitedWhy(c appCard, g todoGroup, wl *inventory.Workload, fs []store.Finding) (text string, whole bool) {
+	var pick *match.Finding
+	pkg, pickTop := "", false
+	for _, f := range fs {
+		if f.MatchState != string(match.Affected) || !status.Active(f.State) {
+			continue
+		}
+		var m match.Finding
+		if json.Unmarshal(f.Detail, &m) != nil || !m.KEV {
+			continue
+		}
+		// The most pressing one: one of the card's priority first.
+		if top := f.Priority == g.Priority; pick == nil || (top && !pickTop) {
+			mm := m
+			pick, pickTop = &mm, top
+			_, pkg, _ = distro.ParseSystemAppID(f.AppID)
+		}
+	}
+	if pick == nil || !pick.Image || pkg == "" {
+		return "a flaw is known to be exploited", false
+	}
+	exposed := c.Exposure == "public" || c.Exposure == "lan"
+	var command []string
+	if wl != nil && wl.Container != nil && wl.Container.Runtime != nil {
+		command = wl.Container.Runtime.Command
+	}
+	if paths.ComponentOf(pkg, command, exposed).Reach != paths.Served {
+		return "known-exploited flaw in " + pkg + ", in the image", true
+	}
+	return "known-exploited flaw in " + pkg + ", " + servedOn(c, wl), true
+}
+
+// servedOn says how what a container serves is reached: its published
+// port, or the route that reaches it.
+func servedOn(c appCard, wl *inventory.Workload) string {
+	if wl != nil && wl.Container != nil {
+		for _, p := range wl.Container.Ports {
+			if p.PublicPort > 0 {
+				return "served on port " + strconv.Itoa(int(p.PublicPort))
+			}
+		}
+	}
+	if c.Exposure == "public" {
+		return "served to the internet"
+	}
+	return "served in your network"
+}
+
+// onlyImage reports whether every confirmed finding is in an image package.
+func onlyImage(fs []store.Finding) bool {
+	any := false
+	for _, f := range fs {
+		if f.MatchState != string(match.Affected) {
+			continue
+		}
+		var m match.Finding
+		if json.Unmarshal(f.Detail, &m) != nil || !m.Image {
+			return false
+		}
+		any = true
+	}
+	return any
+}
+
 // appCounts are the numbers the front page leads with.
 type appCounts struct {
-	Now, Soon, Later, Check, Fine, Unknown, Total int
+	Now, Mitigate, Soon, Later, Check, Fine, Unknown, Total int
 }
 
 func countApps(cards []appCard) appCounts {
@@ -408,6 +536,8 @@ func countApps(cards []appCard) appCounts {
 		switch c.State {
 		case appNow:
 			n.Now++
+		case appMitigate:
+			n.Mitigate++
 		case appSoon:
 			n.Soon++
 		case appLater:
@@ -448,7 +578,8 @@ func appSections(cards []appCard) []appSection {
 			out = append(out, appSection{State: state, Title: title, Text: text, Cards: cs, Compact: compact})
 		}
 	}
-	add(appNow, "Update now", "Reachable or already being exploited. These are the ones Varde notifies about at once.", false)
+	add(appNow, "Update now", "Reachable or already being exploited, and an update that fixes it exists. Varde notifies about these at once.", false)
+	add(appMitigate, "Mitigate now", "Just as urgent, but no update that fixes it is known yet. Varde notifies about these at once; each says how to limit the risk, and it moves to \"Update now\" by itself once a fixed image appears.", false)
 	add(appSoon, "Update soon", "Serious, but not directly reachable. They are in the daily digest.", false)
 	add(appLater, "With the next update", "Nothing pressing. They are in the weekly digest.", false)
 	add(appCheck, "Check yourself", "Varde found advisories for these apps but cannot tell whether they apply to the version running.", false)

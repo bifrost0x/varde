@@ -73,6 +73,14 @@
     <span class="hint">For containers started from tags such as <code>latest</code>: Varde reads the tag list of the image's repository and compares the digests of release tags with the running one, anonymously and read-only. It also reads the tag list of every other image the data package brings no release tags for (your own registries, images outside the catalog), so the inventory can say when a newer release exists. The registry learns which images you run, as it does when you pull them.</span>
     <button class="btn btn--primary" type="submit">Save</button>
   </form>
+  <form class="form" method="post" action="/settings" id="upstream">
+    {{template "csrf" $csrf}}<input type="hidden" name="UPSTREAM_CANDIDATES" value="false"><input type="hidden" name="UPSTREAM_CROSS_MAJOR" value="false">
+    <label class="check"><input type="checkbox" name="UPSTREAM_CANDIDATES" value="true" {{if $d.UpstreamCandidates}}checked{{end}} {{if not $d.RegistryTags}}disabled{{end}}> Read newer images from the registry before suggesting them</label>
+    <span class="hint">With the registry switch on, Varde asks every few hours whether the tag of a container with flawed image packages points to a rebuilt image, or whether a newer tag of the same variant exists. With this switch it also reads the package list of that newer image from the registry, at most two images per run and 1 GB each, without pulling it into Docker, and suggests it only when it fixes something. Without it, Varde knows what a newer image fixes only for releases the data package read.</span>
+    <label class="check"><input type="checkbox" name="UPSTREAM_CROSS_MAJOR" value="true" {{if $d.UpstreamCrossMajor}}checked{{end}} {{if not $d.RegistryTags}}disabled{{end}}> Also suggest a new major version of a pinned tag</label>
+    <span class="hint">A new major version may need migration steps; off, Varde stays on the major version you run.</span>
+    <button class="btn btn--primary" type="submit" {{if not $d.RegistryTags}}disabled{{end}}>Save</button>
+  </form>
   <form class="form" method="post" action="/settings">
     {{template "csrf" $csrf}}<input type="hidden" name="CONTAINER_PACKAGES" value="false">
     <label class="check"><input type="checkbox" name="CONTAINER_PACKAGES" value="true" {{if $d.ContainerPackages}}checked{{end}}> Read the package lists of images from their containers</label>
