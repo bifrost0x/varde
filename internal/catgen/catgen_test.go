@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -251,20 +252,39 @@ func TestFloatingTagsRejectRule(t *testing.T) {
 	e := newEnv(t)
 	e.app("ghcr.io/acme/widget", "acme/widget", "ghcr,readme")
 	e.reg.tags["ghcr.io/acme/widget"] = append(e.reg.tags["ghcr.io/acme/widget"], "v1.3.0-rc.1")
-	app := reviewedCatalog(t, reviewedYAML("widget", `'^v?(?P<v>\d+\.\d+\.\d+(?:-rc\.\d+)?)$'`, "")).Apps()[0]
+	app := reviewedCatalog(t, reviewedYAML(`'^v?(?P<v>\d+\.\d+\.\d+(?:-rc\.\d+)?)$'`, "")).Apps()[0]
 	probs := e.g.CheckReviewed(t.Context(), app)
 	if len(probs) != 1 || probs[0].Check != CheckTags || probs[0].Fix == nil || probs[0].Fix.Tag != Templates()[0].Pattern {
 		t.Fatalf("problems %+v", probs)
 	}
 	// The same entry with a rule that leaves the candidate out passes.
-	app = reviewedCatalog(t, reviewedYAML("widget", `'^v?(?P<v>\d+\.\d+\.\d+)$'`, "")).Apps()[0]
+	app = reviewedCatalog(t, reviewedYAML(`'^v?(?P<v>\d+\.\d+\.\d+)$'`, "")).Apps()[0]
 	if probs := e.g.CheckReviewed(t.Context(), app); len(probs) != 0 {
 		t.Errorf("problems %+v", probs)
 	}
+	// A rule that also reads a variant no template knows keeps failing,
+	// but no template is proposed: it would leave the variant unread.
+	e.reg.tags["ghcr.io/acme/widget"] = append(e.reg.tags["ghcr.io/acme/widget"], "v1.2.0-rootless")
+	app = reviewedCatalog(t, reviewedYAML(`'^v?(?P<v>\d+\.\d+\.\d+(?:-rc\.\d+)?)(?:-rootless)?$'`, "")).Apps()[0]
+	probs = e.g.CheckReviewed(t.Context(), app)
+	if len(probs) != 1 || probs[0].Check != CheckTags || probs[0].Fix != nil || !strings.Contains(probs[0].Detail, "v1.2.0-rootless") {
+		t.Fatalf("problems %+v", probs)
+	}
 }
 
-func reviewedYAML(id, tagRule, extra string) string {
-	return `id: ` + id + `
+func TestDroppedTags(t *testing.T) {
+	rules := []*regexp.Regexp{regexp.MustCompile(`^v?(?P<v>\d+\.\d+\.\d+(?:-rc\d+)?)(?:-tensorrt)?$`)}
+	got := dropped(rules, Templates()[1], []string{"1.2.3", "1.2.3-tensorrt", "1.2.4-rc1", "v1.2.5"})
+	if want := []string{"1.2.3-tensorrt", "v1.2.5"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("dropped %q, want %q", got, want)
+	}
+	if got := dropped(rules, Templates()[0], []string{"1.2.3", "v1.2.5", "1.2.4-rc1"}); len(got) != 0 {
+		t.Errorf("dropped %q", got)
+	}
+}
+
+func reviewedYAML(tagRule, extra string) string {
+	return `id: widget
 name: Widget
 homepage: https://example.org/
 images:
@@ -343,7 +363,7 @@ func TestCPEOnlyWithRepoReference(t *testing.T) {
 		t.Errorf("notes do not say which checks passed:\n%s\n%s", r.Shipped[0].Data, r.Shipped[1].Data)
 	}
 	// A reviewed CPE NVD does not tie to the repository is a C5 problem.
-	app := reviewedCatalog(t, reviewedYAML("widget", `'^v?(?P<v>\d+\.\d+\.\d+)$'`, "  cpe: [cpe:2.3:a:acme:widget_server]\n")).Apps()[0]
+	app := reviewedCatalog(t, reviewedYAML(`'^v?(?P<v>\d+\.\d+\.\d+)$'`, "  cpe: [cpe:2.3:a:acme:widget_server]\n")).Apps()[0]
 	e.nvd.byCPE["cpe:2.3:a:acme:widget_server"] = []CPEProduct{{Name: "cpe:2.3:a:acme:widget_server:1:*:*:*:*:*:*:*", Refs: []string{"https://acme.example/"}}}
 	if probs := e.g.CheckReviewed(t.Context(), app); len(probs) != 1 || probs[0].Check != CheckCPE {
 		t.Errorf("problems %+v", probs)

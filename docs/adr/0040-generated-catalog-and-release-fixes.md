@@ -88,7 +88,7 @@ reviewed entry costs a person time, so the reviewed catalog cannot grow to the i
   findings is said to fix none of them yet.
 - **Weekly check of the reviewed catalog.** `cmd/catalogcheck` runs C1, C3, C4 and C5 on
   `catalog/apps` every Monday. It corrects only what a check proves: the tag rule when a
-  template reads the image's tags, and the note and `verified` date of an entry written without
+  template reads the image's tags, including every release tag the old rule reads, and the note and `verified` date of an entry written without
   a look at the live sources. Corrections go into one pull request, `catalog: weekly check`, on
   a fixed branch; it is never merged automatically. A week with problems but nothing to correct
   appears only in the run's summary and artifact. A reviewed entry is never dropped from the

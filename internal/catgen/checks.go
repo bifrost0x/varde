@@ -337,8 +337,9 @@ func (g *Generator) checkReviewedTags(ctx context.Context, app *catalog.App, rep
 			continue
 		}
 		var fix *catalog.VersionSource
-		if t, _, ok := pickTemplate([][]string{tags}, releases); ok {
-			fix = &catalog.VersionSource{Tag: t.Pattern}
+		tpl, _, ok := pickTemplate([][]string{tags}, releases)
+		if ok {
+			fix = &catalog.VersionSource{Tag: tpl.Pattern}
 		}
 		if len(rules) == 0 {
 			// Nothing to check; a template that fits is a proposal.
@@ -356,7 +357,14 @@ func (g *Generator) checkReviewedTags(ctx context.Context, app *catalog.App, rep
 			}
 			p := Problem{Check: f.check, Detail: app.ID + ": " + f.detail}
 			if fix != nil && fix.Tag != ruleText(app) {
-				p.Fix = fix
+				if lost := dropped(rules, tpl, s.matched); len(lost) > 0 {
+					// The template would leave release tags unread that
+					// the reviewed rule reads (a hardware or rootless
+					// variant, say): the rule needs a person.
+					p.Detail += fmt.Sprintf("; the template %s would no longer read %s", fix.Tag, strings.Join(first(lost, 5), ", "))
+				} else {
+					p.Fix = fix
+				}
 			}
 			out = append(out, p)
 			continue
@@ -365,6 +373,23 @@ func (g *Generator) checkReviewedTags(ctx context.Context, app *catalog.App, rep
 			var f *failure
 			errors.As(err, &f)
 			out = append(out, Problem{Check: f.check, Detail: fmt.Sprintf("%s: %s: %s", app.ID, image, f.detail)})
+		}
+	}
+	return out
+}
+
+// dropped returns the tags among matched that the reviewed rules read as a
+// release and the template does not read with the same version. Floating
+// tags are not counted: leaving them out is what the template is for.
+func dropped(rules []*regexp.Regexp, tpl Template, matched []string) []string {
+	var out []string
+	for _, tag := range matched {
+		if Floating(tag) {
+			continue
+		}
+		old, _ := extract(rules, tag)
+		if v, ok := tpl.Version(tag); !ok || stripV(v) != stripV(old) {
+			out = append(out, tag)
 		}
 	}
 	return out

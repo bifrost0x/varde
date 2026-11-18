@@ -20,11 +20,9 @@ advisories:
   notes: >-
     CyberChef is a web app that runs in the browser; the container only serves its files. Advisories
     are published on the repository (gchq/CyberChef). Release tags are v-prefixed (v10.19.4); latest
-    is floating. Written on 2026-11-12 from the project's public facts without a fresh look at the
-    live sources; the CPE, the advisory repository and the tag forms are to be confirmed on the next
-    review of this entry.
+    is floating.
 exposure_hints:
   default_ports: [8000]
   typical: internal
 maintainers_of_entry: [bifrost0x]
-verified: 2026-11-12
+verified: 2026-11-16

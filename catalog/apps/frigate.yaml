@@ -10,7 +10,7 @@ images:
 version:
   scheme: semver
   sources:
-    - tag: '^(?P<v>\d+\.\d+\.\d+(?:-(?:beta|rc)\d+)?)(?:-(?:standard-arm64|tensorrt(?:-jp[456])?|rk|rocm|synaptics|h8l))?$'
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-(?:standard-arm64|tensorrt(?:-jp[456])?|rk|rocm|synaptics|h8l))?$'
 advisories:
   coverage: full
   github_repos:

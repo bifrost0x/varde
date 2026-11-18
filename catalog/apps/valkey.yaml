@@ -18,11 +18,9 @@ advisories:
   notes: >-
     Valkey publishes repository security advisories (valkey-io/valkey) with affected and fixed
     versions. Tags: 8.0.1, 8.0.1-alpine, 8.0.1-bookworm are pinned; 8, 8.0, 8-bookworm and latest
-    are floating. Written on 2026-11-12 from the project's public facts without a fresh look at the
-    live sources; the CPE, the advisory repository and the tag forms are to be confirmed on the next
-    review of this entry.
+    are floating.
 exposure_hints:
   default_ports: [6379]
   typical: internal
 maintainers_of_entry: [bifrost0x]
-verified: 2026-11-12
+verified: 2026-11-16

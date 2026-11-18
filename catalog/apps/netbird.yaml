@@ -21,7 +21,7 @@ images:
 version:
   scheme: semver
   sources:
-    - tag: '^v?(?P<v>\d+\.\d+\.\d+(?:-rc\.\d+)?)(?:-(?:ubi|rootless|rootless-ubi))?$'
+    - tag: '^v?(?P<v>\d+\.\d+\.\d+)(?:-(?:ubi|rootless|rootless-ubi))?$'
 advisories:
   coverage: full
   github_repos:
