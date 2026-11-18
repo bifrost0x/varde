@@ -9,7 +9,7 @@ images:
 version:
   scheme: semver
   sources:
-    - tag: '^(?P<v>\d+\.\d+\.\d+(?:-rc\d+)?)(?:-rootless)?$'
+    - tag: '^(?P<v>\d+\.\d+\.\d+)(?:-rootless)?$'
 advisories:
   coverage: full
   github_repos:
@@ -21,7 +21,7 @@ advisories:
   notes: >-
     The image has no labels; the version comes from the tag. docker.gitea.com/gitea and
     gitea/gitea serve the same digests. Version tags are plain semver with an optional -rootless
-    suffix (28.3.0, 28.3.0-rootless); release candidates are 1.27.0-rc0. Numbering went from
+    suffix (28.3.0, 28.3.0-rootless); release candidates (1.27.0-rc0) are not read. Numbering went from
     1.27.x to 28.0.0. latest, latest-rootless, major and minor tags (28, 28.3) and *-nightly are
     floating. The Go module moved from code.gitea.io/gitea to gitea.dev; the Go vulnerability
     database marks newer entries under code.gitea.io/gitea as affecting every version, so that
