@@ -8,7 +8,7 @@
 //
 // It never changes an entry beyond two things a check proves: the tag rule,
 // when the rule failed C3 and one of the generator's templates reads the
-// image's tags, and, for an entry written without a look at the live
+// image's tags, every release tag the old rule reads included, and, for an entry written without a look at the live
 // sources, that note and the verified date once every check passed. The
 // edits are textual and leave comments and formatting alone. Corrected
 // files go to <out>/apps/<name>.yaml and the findings to <out>/report.md;
