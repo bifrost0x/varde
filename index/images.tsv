@@ -1,6 +1,8 @@
 docker.clickhouse.com/clickhouse/clickstack-all-in-one	github.com/clickhouse/clickstack	readme
 docker.flagsmith.com/flagsmith/flagsmith	github.com/flagsmith/flagsmith	readme
 docker.io/0netx/bw-export	github.com/0netx/bitwarden_export	hub,readme
+docker.io/0x1917/deepseek-harness	github.com/deepseek-ai/deepseek-harness	hub
+docker.io/0x1917/opengym	github.com/duartesantos8/opengym	hub
 docker.io/0xfurai/peekaping	github.com/0xfurai/peekaping	readme
 docker.io/11notes/adguard	github.com/11notes/docker-adguard	hub,readme
 docker.io/1activegeek/airconnect	github.com/philippe44/airconnect	hub
@@ -34,6 +36,7 @@ docker.io/ahmadnassri/unifi-api-browser	github.com/art-of-wifi/unifi-api-browser
 docker.io/ahmadnassri/vscode-server	github.com/ahmadnassri/docker-vscode-server	hub,readme
 docker.io/airsonicadvanced/airsonic-advanced	github.com/airsonic-advanced/airsonic-advanced	hub
 docker.io/akhilrex/podgrab	github.com/akhilrex/podgrab	hub,readme
+docker.io/akitaonrails/ai-memory	github.com/akitaonrails/ai-memory	readme
 docker.io/alcapone1933/ddns-ipv64	github.com/alcapone1933/docker-ddns-ipv64	hub,readme
 docker.io/alcapone1933/shoutrrr	github.com/alcapone1933/docker-ddns-ipv64	readme
 docker.io/alexindigo/localsend-nas	github.com/alexindigo/localsend-nas	readme
@@ -307,6 +310,7 @@ docker.io/devlindelfuego/easy-uploader	github.com/devlindelfuego/easy-uploader	h
 docker.io/devmtl/noti	github.com/variadico/noti	hub
 docker.io/devzwf/brscan-skey	github.com/devzwf/brscan-skey-docker	hub,readme
 docker.io/devzwf/mimosa	github.com/firemarshmellow/m.i.m.o.s.a	hub
+docker.io/devzwf/partscout	github.com/devzwf/partscout	hub
 docker.io/dgongut/docker-controller-bot	github.com/dgongut/docker-controller-bot	hub,readme
 docker.io/dgongut/wakebot	github.com/dgongut/wakebot	hub,readme
 docker.io/dgtlmoon/changedetection.io	github.com/dgtlmoon/changedetection.io	hub,readme
@@ -314,7 +318,7 @@ docker.io/dhruvinsh/ws-ephemeral	github.com/dhruvinsh/ws-ephemeral	readme
 docker.io/dialmaster/youtarr	github.com/dialmasterorg/youtarr	hub
 docker.io/diamkil/notea	github.com/diamkil/docker-notea	readme
 docker.io/didmar/whisper-api-server	github.com/didmar/whisper-api-server	readme
-docker.io/diegosouzapw/omniroute	github.com/diegosouzapw/omniroute	hub,readme
+docker.io/diegosouzapw/omniroute	github.com/diegosouzapw/omniroute	hub
 docker.io/difegue/lanraragi	github.com/difegue/lanraragi	hub
 docker.io/digitalhigh/flextv	github.com/d8ahazard/flextv	hub
 docker.io/digitalhigh/glimmr	github.com/d8ahazard/glimmr	hub
@@ -446,6 +450,7 @@ docker.io/gfountopoulos/homelabinfo	github.com/gregluffy/homelabinfo	hub,readme
 docker.io/gfountopoulos/homelabinfo-agent	github.com/gregluffy/homelabinfo	hub,readme
 docker.io/giiibates/fetchly	github.com/gill-bates/fetchly	hub,readme
 docker.io/giiibates/fritzfluxdb	github.com/gill-bates/fritzfluxdb	hub
+docker.io/giiibates/justup	github.com/gill-bates/justup	hub,readme
 docker.io/giiibates/rct-manager	github.com/gill-bates/rct-manager	hub
 docker.io/giiibates/unifi-os-server	github.com/gill-bates/unifi-os-server	hub
 docker.io/giof71/librespot	github.com/giof71/librespot-docker	hub,readme
@@ -494,7 +499,7 @@ docker.io/henrygd/beszel-agent	github.com/henrygd/beszel	hub
 docker.io/heroeswearkapes/comfyui-intel-xpu	github.com/heroeswearkapes/comfyui-intel-xpu	hub,readme
 docker.io/heroeswearkapes/ffmpeg-ssh-worker	github.com/heroeswearkapes/ffmpeg-ssh-worker	hub,readme
 docker.io/heroeswearkapes/schedules-direct-xmltv	github.com/heroeswearkapes/schedules-direct-xmltv	hub,readme
-docker.io/heroeswearkapes/tts-workbench	github.com/heroeswearkapes/tts-workbench	hub
+docker.io/heroeswearkapes/tts-workbench	github.com/heroeswearkapes/tts-workbench	hub,readme
 docker.io/heywoodlh/hydroxide	github.com/emersion/hydroxide	hub
 docker.io/hhftechnology/pangolin-cloudflare-tunnel	github.com/hhftechnology/pangolin-cloudflare-tunnel	readme
 docker.io/holyarrs/holyarrs	github.com/holyarrs/holyarrs	hub,readme
@@ -591,7 +596,7 @@ docker.io/jsonbored/signoz-agent	github.com/jsonbored/signoz-aio	hub
 docker.io/jsonbored/simplelogin-aio	github.com/jsonbored/simplelogin-aio	hub
 docker.io/judochinx/rangarr	github.com/judochinx/rangarr	readme
 docker.io/juggleim/im-server	github.com/juggleim/im-server	readme
-docker.io/junkerderprovinz/arrowloop	github.com/junkerderprovinz/arrowloop	readme
+docker.io/junkerderprovinz/arrowloop	github.com/junkerderprovinz/arrowloop	hub,readme
 docker.io/junkerderprovinz/bombvault	github.com/junkerderprovinz/bombvault	hub
 docker.io/junkerderprovinz/cadcraft	github.com/storytold/cadcraft	hub
 docker.io/junkerderprovinz/cannoncommander	github.com/junkerderprovinz/cannoncommander	readme
@@ -794,6 +799,7 @@ docker.io/netplexflix/uldas	github.com/netplexflix/uldas	readme
 docker.io/netplexflix/umtk	github.com/netplexflix/upcoming-movies-tv-shows-for-kometa	readme
 docker.io/netplexflix/wtwp	github.com/netplexflix/what-to-watch-on-plex	readme
 docker.io/newterry/get-icon	github.com/newterry/get-icon	hub,readme
+docker.io/nexius2/vodum	github.com/nexius2/vodum	readme
 docker.io/nextcloud/all-in-one	github.com/nextcloud/all-in-one	hub
 docker.io/neyslim/ultimate-ca-manager	github.com/neyslim/ultimate-ca-manager	hub,readme
 docker.io/ngosang/deluge-exporter	github.com/ngosang/deluge-exporter	hub,readme
@@ -941,7 +947,6 @@ docker.io/rsaturns/backuparr	github.com/rsaturns/backuparr	hub,readme
 docker.io/rssbridge/rss-bridge	github.com/rss-bridge/rss-bridge	hub,readme
 docker.io/rtuszik/photon-docker	github.com/rtuszik/photon-docker	readme
 docker.io/runitor/runitor	github.com/bdd/runitor	hub
-docker.io/runwisp/runwisp	github.com/runwisp/runwisp	hub,readme
 docker.io/rustdesk/rustdesk-server	github.com/rustdesk/rustdesk-server	readme
 docker.io/rustfs/rustfs	github.com/rustfs/rustfs	hub,readme
 docker.io/rustmailer/bichon	github.com/rustmailer/bichon	readme
@@ -986,8 +991,7 @@ docker.io/shoginn/flightradar24	github.com/shoginn/flightradar24	readme
 docker.io/shoshuo/prismarr	github.com/shoshuo/prismarr	hub,readme
 docker.io/significantgravitas/autogpt	github.com/significant-gravitas/autogpt	hub,readme
 docker.io/signtools/signtools	github.com/signtools/signtools	hub
-docker.io/silverwind/droppy	github.com/silverwind/droppy	hub,readme
-docker.io/simojenki/bonob	github.com/simojenki/bonob	readme
+docker.io/simojenki/bonob	github.com/simojenki/bonob	hub,readme
 docker.io/simonjenny/fastcom-mqtt	github.com/simonjenny/fastcom-mqtt	readme
 docker.io/simonjenny/fastcom-mysql	github.com/simonjenny/fastcom-mysql	readme
 docker.io/simplic17y/disc-o-matic	github.com/disc-o-matic/disc-o-matic	hub,readme
@@ -1003,6 +1007,7 @@ docker.io/slimjimserver/melodarr	github.com/slimjimserver/melodarr	readme
 docker.io/slskd/slskd	github.com/slskd/slskd	hub,readme
 docker.io/slurvdjur/legejo	github.com/jularboolean/legejo	hub,readme
 docker.io/smallstep/step-ca	github.com/smallstep/certificates	hub
+docker.io/smccloud/unifi-wifi-tool	github.com/smccloud/unifiwifitool	readme
 docker.io/smeagolworms4/mqtt-explorer	github.com/smeagolworms4/mqtt-explorer	hub
 docker.io/smidley/dovi-convert	github.com/smidley/dovi-convert-docker	readme
 docker.io/smp46/pingvin-share-x	github.com/smp46/pingvin-share-x	readme
@@ -1039,10 +1044,12 @@ docker.io/szurubooru/client	github.com/rr-/szurubooru	hub,readme
 docker.io/szurubooru/server	github.com/rr-/szurubooru	hub,readme
 docker.io/tailscale/tailscale	github.com/tailscale/tailscale	hub
 docker.io/tajniak81/gsmnode-aio	github.com/gsmnode/gsmnode	hub
+docker.io/taloan/dmoffice	github.com/taloan/dmoffice	hub
 docker.io/tamland/airsonic-refix	github.com/tamland/airsonic-refix	readme
 docker.io/tannermiddleton/recommendarr	github.com/fingerthief/recommendarr	hub
 docker.io/tanq16/expenseowl	github.com/tanq16/expenseowl	readme
 docker.io/tanq16/local-content-share	github.com/tanq16/local-content-share	readme
+docker.io/tarampampam/error-pages	github.com/tarampampam/error-pages	hub
 docker.io/tareku99/amp-v3-dockerized	github.com/tareku99/amp-v3-dockerized	hub
 docker.io/taskcafe/taskcafe	github.com/jordanknott/taskcafe	hub,readme
 docker.io/teampass/teampass	github.com/nilsteampassnet/teampass	hub,readme
@@ -1101,6 +1108,7 @@ docker.io/tunefish92/tapeory	github.com/tunefish92/tapeory	hub
 docker.io/tunefish92/tilorama	github.com/tunefish92/tilorama	hub
 docker.io/twiddly/happypandax	github.com/happypandax/happypandax	hub
 docker.io/twinproduction/gatus	github.com/twin/gatus	hub,readme
+docker.io/txemi/immich-autotag	github.com/txemi/immich-autotag	readme
 docker.io/typingpenguin/quartz_builder	github.com/typingpenguin/quartz_builder	hub
 docker.io/unsloth/unsloth	github.com/unslothai/unsloth	hub,readme
 docker.io/untraceablez/uvdesk	github.com/uvdesk/community-skeleton	hub
@@ -1141,6 +1149,7 @@ docker.io/willfarrell/crontab	github.com/willfarrell/docker-crontab	hub
 docker.io/wingysam/christmas-community	github.com/wingysam/christmas-community	hub,readme
 docker.io/wollomatic/socket-proxy	github.com/wollomatic/socket-proxy	hub,readme
 docker.io/wupasscat/continentbot	github.com/wupasscat/continent-bot	readme
+docker.io/x0lie/pia-tun	github.com/x0lie/pia-tun	hub,readme
 docker.io/xacnio/tweetcapture	github.com/xacnio/tweetcapture	readme
 docker.io/xanderstrike/goplaxt	github.com/xanderstrike/goplaxt	readme
 docker.io/xavierh/external-ip	github.com/xavier-hernandez/docker-external-ip	hub,readme
@@ -1153,7 +1162,6 @@ docker.io/xhofe/alist	github.com/xhofe/alist	hub,readme
 docker.io/xiaodoudoufr/plexiptv	github.com/xiaodoudou/plexiptv	hub,readme
 docker.io/xirixiz/dsmr-reader-docker	github.com/xirixiz/dsmr-reader-docker	hub
 docker.io/xoriin/netmap	github.com/xoriin/netmap	readme
-docker.io/xubiaolin/zerotier-planet	github.com/xubiaolin/docker-zerotier-planet	hub,readme
 docker.io/xy2z/pinedocs	github.com/xy2z/pinedocs	hub,readme
 docker.io/yannisalexiou/appstore-webhook-proxy	github.com/yannisalexiou/appstore-webhook-proxy	hub
 docker.io/yooooomi/your_spotify_client	github.com/yooooomi/your_spotify	hub,readme
@@ -1172,6 +1180,8 @@ docker.io/zggis/dobby	github.com/zggis/dobby	hub,readme
 docker.io/zggis/howler	github.com/zggis/howler	hub,readme
 docker.io/zggis/plex-tvtime	github.com/zggis/plex-tvtime	hub,readme
 docker.io/zigleur/jellyhub	github.com/zigl3ur/jellyhub	hub,readme
+docker.io/zimengxiong/excalidash-backend	github.com/zimengxiong/excalidash	readme
+docker.io/zimengxiong/excalidash-frontend	github.com/zimengxiong/excalidash	readme
 docker.io/zkkzkk32312/crawl4ai-proxy	github.com/zkkzkk32312/crawl4ai-proxy	readme
 docker.io/zoeyvid/npmplus	github.com/zoeyvid/npmplus	hub,readme
 docker.io/zoraxydocker/zoraxy	github.com/tobychui/zoraxy	hub
@@ -1199,6 +1209,7 @@ ghcr.io/activepieces/activepieces	github.com/activepieces/activepieces	ghcr,read
 ghcr.io/activexray/doplarr_rs	github.com/activexray/doplarr_rs	ghcr,readme
 ghcr.io/ad-on-is/odin	github.com/ad-on-is/odin-server	readme
 ghcr.io/advplyr/audiobookshelf	github.com/advplyr/audiobookshelf	ghcr,readme
+ghcr.io/aerowinder/jembex-dedupe	github.com/aerowinder/jembex-dedupe	ghcr,readme
 ghcr.io/aerya/gluetun-companion	github.com/aerya/gluetun-companion	ghcr,readme
 ghcr.io/afairgiant/medikeep	github.com/afairgiant/medikeep	ghcr,readme
 ghcr.io/agigante80/actual-mcp-server	github.com/agigante80/actual-mcp-server	ghcr,readme
@@ -1231,7 +1242,6 @@ ghcr.io/appwrite/hansi	github.com/appwrite/appwrite	readme
 ghcr.io/aquantumofdonuts/mixarr	github.com/aquantumofdonuts/mixarr	ghcr,readme
 ghcr.io/arabcoders/watchstate	github.com/arabcoders/watchstate	ghcr,readme
 ghcr.io/arabcoders/ytptube	github.com/arabcoders/ytptube	ghcr,readme
-ghcr.io/arif-banai/musicbot	github.com/arif-banai/musicbot	ghcr,readme
 ghcr.io/arnegiacomo/fugleramme	github.com/arnegiacomo/fugleramme	ghcr,readme
 ghcr.io/arpanghosh8453/open-dronelog	github.com/arpanghosh8453/open-dronelog	ghcr,readme
 ghcr.io/arthursoares/libsync	github.com/arthursoares/libsync	ghcr,readme
@@ -1262,12 +1272,12 @@ ghcr.io/bdlnaredi/mediahub	github.com/bdlnaredi/mediahub	ghcr,readme
 ghcr.io/bdlnaredi/stasharr	github.com/bdlnaredi/stasharr	ghcr,readme
 ghcr.io/bdlnaredi/stasharr-tagger	github.com/bdlnaredi/stasharr	ghcr,readme
 ghcr.io/beccazero/prusa-connect-rtsp	github.com/beccazero/prusa-connect-rtsp	ghcr,readme
+ghcr.io/benjafin/poptonium	github.com/benjafin/poptonium-server	readme
 ghcr.io/benjaminmue/onedrive-sync-station	github.com/benjaminmue/onedrive-sync-station	ghcr,readme
 ghcr.io/bennobaer-dev/suslik	github.com/bennobaer-dev/suslik	ghcr,readme
 ghcr.io/bert-mccutchen/oak	github.com/bert-mccutchen/oak	ghcr,readme
 ghcr.io/besoeasy/originless	github.com/besoeasy/originless	ghcr,readme
 ghcr.io/besoeasy/yantr	github.com/besoeasy/yantr	ghcr,readme
-ghcr.io/besoeasy/zeronote	github.com/besoeasy/zeronote	ghcr,readme
 ghcr.io/bfritscher/typesense-dashboard	github.com/bfritscher/typesense-dashboard	ghcr,readme
 ghcr.io/bgriffin63/reelping	github.com/bgriffin63/reelping	ghcr,readme
 ghcr.io/bgriffin63/reelspace	github.com/bgriffin63/reelspace	ghcr,readme
@@ -1285,6 +1295,7 @@ ghcr.io/bluewave-labs/capture	github.com/bluewave-labs/capture	ghcr,readme
 ghcr.io/bmj812/batcharr	github.com/bmj812/batcharr	ghcr,readme
 ghcr.io/bmj812/mediamedic	github.com/bmj812/mediamedic	ghcr,readme
 ghcr.io/bnlqn/overlook	github.com/bnlqn/overlook	ghcr,readme
+ghcr.io/bonderaustriaat/justdns	github.com/bonderaustriaat/justdns	ghcr,readme
 ghcr.io/booklore-app/booklore	github.com/booklore-app/booklore	ghcr,readme
 ghcr.io/bopeng/ai-marketplace-monitor	github.com/bopeng/ai-marketplace-monitor	ghcr,readme
 ghcr.io/borgbase/vorta-docker	github.com/borgbase/vorta-docker	ghcr,readme
@@ -1303,6 +1314,7 @@ ghcr.io/caglaryalcin/omnisight	github.com/caglaryalcin/omnisight	ghcr,readme
 ghcr.io/cansas/commonplace-multi	github.com/cansas/commonplace-multi	ghcr,readme
 ghcr.io/caramelfur/picsur	github.com/caramelfur/picsur	ghcr,readme
 ghcr.io/catduckgnaf/discord-repost-history-bot	github.com/catduckgnaf/discord-repost-history-bot	ghcr,readme
+ghcr.io/catduckgnaf/pastey	github.com/catduckgnaf/pastey	ghcr,readme
 ghcr.io/cbcoutinho/nextcloud-mcp-server	github.com/cbcoutinho/nextcloud-mcp-server	ghcr,readme
 ghcr.io/cedya77/aiometadata	github.com/cedya77/aiometadata	ghcr,readme
 ghcr.io/cenodude/crosswatch	github.com/cenodude/crosswatch	ghcr,readme
@@ -1339,6 +1351,7 @@ ghcr.io/craigmccaskill/posthorn	github.com/craigmccaskill/posthorn	ghcr,readme
 ghcr.io/crosis47/tmodloader	github.com/crosis47/tmodloader	ghcr,readme
 ghcr.io/crosstalk-solutions/unifi-toolkit	github.com/crosstalk-solutions/unifi-toolkit	ghcr,readme
 ghcr.io/crywolf203/ama-unraid	github.com/crywolf203/ama-unraid	ghcr,readme
+ghcr.io/ctrlaltspoods/blizzbeat	github.com/ctrlaltspoods/blizzbeat	ghcr,readme
 ghcr.io/d3vyce/teleinfo-exporter	github.com/d3vyce/teleinfo-exporter	ghcr,readme
 ghcr.io/dadaloop82/evershelf	github.com/dadaloop82/evershelf	ghcr,readme
 ghcr.io/dagucloud/dagu	github.com/dagucloud/dagu	ghcr,readme
@@ -1353,7 +1366,6 @@ ghcr.io/daprkid/discovarr	github.com/daprkid/discovarr	ghcr,readme
 ghcr.io/darkdragon14/volumevault	github.com/darkdragon14/volumevault	ghcr,readme
 ghcr.io/darksworm/doormouse	github.com/darksworm/doormouse	ghcr,readme
 ghcr.io/datbird/blockslot-server	github.com/datbird/blockslot	ghcr,readme
-ghcr.io/datbird/couchelephant	github.com/datbird/couchelephant	ghcr,readme
 ghcr.io/davidkrgh/dockkeep	github.com/davidkrgh/dockkeep	ghcr,readme
 ghcr.io/debridmediamanager/zurg	github.com/debridmediamanager/zurg-public	readme
 ghcr.io/debridmediamanager/zurg-public	github.com/debridmediamanager/zurg-public	ghcr,readme
@@ -1407,6 +1419,7 @@ ghcr.io/dotcoocoo/hermitstash	github.com/dotcoocoo/hermitstash	ghcr,readme
 ghcr.io/drachenhort/lidarr-similar	github.com/drachenhort/lidarr-similar	ghcr,readme
 ghcr.io/drewzh/meshcore-web-docker	github.com/drewzh/meshcore-web-docker	ghcr,readme
 ghcr.io/drohack/keeparr	github.com/drohack/keeparr	ghcr,readme
+ghcr.io/drolosoft/immich-photo-manager	github.com/drolosoft/immich-photo-manager	ghcr,readme
 ghcr.io/drumandbytes/momentarr	github.com/drumandbytes/momentarr	ghcr,readme
 ghcr.io/drumandbytes/nordvpn	github.com/drumandbytes/nordvpn	ghcr,readme
 ghcr.io/drumandbytes/paddock-api	github.com/drumandbytes/paddock-api	ghcr,readme
@@ -1439,13 +1452,13 @@ ghcr.io/esg450/jobify	github.com/esg450/jobify	ghcr,readme
 ghcr.io/esg450/jobify-jobspy	github.com/esg450/jobify	ghcr,readme
 ghcr.io/euro-office/documentserver	github.com/euro-office/documentserver	ghcr,readme
 ghcr.io/evroon/bracket	github.com/evroon/bracket	ghcr,readme
-ghcr.io/eyupio/zoomies	github.com/eyupio/zoomies	ghcr,readme
 ghcr.io/ezekielthemad/healthtrack	github.com/ezekielthemad/healthtrack	ghcr,readme
 ghcr.io/fccview/cronmaster	github.com/fccview/cronmaster	ghcr,readme
 ghcr.io/fccview/jotty	github.com/fccview/jotty	ghcr,readme
 ghcr.io/fclairamb/solidping	github.com/fclairamb/solidping	ghcr,readme
 ghcr.io/felddy/foundryvtt	github.com/felddy/foundryvtt-docker	readme
 ghcr.io/felddy/weewx	github.com/felddy/weewx-docker	readme
+ghcr.io/feldorn/free-games-claimer	github.com/feldorn/free-games-claimer	ghcr,readme
 ghcr.io/fenrisskoll/hermitage	github.com/fenrisskoll/hermitage	ghcr,readme
 ghcr.io/ferdinand99/tofarr	github.com/ferdinand99/tofarr	ghcr,readme
 ghcr.io/ferretdb/ferretdb-eval	github.com/ferretdb/ferretdb	ghcr,readme
@@ -1497,9 +1510,11 @@ ghcr.io/gilbn/geometrikks	github.com/gilbn/geometrikks	ghcr,readme
 ghcr.io/gillberg1111/linearr	github.com/gillberg1111/linearr	ghcr,readme
 ghcr.io/gillberg1111/mediaspecter	github.com/gillberg1111/mediaspecter	ghcr,readme
 ghcr.io/glincker/levelrail	github.com/glincker/levelrail	ghcr,readme
+ghcr.io/gnacho/netpulse	github.com/gnacho/netpulse	ghcr,readme
 ghcr.io/got-feedback/feedback-demucs-server	github.com/got-feedback/feedback-demucs-server	ghcr,readme
 ghcr.io/gothenburgbitfactory/taskchampion-sync-server	github.com/gothenburgbitfactory/taskchampion-sync-server	ghcr,readme
 ghcr.io/gradium-ai/ptts-openai-server	github.com/gradium-ai/xn-ptts	readme
+ghcr.io/grantm28/runelite-web	github.com/grantm28/runelite-web	ghcr,readme
 ghcr.io/greentown0/map.meshcore.dev-uploader	github.com/greentown0/map.meshcore.dev-uploader	ghcr,readme
 ghcr.io/greite/database-backup	github.com/greite/database-backup	ghcr,readme
 ghcr.io/guillevc/yubal	github.com/guillevc/yubal	ghcr,readme
@@ -1554,9 +1569,11 @@ ghcr.io/itsdnns/docsight	github.com/itsdnns/docsight	ghcr,readme
 ghcr.io/itsecholot/containernursery	github.com/itsecholot/containernursery	ghcr,readme
 ghcr.io/itskovacs/trip	github.com/itskovacs/trip	ghcr,readme
 ghcr.io/itskovacs/wingfit	github.com/itskovacs/wingfit	ghcr,readme
+ghcr.io/itsmemac/agentcairn	github.com/itsmemac/agentcairn	ghcr,readme
 ghcr.io/itsweber-official/itsweber-play	github.com/itsweber-official/itsweber-play	ghcr,readme
 ghcr.io/ivanfioravanti/chatbot-ollama	github.com/ivanfioravanti/chatbot-ollama	ghcr,readme
 ghcr.io/jackmeyer/handoff	github.com/jackmeyer/handoff	ghcr,readme
+ghcr.io/jaclas/bisqfts	github.com/jaclas/bisqfts	ghcr,readme
 ghcr.io/jakeshake/pinebridge-bridge	github.com/jakeshake/pinebridge	ghcr,readme
 ghcr.io/jakeshake/pinebridge-mt5	github.com/jakeshake/pinebridge	ghcr,readme
 ghcr.io/jakobbjelver/messer-swipe	github.com/jakobbjelver/messer-swipe	ghcr,readme
@@ -1586,6 +1603,7 @@ ghcr.io/jfmlima/shelly-manager-web	github.com/jfmlima/shelly-manager	ghcr,readme
 ghcr.io/jittering/traefik-kop	github.com/jittering/traefik-kop	ghcr,readme
 ghcr.io/jlightner86/jellylooter	github.com/jlightner86/jellylooter	ghcr,readme
 ghcr.io/jltelectronics/jltamp-server	github.com/jltelectronics/jltamp-server	ghcr,readme
+ghcr.io/jnslmk/amazon-mcp	github.com/jnslmk/amazon-mcp	ghcr,readme
 ghcr.io/joecarl/mularr	github.com/joecarl/mularr	ghcr,readme
 ghcr.io/johagan94/warden	github.com/johagan94/warden	ghcr,readme
 ghcr.io/jon4hz/jellysweep	github.com/jon4hz/jellysweep	ghcr,readme
@@ -1621,6 +1639,7 @@ ghcr.io/khoj-ai/terrarium	github.com/khoj-ai/khoj	readme
 ghcr.io/kieraneglin/pinchflat	github.com/kieraneglin/pinchflat	ghcr,readme
 ghcr.io/kikootwo/readmeabook	github.com/kikootwo/readmeabook	ghcr,readme
 ghcr.io/kilvoctu/aiyabot	github.com/kilvoctu/aiyabot	ghcr,readme
+ghcr.io/kinopeer/kinopeer	github.com/kinopeer/kinopeer	ghcr,readme
 ghcr.io/kirovair/muxarr	github.com/kirovair/muxarr	ghcr,readme
 ghcr.io/kittendevv/invio	github.com/kittendevv/invio	ghcr,readme
 ghcr.io/kkodecs/livrarr	github.com/kkodecs/livrarr	ghcr,readme
@@ -1628,15 +1647,19 @@ ghcr.io/koalitos/tambaqui	github.com/koalitos/tambaqui	ghcr,readme
 ghcr.io/kolapsis/maintenant	github.com/kolapsis/maintenant	ghcr,readme
 ghcr.io/koroblabs/ferrite-server	github.com/koroblabs/ferrite-server	ghcr,readme
 ghcr.io/krinkuto11/streamflow	github.com/krinkuto11/streamflow	ghcr,readme
+ghcr.io/krismakes/octofarm-redux	github.com/krismakes/octofarm-redux	ghcr,readme
 ghcr.io/ktordoff13/media-purge	github.com/ktordoff13/media-purge	ghcr,readme
 ghcr.io/kx1t/screenshot	github.com/kx1t/docker-planefence	readme
 ghcr.io/kylejschultz/cratekeep	github.com/kylejschultz/cratekeep	ghcr,readme
 ghcr.io/kylejschultz/nestview	github.com/kylejschultz/nestview	ghcr,readme
+ghcr.io/kyonew/dvinyl	github.com/kyonew/dvinyl	ghcr,readme
 ghcr.io/l4stidi0t/arr-tools/main	github.com/l4stidi0t/arr-tools	readme
 ghcr.io/lambdatadb/lambdata	github.com/lambdatadb/lambdata	ghcr,readme
+ghcr.io/largerio/secret	github.com/largerio/secret	ghcr,readme
 ghcr.io/lasikiewicz/plekt	github.com/lasikiewicz/plekt	ghcr,readme
 ghcr.io/laurensguijt/unraid-pwa	github.com/laurensguijt/unraid-pwa	ghcr,readme
 ghcr.io/leppermesiah/letopis	github.com/leppermesiah/letopis	ghcr,readme
+ghcr.io/lethek/sharesight-mcp	github.com/lethek/sharesight-mcp	ghcr,readme
 ghcr.io/lfrank95/amberwave-aio	github.com/lfrank95/amberwave	ghcr,readme
 ghcr.io/libre-7/gupax-docker	github.com/libre-7/gupax-docker	ghcr,readme
 ghcr.io/libredb/libredb-studio	github.com/libredb/libredb-studio	ghcr,readme
@@ -1713,6 +1736,7 @@ ghcr.io/mostlygeek/llama-swap	github.com/mostlygeek/llama-swap	ghcr,readme
 ghcr.io/mqtt-tools/mqttwarn-full	github.com/mqtt-tools/mqttwarn	ghcr,readme
 ghcr.io/mrnogood356/stashboard	github.com/mrnogood356/stashboard	ghcr,readme
 ghcr.io/mrpatates/endfield-checkin	github.com/mrpatates/endfield-checkin	ghcr,readme
+ghcr.io/mrquentin/bambu-controller	github.com/mrquentin/bambu-controller	ghcr,readme
 ghcr.io/mrrobotjs/mum	github.com/mrrobotjs/mum	ghcr,readme
 ghcr.io/mscrnt/patreon-credits	github.com/mscrnt/patreon-credits	ghcr,readme
 ghcr.io/mudler/mcps/localrecall	github.com/mudler/localrecall	ghcr,readme
@@ -1720,6 +1744,7 @@ ghcr.io/muety/wakapi	github.com/muety/wakapi	ghcr,readme
 ghcr.io/mxpv/podsync	github.com/mxpv/podsync	ghcr,readme
 ghcr.io/mytview/mytview	github.com/mytview/mytview-server	readme
 ghcr.io/nadeko-bot/nadekobot	github.com/nadeko-bot/nadekobot	ghcr,readme
+ghcr.io/narratarr/narratarr	github.com/narratarr/narratarr	ghcr,readme
 ghcr.io/navino16/flixpatrol-top10-on-trakt	github.com/navino16/flixpatrol-top10-on-trakt	ghcr,readme
 ghcr.io/nazmolla/cleanplex	github.com/nazmolla/cleanplex	ghcr,readme
 ghcr.io/nebn/unraid-simple-monitoring-api	github.com/nebn/unraid-simple-monitoring-api	ghcr,readme
@@ -1732,6 +1757,9 @@ ghcr.io/netalertx/netalertx	github.com/netalertx/netalertx	ghcr,readme
 ghcr.io/netbootxyz/netbootxyz	github.com/netbootxyz/docker-netbootxyz	readme
 ghcr.io/netbymatt/ws4kp	github.com/netbymatt/ws4kp	ghcr,readme
 ghcr.io/neur0map/deskmon-agent	github.com/neur0map/deskmon-agent	ghcr,readme
+ghcr.io/nexaflowfrance/openfamily	github.com/nexaflowfrance/openfamily	ghcr,readme
+ghcr.io/nexaflowfrance/openfamily-client	github.com/nexaflowfrance/openfamily	ghcr,readme
+ghcr.io/nexaflowfrance/openfamily-server	github.com/nexaflowfrance/openfamily	ghcr,readme
 ghcr.io/ngosang/deluge-exporter	github.com/ngosang/deluge-exporter	ghcr,readme
 ghcr.io/nichtlegacy/mediawatch	github.com/nichtlegacy/plexwatch	readme
 ghcr.io/nickshanks347/monitarr	github.com/nickshanks347/monitarr	ghcr,readme
@@ -1740,12 +1768,14 @@ ghcr.io/nicotsx/zerobyte	github.com/nicotsx/zerobyte	ghcr,readme
 ghcr.io/nightcrawler1016/immich-album-sync	github.com/nightcrawler1016/immich-album-sync	ghcr,readme
 ghcr.io/nightly-labs/openbot	github.com/nightly-labs/openbot	ghcr,readme
 ghcr.io/niki2k1/mcsm	github.com/niki2k1/mcsm	ghcr,readme
+ghcr.io/nishantjh/immich_autoalbums	github.com/nishantjh/immich_autoalbums	ghcr,readme
 ghcr.io/njic/medassist	github.com/njic/medassist	ghcr,readme
 ghcr.io/nobsevomberg/ubuchhaltung	github.com/nobsevomberg/ubuchhaltung	ghcr,readme
 ghcr.io/note-sx/server	github.com/note-sx/server	ghcr,readme
 ghcr.io/notifiarr/starrproxy	github.com/notifiarr/starrproxy	ghcr,readme
 ghcr.io/nulcraft/boxwatchr	github.com/nulcraft/boxwatchr	ghcr,readme
 ghcr.io/nullifyr/excalidraw-live-unraid	github.com/nullifyr/excalidraw-live-unraid	ghcr,readme
+ghcr.io/ohf-voice/voice-incubator	github.com/ohf-voice/voice-incubator	ghcr,readme
 ghcr.io/ohmzi/immaculaterr	github.com/ohmzi/immaculaterr	ghcr,readme
 ghcr.io/okhr/reclaimarr	github.com/okhr/reclaimarr	ghcr,readme
 ghcr.io/oliverbravery/printguard	github.com/oliverbravery/printguard	ghcr,readme
@@ -1759,6 +1789,7 @@ ghcr.io/operationeth/absulli	github.com/operationeth/absulli	ghcr,readme
 ghcr.io/orangecoding/fredy	github.com/orangecoding/fredy	ghcr,readme
 ghcr.io/oratorian/emby-watchparty	github.com/oratorian/emby-watchparty	ghcr,readme
 ghcr.io/orbitmpgh/maki	github.com/orbitmpgh/maki	ghcr,readme
+ghcr.io/orohde/wissen	github.com/orohde/wissen	ghcr,readme
 ghcr.io/oroshi-zz/forge_90	github.com/oroshi-zz/forge_90	ghcr,readme
 ghcr.io/oscartbeaumont/netlify-dynamic-dns	github.com/oscartbeaumont/netlify-dynamic-dns	ghcr,readme
 ghcr.io/outsourc-e/hermes-workspace	github.com/outsourc-e/hermes-workspace	ghcr,readme
@@ -1791,6 +1822,7 @@ ghcr.io/peppeg/watchsense	github.com/peppeg/watchsense	ghcr,readme
 ghcr.io/perber/leafwiki	github.com/perber/leafwiki	ghcr,readme
 ghcr.io/peterthepeter/groly	github.com/peterthepeter/groly	ghcr,readme
 ghcr.io/phantombot/phantombot	github.com/phantombot/phantombot	ghcr,readme
+ghcr.io/pharaoh-labs/teamarr	github.com/pharaoh-labs/teamarr	ghcr,readme
 ghcr.io/pilascat/cinema-watch	github.com/pilascat/cinema-watch	ghcr,readme
 ghcr.io/pipe-bomb/frontend	github.com/pipe-bomb/docker	readme
 ghcr.io/pipe-bomb/pipe-bomb	github.com/pipe-bomb/docker	readme
@@ -1798,7 +1830,10 @@ ghcr.io/pipe-bomb/proxy	github.com/pipe-bomb/docker	readme
 ghcr.io/pipe-bomb/server	github.com/pipe-bomb/docker	readme
 ghcr.io/pixlcore/xyops	github.com/pixlcore/xyops	ghcr,readme
 ghcr.io/plankanban/planka	github.com/plankanban/planka	ghcr,readme
+ghcr.io/pluja/anysub	github.com/pluja/anysub	ghcr,readme
+ghcr.io/pluja/anysub-worker	github.com/pluja/anysub	ghcr,readme
 ghcr.io/poag/buffarr	github.com/poag/buffarr	ghcr,readme
+ghcr.io/poag/mcpopus	github.com/poag/mcpopus	ghcr,readme
 ghcr.io/poag/seerrcompanion	github.com/poag/seerrcompanion	ghcr,readme
 ghcr.io/poag/twitchminer	github.com/poag/twitchminer	ghcr,readme
 ghcr.io/prolife86/whiskywise	github.com/prolife86/whiskywise	ghcr,readme
@@ -1827,7 +1862,6 @@ ghcr.io/ralksta/immich-folio	github.com/ralksta/immich-folio	ghcr,readme
 ghcr.io/rapha57/dockit	github.com/rapha57/dockit	ghcr,readme
 ghcr.io/rargames/4gaboards	github.com/rargames/4gaboards	ghcr,readme
 ghcr.io/raunot/rewindarr	github.com/raunot/rewindarr	ghcr,readme
-ghcr.io/raylabshq/gitea-mirror	github.com/raylabshq/gitea-mirror	ghcr,readme
 ghcr.io/raymunro/docker-safeguard	github.com/raymunro/docker-safeguard	ghcr,readme
 ghcr.io/raymunro/plexgaps	github.com/raymunro/plexgaps	ghcr,readme
 ghcr.io/rayz3r0/tidaloader	github.com/rayz3r0/tidaloader	ghcr,readme
@@ -1865,6 +1899,7 @@ ghcr.io/rix1337/quasarr	github.com/rix1337/quasarr	ghcr,readme
 ghcr.io/rix1337/sponsors-helper	github.com/rix1337/quasarr	readme
 ghcr.io/rmyndharis/openwa	github.com/rmyndharis/openwa	ghcr,readme
 ghcr.io/roalkege/jumpcoin	github.com/roalkege/jumpcoin	ghcr,readme
+ghcr.io/rocketride-org/rocketride-engine	github.com/rocketride-org/rocketride-server	readme
 ghcr.io/rohit-purandare/shelfbridge	github.com/rohit-purandare/shelfbridge	ghcr,readme
 ghcr.io/roonlabs/roonserver	github.com/roonlabs/roon-docker	readme
 ghcr.io/rorar/vibe-kanban-docker	github.com/rorar/vibe-kanban-docker	ghcr,readme
@@ -1878,10 +1913,10 @@ ghcr.io/s3lfcod3r/selfthreatmap	github.com/s3lfcod3r/selfthreatmap	ghcr,readme
 ghcr.io/s3lfcod3r/zoraxy-crowdsec-bouncer	github.com/s3lfcod3r/zoraxy-crowdsec-bouncer	ghcr,readme
 ghcr.io/sahara101/dakosys	github.com/sahara101/dakosys	ghcr,readme
 ghcr.io/saihgupr/homeassistanttimemachine	github.com/saihgupr/homeassistanttimemachine	ghcr,readme
-ghcr.io/samuelloranger/labby	github.com/samuelloranger/labby	ghcr,readme
 ghcr.io/sandobserver/posteryard	github.com/sandobserver/posteryard	ghcr,readme
 ghcr.io/sandobserver/stackyard	github.com/sandobserver/stackyard	ghcr,readme
 ghcr.io/sandobserver/tellyard	github.com/sandobserver/tellyard	ghcr,readme
+ghcr.io/sasakaranovic/openfan-service	github.com/sasakaranovic/openfan-service	ghcr,readme
 ghcr.io/sassanix/warracker/main	github.com/sassanix/warracker	readme
 ghcr.io/satsbook/satsbook	github.com/satsbook/satsbook	ghcr,readme
 ghcr.io/sbondco/watcharr	github.com/sbondco/watcharr	ghcr,readme
@@ -1890,15 +1925,18 @@ ghcr.io/scanopy/scanopy/server	github.com/scanopy/scanopy	readme
 ghcr.io/schaka/janitorr	github.com/schaka/janitorr	ghcr,readme
 ghcr.io/scoltzero/msf	github.com/scoltzero/msf	ghcr,readme
 ghcr.io/scormave/gramps-web-mcp	github.com/scormave/gramps-web-mcp	ghcr,readme
+ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder	github.com/sdr-enthusiasts/docker-adsb-ultrafeeder	ghcr,readme
 ghcr.io/sdr-enthusiasts/docker-rtlsdrairband	github.com/sdr-enthusiasts/docker-rtlsdrairband	ghcr,readme
 ghcr.io/seanmorley15/adventurelog	github.com/seanmorley15/adventurelog	ghcr,readme
 ghcr.io/seaweedbraincy/jellyfin-newsletter	github.com/seaweedbraincy/jellyfin-newsletter	ghcr,readme
 ghcr.io/sec844/analysarr	github.com/sec844/analysarr	ghcr,readme
 ghcr.io/secops-7/mikrodash	github.com/secops-7/mikrodash	ghcr,readme
+ghcr.io/selkies-project/selkies/desktop	github.com/selkies-project/selkies	readme
 ghcr.io/serge-chat/serge	github.com/serge-chat/serge	ghcr,readme
 ghcr.io/sergigp/yarrtube	github.com/sergigp/yarrtube	ghcr,readme
-ghcr.io/sergiotapia/magnetissimo	github.com/sergiotapia/magnetissimo	ghcr,readme
 ghcr.io/seriousm4x/upsnap	github.com/seriousm4x/upsnap	ghcr,readme
+ghcr.io/shaderf/filmhound	github.com/shaderf/filmhound	ghcr,readme
+ghcr.io/shaderf/recordhound	github.com/shaderf/recordhound	ghcr,readme
 ghcr.io/shadowner/infrarust	github.com/shadowner/infrarust	ghcr,readme
 ghcr.io/shakes63/palisade	github.com/shakes63/palisade	ghcr,readme
 ghcr.io/shanebionic/palcenter	github.com/shanebionic/palcenter	ghcr,readme
@@ -1928,7 +1966,6 @@ ghcr.io/sognix/strata-supervisor	github.com/sognix/strata-supervisor	ghcr,readme
 ghcr.io/sognix/video2x-webgui	github.com/sognix/video2x-webgui	ghcr,readme
 ghcr.io/sp-tushonka/server-csharp	github.com/sp-tushonka/server-csharp	ghcr,readme
 ghcr.io/spaceinvaderone/hailfrequency	github.com/spaceinvaderone/hail-frequency	readme
-ghcr.io/spikey1965/library-doctor	github.com/spikey1965/library-doctor	ghcr,readme
 ghcr.io/spudgunman/meshing-around	github.com/spudgunman/meshing-around	ghcr,readme
 ghcr.io/staffwerke/staffwerke/vm-babysitter	github.com/staffwerke/vm-babysitter	ghcr,readme
 ghcr.io/starosdev/scrutiny	github.com/starosdev/scrutiny	ghcr,readme
@@ -1990,6 +2027,7 @@ ghcr.io/tda90/spoolease-bambustudio	github.com/tda90/docker-spoolease-bambustudi
 ghcr.io/technomancer702/nodecast-tv	github.com/technomancer702/nodecast-tv	ghcr,readme
 ghcr.io/teecodedev/gyroidvault	github.com/teecodedev/gyroidvault	ghcr,readme
 ghcr.io/teecodedev/vehiclevault	github.com/teecodedev/vehiclevault	ghcr,readme
+ghcr.io/tempus2016/z2m-device-tracker	github.com/tempus2016/z2m-device-tracker	ghcr,readme
 ghcr.io/tensorchord/vchord-postgres	github.com/tensorchord/vectorchord	readme
 ghcr.io/terafin/mqtt-venstar-bridge	github.com/terafin/mqtt-venstar-bridge	ghcr,readme
 ghcr.io/termix-ssh/termix	github.com/termix-ssh/termix	ghcr,readme
@@ -2029,8 +2067,6 @@ ghcr.io/traceapps/lifttrace	github.com/traceapps/lifttrace	ghcr,readme
 ghcr.io/traceapps/notetrace	github.com/traceapps/notetrace	ghcr,readme
 ghcr.io/traceapps/nutritrace	github.com/traceapps/nutritrace	ghcr,readme
 ghcr.io/tracefinity/tracefinity	github.com/tracefinity/tracefinity	ghcr,readme
-ghcr.io/trafficflowhq/mirror-postgres	github.com/trafficflowhq/ohmail	readme
-ghcr.io/trafficflowhq/mirror-rustfs	github.com/trafficflowhq/ohmail	readme
 ghcr.io/transmute-app/transmute	github.com/transmute-app/transmute	ghcr,readme
 ghcr.io/trugamr/wol	github.com/trugamr/wol	ghcr,readme
 ghcr.io/tunefish92/factoriomaprenderer	github.com/tunefish92/factoriomaprenderer	ghcr,readme
@@ -2058,13 +2094,14 @@ ghcr.io/vert-sh/vert	github.com/vert-sh/vert	ghcr,readme
 ghcr.io/vert-sh/vertd	github.com/vert-sh/vertd	ghcr,readme
 ghcr.io/viren070/aiostreams	github.com/viren070/aiostreams	ghcr,readme
 ghcr.io/vogler/free-games-claimer	github.com/vogler/free-games-claimer	ghcr,readme
+ghcr.io/volcengine/openviking	github.com/volcengine/openviking	ghcr,readme
 ghcr.io/volttech21/reostream	github.com/volttech21/reostream	ghcr,readme
 ghcr.io/vonhex/a-eye	github.com/vonhex/a-eye	ghcr,readme
-ghcr.io/vonhex/delamain	github.com/vonhex/delamain	ghcr,readme
 ghcr.io/vonhex/eyeris	github.com/vonhex/eyeris	ghcr,readme
 ghcr.io/vonhex/keepsift	github.com/vonhex/keepsift	ghcr,readme
 ghcr.io/wangwanjie/gately	github.com/wangwanjie/gately	ghcr,readme
 ghcr.io/warreth/gphotos2immich	github.com/warreth/gphotos2immich	ghcr,readme
+ghcr.io/webdecoy/fcaptcha	github.com/webdecoy/fcaptcha	ghcr,readme
 ghcr.io/wez/govee2mqtt	github.com/wez/govee2mqtt	ghcr,readme
 ghcr.io/wfzyx/von	github.com/wfzyx/von	ghcr,readme
 ghcr.io/wg-easy/wg-easy	github.com/wg-easy/wg-easy	ghcr,readme
@@ -2086,14 +2123,16 @@ ghcr.io/yourok/torrserver	github.com/yourok/torrserver	ghcr,readme
 ghcr.io/yundera/maison	github.com/yundera/maison	ghcr,readme
 ghcr.io/zabra9red/unraiddeck	github.com/zabra9red/unraiddeck	ghcr,readme
 ghcr.io/zapomatic/bitwatch	github.com/zapomatic/bitwatch	ghcr,readme
+ghcr.io/zarestia-dev/rclone-manager	github.com/zarestia-dev/rclone-manager	ghcr,readme
 ghcr.io/zarskie/postarr	github.com/zarskie/daps-ui	readme
 ghcr.io/zenitram/malla	github.com/zenitram/malla	ghcr,readme
 ghcr.io/zhigege666/lingshu-home	github.com/zhigege666/lingshu-home	ghcr,readme
 ghcr.io/zibbp/ganymede	github.com/zibbp/ganymede	ghcr,readme
+ghcr.io/zilcho-labs/zilcho-subs	github.com/zilcho-labs/zilcho-subs	ghcr,readme
+ghcr.io/zingerlittlebee/serverbee-server	github.com/zingerlittlebee/serverbee	ghcr,readme
 ghcr.io/zmsp/apprankly	github.com/zmsp/apprankly	ghcr,readme
 ghcr.io/zombifiedturkey/yamz	github.com/zombifiedturkey/yamz	ghcr,readme
 ghcr.io/zorcerer/heddohon	github.com/zorcerer/heddohon	ghcr,readme
-ghcr.io/zumbyte-appsolution/zumbyte-remote-server	github.com/zumbyte-appsolution/zumbyte-remote-release	readme
 lscr.io/linuxserver/chromium	github.com/linuxserver/docker-chromium	readme
 lscr.io/linuxserver/kali-linux	github.com/linuxserver/docker-kali-linux	readme
 lscr.io/linuxserver/obsidian	github.com/linuxserver/docker-obsidian	readme
