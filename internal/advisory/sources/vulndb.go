@@ -171,7 +171,11 @@ func (v *VulnDB) update(ctx context.Context, d vulndb.Dataset, now time.Time, re
 	path := vulndb.CachePath(v.Dir, d)
 	_, statErr := os.Stat(path)
 	have := statErr == nil
-	if have && !due(st, now) {
+	// Not before the next run: the daily check of a file in the cache,
+	// and the retry after a failed download, also of a file never fetched
+	// yet. A state without an error and without the file (a restored
+	// backup) fetches at once.
+	if !due(st, now) && (have || st.LastError != "") {
 		res.Skipped++
 		return false, nil
 	}

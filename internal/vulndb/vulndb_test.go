@@ -360,7 +360,9 @@ func TestNormalizeAndSelect(t *testing.T) {
 	for _, s := range sel["os:Debian:12/openssl"] {
 		ids = append(ids, s.Vuln.ID)
 	}
-	if strings.Join(ids, ",") != "DEBIAN-CVE-2024-0001,DEBIAN-CVE-2024-0002,DEBIAN-CVE-2024-0003" {
+	// CVE-2024-0002 is unimportant to Debian: not a finding of a system
+	// package.
+	if strings.Join(ids, ",") != "DEBIAN-CVE-2024-0001,DEBIAN-CVE-2024-0003" {
 		t.Errorf("Debian 12 openssl: %v", ids)
 	}
 	if s := sel["os:Debian:12/openssl"][0]; s.Severity != "high" {
@@ -557,5 +559,68 @@ func TestHandles(t *testing.T) {
 	}
 	if w := Want([]distro.Package{{Ecosystem: "Ubuntu:24.04:LTS", Name: "linux", Version: "6.8.0-1"}}, nil, stamp); len(w.Apps()) != 0 {
 		t.Error("an Ubuntu kernel is not wanted from the datasets")
+	}
+}
+
+// A catalog app installed on two Ubuntu releases gets one record per CVE
+// that keeps the entry of each release.
+func TestTidyMergesReleases(t *testing.T) {
+	dir := t.TempDir()
+	var paths []string
+	for _, eco := range []string{"Ubuntu:24.04:LTS", "Ubuntu:22.04:LTS"} {
+		d := Datasets(eco)[0]
+		if _, err := Normalize(d, "testdata/ubuntu.pkg.oval.xml.bz2", CachePath(dir, d), stamp); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, CachePath(dir, d))
+	}
+	w := Want(nil, map[string][]distro.Package{"openssl-app": {
+		{Ecosystem: "Ubuntu:24.04:LTS", Name: "openssl", Version: "3.0.13-0ubuntu3"},
+		{Ecosystem: "Ubuntu:22.04:LTS", Name: "openssl", Version: "3.0.2-0ubuntu1"},
+	}}, stamp)
+	sel := map[string][]Selected{}
+	for _, p := range paths {
+		if err := Select(p, w, sel); err != nil {
+			t.Fatal(err)
+		}
+	}
+	Tidy(sel)
+	var rec *Selected
+	for i := range sel["openssl-app"] {
+		if sel["openssl-app"][i].Vuln.ID == "UBUNTU-CVE-2025-1000" {
+			rec = &sel["openssl-app"][i]
+		}
+	}
+	if rec == nil || len(sel["openssl-app"]) != 2 {
+		t.Fatalf("records %+v", sel["openssl-app"])
+	}
+	ecos := map[string]bool{}
+	for _, a := range rec.Vuln.Affected {
+		ecos[a.Package.Ecosystem] = true
+	}
+	if !ecos["Ubuntu:24.04:LTS"] || !ecos["Ubuntu:22.04:LTS"] || len(rec.Vuln.Affected) != 2 {
+		t.Errorf("entries %+v", rec.Vuln.Affected)
+	}
+}
+
+// A catalog app keeps Debian's unimportant entries: the matcher says what
+// they are there, as with osv.dev's records of catalog apps.
+func TestUnimportantKeptForCatalogApps(t *testing.T) {
+	dir := t.TempDir()
+	d := Datasets("Debian:12")[0]
+	if _, err := Normalize(d, "testdata/debian.json", CachePath(dir, d), stamp); err != nil {
+		t.Fatal(err)
+	}
+	w := Want(nil, map[string][]distro.Package{"tls-app": {{Ecosystem: "Debian:12", Name: "openssl", Version: "3.0.13-1~deb12u1"}}}, stamp)
+	sel := map[string][]Selected{}
+	if err := Select(CachePath(dir, d), w, sel); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, s := range sel["tls-app"] {
+		found = found || s.Vuln.ID == "DEBIAN-CVE-2024-0002"
+	}
+	if !found {
+		t.Error("unimportant entry missing for a catalog app")
 	}
 }

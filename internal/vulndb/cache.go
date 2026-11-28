@@ -212,11 +212,18 @@ func selectFor(rec Record, h wantedPkg) (Selected, bool) {
 	eco := h.ecosystem
 	v := rec.Vuln
 	v.Affected = nil
+	system := strings.HasPrefix(h.appID, distro.SystemPrefix)
 	for _, a := range rec.Vuln.Affected {
 		if CanonicalName(a.Package.Ecosystem, a.Package.Name) != CanonicalName(eco, h.name) {
 			continue
 		}
 		if !distro.SameRelease(a.Package.Ecosystem, eco, time.Now()) {
+			continue
+		}
+		if u, _ := a.EcosystemSpecific["urgency"].(string); system && strings.EqualFold(u, "unimportant") {
+			// Debian does not count it as a security issue of this
+			// package; the system packages leave it out, as the osv.dev
+			// source does (sources.SystemPackages).
 			continue
 		}
 		// The matcher compares names exactly: the entry takes the name
@@ -235,17 +242,32 @@ func selectFor(rec Record, h wantedPkg) (Selected, bool) {
 }
 
 // Tidy orders the selected records of each package by ID, so that equal
-// data compares equal, and keeps one of each ID: osv.dev exports a record
-// that names packages of several ecosystems in each of them.
+// data compares equal, and merges records of one ID: osv.dev exports a
+// record that names packages of several ecosystems in each of them, and a
+// catalog app installed on two releases gets the record of each release's
+// dataset. The merged record keeps the entries of every release.
 func Tidy(sel map[string][]Selected) {
 	for app, rs := range sel {
 		sort.SliceStable(rs, func(i, j int) bool { return rs[i].Vuln.ID < rs[j].Vuln.ID })
 		out := rs[:0]
-		for i, r := range rs {
-			if i > 0 && r.Vuln.ID == rs[i-1].Vuln.ID {
+		for _, r := range rs {
+			n := len(out)
+			if n == 0 || out[n-1].Vuln.ID != r.Vuln.ID {
+				out = append(out, r)
 				continue
 			}
-			out = append(out, r)
+			m := &out[n-1]
+			for _, a := range r.Vuln.Affected {
+				if !containsEntry(m.Vuln.Affected, a) {
+					m.Vuln.Affected = append(m.Vuln.Affected, a)
+				}
+			}
+			if r.CVSS > m.CVSS {
+				m.CVSS = r.CVSS
+			}
+			if rank(r.Severity) > rank(m.Severity) {
+				m.Severity = r.Severity
+			}
 		}
 		sel[app] = out
 	}

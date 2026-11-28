@@ -132,6 +132,16 @@ func TestVulnDBRefresh(t *testing.T) {
 	if err != nil || st.LastError == "" || !st.NextRun.Equal(now.Add(vulnDBRetry)) {
 		t.Errorf("failed dataset state %+v %v", st, err)
 	}
+	// A refresh before the retry time leaves the failed dataset alone,
+	// although it was never fetched.
+	alpineHits := u.count("/v3.22/main.json")
+	now = now.Add(10 * time.Minute)
+	if _, err := v.Refresh(t.Context(), nil); err != nil {
+		t.Fatalf("refresh during the backoff: %v", err)
+	}
+	if u.count("/v3.22/main.json") != alpineHits {
+		t.Error("a failed dataset is asked again before its retry time")
+	}
 
 	// Later: Debian has not changed, Alpine is back. The rating of the
 	// CVE reaches the Alpine record, which has none of its own.
