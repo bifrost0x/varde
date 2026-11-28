@@ -145,6 +145,9 @@ signing keys combined with the release pipeline (residual risk, mitigated by key
 | I: Chat channel secrets in URL paths (Discord webhook URL, Telegram bot token) | Secrets through environment variables or files only; redacted in every error the channels return (ADR 0029) |
 | I: Distribution data queries reveal package names and releases to osv.dev | Under the same opt-in as OSV; only source packages of catalog apps are asked (ADR 0028) |
 | T: A2 serves misleading distribution records | Records are matched only for the queried release and package; Debian, Ubuntu and Alpine keep only per-CVE records, AlmaLinux, Rocky Linux and openSUSE keep their notices and expand them per CVE without merging CVEs; pages are followed to the end (at most 20), an inconsistent answer is refused; an unparseable version makes the finding unverified, never affected |
+| I: Vulnerability dataset downloads reveal which releases and ecosystems are in use (ADR 0047) | Whole files, the same for every installation: no package or version is named; only datasets of releases and ecosystems present are fetched; `VARDE_VULNDB=false` switches them off |
+| T: A dataset publisher or its hosting serves forged or withheld records | TLS to the publisher's host; records are compared only for the release and package they name, in the package manager's order; a version that does not compare is unverified, never affected; an empty or unreadable file never replaces the cache. Not signed by Varde (residual risk) |
+| D: Oversized or malicious dataset files | Download cap per dataset, bzip2 output capped, zip entries capped per entry and in total, JSON and XML read as streams with bounded lines |
 | T/I: SSRF via catalog-defined URLs or probes | Probes disabled by default, only to the container's own internal address, no redirects, 64 KB cap; egress allowlist option; all HTTP through `internal/httpx` |
 
 ### Notifications (boundary 5)
@@ -185,6 +188,9 @@ signing keys combined with the release pipeline (residual risk, mitigated by key
   forward to a host service, an app using a library in an unusual way); the reason is always
   shown, and noise stays listed and in the weekly digest.
 - Direct mode leaks the set of apps in use to upstream APIs from the user's IP.
+- The vulnerability datasets (ADR 0047) come from their publishers over TLS, without a signature
+  of the project: whoever controls a publisher's hosting can add or hide package flaws until the
+  data reaches the signed data package.
 - A compromised feed signing pipeline can publish a validly signed but incomplete feed. Further
   feed limits are listed in `docs/feed-trust.md`.
 - On a plain-HTTP LAN (`VARDE_COOKIE_SECURE=never`) session cookies and passwords cross the network

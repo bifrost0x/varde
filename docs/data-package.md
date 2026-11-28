@@ -31,7 +31,9 @@ no package, says so under Settings › Data package and has no advisory data fro
 | `enrichment/epss` | EPSS scores for the CVEs the package names, not the whole dataset. |
 
 Not in it: distribution package data (2.6 GB at osv.dev), osv.dev package data, NVD,
-endoflife.date. Those stay the switches they are in an installation.
+endoflife.date. An installation downloads the distributions' and ecosystems' own complete
+datasets itself ([ADR 0047](adr/0047-complete-vulnerability-datasets.md)); osv.dev queries, the
+NVD and endoflife.date stay the switches they are in an installation.
 
 The manifest names the channel `package`, carries the build time as sequence (Unix seconds) and
 is valid for 7 days: six failed builds in a row pass before installations report stale data.

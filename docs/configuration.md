@@ -414,6 +414,38 @@ advisories of the project's GitHub repository.
 
 The inventory marks such apps "recognised automatically" and says what the recognition rests on.
 
+## Package vulnerability data
+
+Varde checks every package it reads, of hosts and of container images, against the complete
+security data of its distribution or ecosystem (ADR 0047). With `VARDE_VULNDB` on (the default)
+it downloads, for the releases and ecosystems present:
+
+| Packages | Dataset | Host |
+|---|---|---|
+| Debian 12, 13, 14 | Debian security tracker, all releases in one file | `security-tracker.debian.org` |
+| Ubuntu | Canonical's package OVAL of the release | `security-metadata.canonical.com` |
+| Alpine | secdb of the release, `main` and `community` | `secdb.alpinelinux.org` |
+| Wolfi, Chainguard | their secdb files | `packages.wolfi.dev`, `packages.cgr.dev` |
+| Go, PyPI, Maven, crates.io, RubyGems, Packagist, NuGet, AlmaLinux, Rocky Linux, openSUSE, RHEL | osv.dev's export of the ecosystem | `osv-vulnerabilities.storage.googleapis.com` |
+| Severity for records without one | Canonical's CVE data of the newest LTS release (NVD scores) | `security-metadata.canonical.com` |
+
+- **What a request reveals.** Every installation downloads the same whole files. A host learns
+  that some system uses a release or an ecosystem, as the package manager of that system tells
+  its mirror anyway; no request names a package or a version.
+- **How often.** Each file is checked once a day with a conditional request and converted into
+  a compact cache under `<VARDE_DATA_DIR>/vulndb` (20 to 60 MB for a typical host). When the
+  inventory changes, Varde selects the records of the new packages from the cache without a
+  request. The cache is not part of a backup; it is downloaded again when missing.
+- **What is not covered.** npm packages (osv.dev's export is too large to fetch daily) and
+  Ubuntu kernels; with `VARDE_DIRECT_OSV` on they are asked from osv.dev. Debian releases past
+  their long-term support are no longer in the tracker. Ubuntu's data names fixed issues only.
+- **When a download fails.** The records of that dataset stay as they were, and Settings ›
+  Package vulnerability data shows the error and the next attempt.
+- **Switching it off.** `VARDE_VULNDB=false` or the switch in Settings. Packages are then
+  checked only with `VARDE_DIRECT_OSV` on. With `VARDE_EGRESS_ALLOWLIST` set, add the hosts above.
+- **Trust.** The files come over TLS from their publishers; they are not signed by the project.
+  See the [threat model](threat-model.md).
+
 ## The data package
 
 The project builds one signed data package a day: the advisories of every app the catalog and the

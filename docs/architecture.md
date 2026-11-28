@@ -40,7 +40,10 @@ one SQLite file (ADR 0002); the UI is server-rendered (ADR 0007).
 3. **Advisories.** In direct mode `internal/advisory/sources` fetches GitHub repository advisories,
    CISA KEV and FIRST EPSS, and optionally OSV and NVD, only for apps that are present (ADR 0009,
    ADR 0017). In feed mode `internal/feed` installs a signed snapshot (ADR 0005,
-   `docs/feed-trust.md`); hybrid uses both. Everything is stored as OSV (ADR 0004).
+   `docs/feed-trust.md`); hybrid uses both. In every mode `internal/vulndb` downloads the complete
+   security datasets of the distributions and ecosystems present, normalises each into a cache
+   file and selects the records of the packages present (ADR 0047). Everything is stored as OSV
+   (ADR 0004).
 4. **Matching** (`internal/match`): advisories are deduplicated by alias, version ranges evaluated
    precisely; anything not comparable is `unverified`, never `affected` (ADR 0008). Distribution
    packages are matched against their distribution's records with the dpkg or apk version order
@@ -72,6 +75,7 @@ one SQLite file (ADR 0002); the UI is server-rendered (ADR 0007).
 | `internal/agent`, `internal/fleet`, `…/wire` | Agent client; server side (CA, listener, enrollment); shared protocol |
 | `internal/catalog`, `internal/identify`, `internal/imageref`, `internal/version` | Catalog, identification, versions |
 | `internal/advisory`, `…/sources`, `internal/feed` | OSV model, ranges, CVSS; direct sources; feed client |
+| `internal/vulndb` | Complete vulnerability datasets: readers for the Debian tracker, Ubuntu OVAL, secdb and osv.dev exports, the cache, selection of the packages present |
 | `internal/match`, `internal/exposure`, `internal/policy` | Matching, exposure, priorities |
 | `internal/pipeline`, `internal/coverage`, `internal/notify` | Analysis; host merge, coverage and blind spots; notifications |
 | `internal/status` | Finding counts and the overall state shown by the UI and the API |
