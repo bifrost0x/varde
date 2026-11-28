@@ -177,15 +177,28 @@ func Select(path string, w *Wanted, into map[string][]Selected) error {
 		if err := json.Unmarshal(l.Record, &rec); err != nil {
 			return fmt.Errorf("vulndb %s: %w", filepath.Base(path), err)
 		}
-		done := map[string]bool{}
+		// One record per app: an app with packages in two releases keeps
+		// the entries of both in one record.
+		byApp := map[string]*Selected{}
+		var order []string
 		for _, h := range hits {
-			if done[h.appID] {
+			s, ok := selectFor(rec, h)
+			if !ok {
 				continue
 			}
-			done[h.appID] = true
-			if s, ok := selectFor(rec, h); ok {
-				into[h.appID] = append(into[h.appID], s)
+			if prev := byApp[h.appID]; prev != nil {
+				for _, a := range s.Vuln.Affected {
+					if !containsEntry(prev.Vuln.Affected, a) {
+						prev.Vuln.Affected = append(prev.Vuln.Affected, a)
+					}
+				}
+				continue
 			}
+			byApp[h.appID] = &s
+			order = append(order, h.appID)
+		}
+		for _, app := range order {
+			into[app] = append(into[app], *byApp[app])
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -196,7 +209,7 @@ func Select(path string, w *Wanted, into map[string][]Selected) error {
 
 // selectFor trims rec to the entries of the wanted package.
 func selectFor(rec Record, h wantedPkg) (Selected, bool) {
-	eco, _, _ := distro.ParseSystemAppID(h.appID)
+	eco := h.ecosystem
 	v := rec.Vuln
 	v.Affected = nil
 	for _, a := range rec.Vuln.Affected {
@@ -337,4 +350,13 @@ func CVSSLabel(score float64) string {
 		return "low"
 	}
 	return ""
+}
+
+func containsEntry(entries []advisory.Affected, a advisory.Affected) bool {
+	for _, e := range entries {
+		if strings.EqualFold(e.Package.Ecosystem, a.Package.Ecosystem) && e.Package.Name == a.Package.Name {
+			return true
+		}
+	}
+	return false
 }

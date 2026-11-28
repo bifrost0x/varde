@@ -39,7 +39,7 @@ verified: 2026-11-09
 
 // A distribution package shows its version and release data on the
 // inventory, and the next steps suggest the distribution security data
-// while osv.dev queries are off.
+// while neither the vulnerability datasets nor osv.dev queries are on.
 func TestDistroPackages(t *testing.T) {
 	var set *settings.Service
 	h := newHarness(t, withNetwork(t), withNginx(t), func(d *Deps) { set = d.Settings })
@@ -61,6 +61,13 @@ func TestDistroPackages(t *testing.T) {
 		t.Fatal("scope")
 	}
 	_ = h.store.RecordDevices(ctx, []discovery.Device{{Address: "192.168.1.5", Kind: discovery.KindWeb, Label: "Web"}}, nil, now)
+	// With the vulnerability datasets on (the default) the step is done.
+	if _, body = h.do(t, "GET", "/connections", nil, nil); strings.Contains(body, "distribution packages against") {
+		t.Error("step shown although the vulnerability datasets are on")
+	}
+	if err := set.Update(ctx, map[string]string{settings.KeyVulnDB: "false"}, "admin", now); err != nil {
+		t.Fatal(err)
+	}
 	_, body = h.do(t, "GET", "/connections", nil, nil)
 	if !strings.Contains(body, "Check 1 distribution packages against their distribution") || !strings.Contains(body, "/settings#sources") {
 		t.Error("distribution data step missing")

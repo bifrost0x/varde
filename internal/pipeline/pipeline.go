@@ -239,6 +239,10 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 		}
 	}
 	sum.ImagePackages = len(images)
+	checks := packageChecks(ws, images, pkgs)
+	for i := range results {
+		results[i].Packages = checks[results[i].WorkloadID]
+	}
 	all := make(map[string]*catalog.App, len(appSet)+len(systemApps))
 	for id, a := range appSet {
 		all[id] = a
@@ -732,6 +736,47 @@ func AdvisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded fun
 			continue
 		}
 		out = append(out, match.Advisory{Source: r.Source, Vuln: r.Vuln, CVSS: r.CVSS, SeverityLabel: r.SeverityLabel})
+	}
+	return out
+}
+
+// packageChecks says per container what of its image's packages was read
+// and is compared with security data, and why nothing was read.
+func packageChecks(ws []inventory.Workload, images []imageTarget, pkgs map[store.ImageRef]inventory.ImagePackages) map[string]*identify.PackageCheck {
+	out := map[string]*identify.PackageCheck{}
+	for _, t := range images {
+		pc := out[t.workloadID]
+		if pc == nil {
+			pc = &identify.PackageCheck{Ecosystems: map[string]int{}}
+			out[t.workloadID] = pc
+		}
+		pc.Count++
+		pc.Ecosystems[t.pkg.Ecosystem]++
+	}
+	for _, w := range ws {
+		c := w.Container
+		if c == nil || w.RemovedAt != nil {
+			continue
+		}
+		ip, ok := pkgs[store.ImageRef{ImageID: c.ImageID, HostID: w.HostID}]
+		note := ""
+		switch {
+		case !ok:
+			note = "the packages of its image have not been read yet"
+		case ip.Error != "":
+			note = ip.Error
+		case ip.Partial:
+			note = "the package lists of its image were read only in part"
+		case ip.Distro == "" && out[w.ID] == nil:
+			note = "its image has no package database Varde reads"
+		}
+		if note == "" {
+			continue
+		}
+		if out[w.ID] == nil {
+			out[w.ID] = &identify.PackageCheck{}
+		}
+		out[w.ID].Note = note
 	}
 	return out
 }

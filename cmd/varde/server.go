@@ -46,7 +46,6 @@ import (
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/uplink"
 	"github.com/bifrost0x/varde/internal/upstream"
-	"github.com/bifrost0x/varde/internal/vulndb"
 	"github.com/bifrost0x/varde/internal/web"
 )
 
@@ -368,6 +367,13 @@ func newHandler(cfg config.Config, st *store.Store, cat *catalog.Live, set *sett
 		BehindTLS:  cfg.BehindTLSProxy, GitHubToken: cfg.GitHubToken != "", Log: logger,
 		AgentCAPin: caPin(ca), AgentListenAddr: cfg.AgentListenAddr, HostAddresses: cfg.HostAddresses, AgentBinaries: binaries, Network: network, Mode: cfg.Mode, Uplink: uplinkMgr, Package: packageMgr, LocalDocker: syncer != nil,
 		Advisories: analysis.Advisories,
+		PackagesCovered: func(ecosystem string) bool {
+			eff := set.Get()
+			if eff.VulnDB && sources.VulnDBCovered(filepath.Join(cfg.DataDir, "vulndb"), ecosystem) {
+				return true
+			}
+			return eff.DirectOSV && distro.Supported(ecosystem)
+		},
 	})
 }
 
@@ -497,6 +503,17 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 	hc := httpx.New(httpx.Options{AllowHosts: cfg.EgressAllowlist, RootCAs: pool})
 	deps := sources.Deps{HTTP: hc, Store: st}
 	github := &sources.GitHub{Deps: deps, Token: string(cfg.GitHubToken)}
+	// The distribution packages of catalog apps installed on hosts.
+	appPackages := func(ctx context.Context) (map[string][]distro.Package, error) {
+		ws, err := st.Workloads(ctx, store.WorkloadFilter{Kind: inventory.KindPackage})
+		if err != nil {
+			return nil, err
+		}
+		return identify.DistroPackages(analysis.Catalog().Current(), ws), nil
+	}
+	// osv.dev is not asked about what the downloaded datasets cover.
+	vulnDir := filepath.Join(cfg.DataDir, "vulndb")
+	vulnDBReady := func(ecosystem string) bool { return set.Get().VulnDB && sources.VulnDBCovered(vulnDir, ecosystem) }
 	// Sources with a switch of their own. None of their data is in the
 	// data package, so they work the same with and without it.
 	optional := []sources.Source{
@@ -504,16 +521,11 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 		sources.Toggle{Source: &sources.OSV{Deps: deps}, Enabled: func() bool { return set.Get().DirectOSV }},
 		// Distribution security data also comes from osv.dev and reveals
 		// package names and releases the same way, so one switch covers both.
-		sources.Toggle{Source: &sources.Distro{Deps: deps, Packages: func(ctx context.Context) (map[string][]distro.Package, error) {
-			ws, err := st.Workloads(ctx, store.WorkloadFilter{Kind: inventory.KindPackage})
-			if err != nil {
-				return nil, err
-			}
-			return identify.DistroPackages(analysis.Catalog().Current(), ws), nil
-		}}, Enabled: func() bool { return set.Get().DirectOSV }},
+		sources.Toggle{Source: &sources.Distro{Deps: deps, Packages: appPackages, Skip: vulnDBReady}, Enabled: func() bool { return set.Get().DirectOSV }},
 		// Every package of every host and image against complete datasets
 		// downloaded whole (ADR 0047): no request names a package.
-		sources.Toggle{Source: &sources.VulnDB{Deps: deps, Dir: filepath.Join(cfg.DataDir, "vulndb"), Stored: st.SystemAdvisoryApps, Log: logger,
+		sources.Toggle{Source: &sources.VulnDB{Deps: deps, Dir: vulnDir, Log: logger, Apps: appPackages,
+			Stored:   func(ctx context.Context) ([]string, error) { return st.AdvisoryApps(ctx, sources.SourceVulnDB) },
 			Packages: func(ctx context.Context) ([]distro.Package, error) { return checkedPackages(ctx, st) },
 		}, Enabled: func() bool { return set.Get().VulnDB }},
 		// Every system package of every host, the same way (ADR 0032),
@@ -521,7 +533,7 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 		// do not cover, or all of them when those are switched off.
 		sources.Toggle{Source: &sources.SystemPackages{Deps: deps, Stored: st.SystemAdvisoryApps, Packages: func(ctx context.Context) ([]distro.Package, error) {
 			return checkedPackages(ctx, st)
-		}, Skip: func(ecosystem string) bool { return set.Get().VulnDB && vulndb.Covered(ecosystem) }}, Enabled: func() bool { return set.Get().DirectOSV }},
+		}, Skip: vulnDBReady}, Enabled: func() bool { return set.Get().DirectOSV }},
 		sources.Toggle{Source: &sources.EOL{Deps: deps, EOLStore: st}, Enabled: func() bool { return set.Get().EOLData }},
 		sources.Toggle{Source: &sources.NVD{Deps: deps, APIKey: string(cfg.NVDAPIKey)}, Enabled: func() bool { return set.Get().DirectNVD }},
 	}

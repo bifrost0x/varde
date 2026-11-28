@@ -4,6 +4,7 @@ package sources
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/bifrost0x/varde/internal/distro"
-	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/vulndb"
 )
@@ -79,7 +79,12 @@ func TestVulnDBRefresh(t *testing.T) {
 	}
 	var pmu sync.Mutex
 	dir := filepath.Join(t.TempDir(), "vulndb")
-	v := &VulnDB{Deps: deps(u, s, &now), Dir: dir, Stored: s.SystemAdvisoryApps,
+	v := &VulnDB{Deps: deps(u, s, &now), Dir: dir,
+		Stored: func(ctx context.Context) ([]string, error) { return s.AdvisoryApps(ctx, SourceVulnDB) },
+		Apps: func(context.Context) (map[string][]distro.Package, error) {
+			// nginx installed from Debian's archive, a catalog app.
+			return map[string][]distro.Package{"nginx": {{Ecosystem: "Debian:13", Name: "openssl", Version: "3.5.1-1"}}}, nil
+		},
 		Packages: func(context.Context) ([]distro.Package, error) {
 			pmu.Lock()
 			defer pmu.Unlock()
@@ -95,7 +100,7 @@ func TestVulnDBRefresh(t *testing.T) {
 		t.Errorf("requests %d, want 4 (Debian, CVE ratings, two Alpine files)", res.Requests)
 	}
 	recs := records(t, s, "os:Debian:13/openssl")
-	if len(recs) != 1 || recs[0].Vuln.ID != "DEBIAN-CVE-2026-1" || recs[0].Source != match.SourceDistro {
+	if len(recs) != 1 || recs[0].Vuln.ID != "DEBIAN-CVE-2026-1" || recs[0].Source != SourceVulnDB {
 		t.Fatalf("openssl records %+v", recs)
 	}
 	if !recs[0].Vuln.Modified.Equal(time.Date(2026, 11, 28, 6, 4, 3, 0, time.UTC)) {
@@ -103,6 +108,11 @@ func TestVulnDBRefresh(t *testing.T) {
 	}
 	if got := records(t, s, "os:Debian:13/bash"); len(got) != 1 {
 		t.Errorf("bash records %+v", got)
+	}
+	// A catalog app's distribution package gets the same records, under
+	// the app.
+	if got := records(t, s, "nginx"); len(got) != 1 || got[0].Vuln.ID != "DEBIAN-CVE-2026-1" || got[0].Vuln.Affected[0].Package.Name != "openssl" {
+		t.Errorf("app records %+v", got)
 	}
 	if got := records(t, s, "os:Alpine:v3.22/musl"); len(got) != 0 {
 		t.Errorf("no Alpine data yet, no records: %+v", got)
@@ -151,11 +161,16 @@ func TestVulnDBRefresh(t *testing.T) {
 	}
 }
 
-// The osv.dev source leaves the ecosystems the datasets cover to them,
-// also when it removes the records of packages that went.
+// The osv.dev source does not ask about what the datasets cover.
 func TestSystemPackagesSkip(t *testing.T) {
+	var mu sync.Mutex
+	var asked []string
 	u := newUpstream(t, func(_ *upstream, w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/querybatch" {
+			body, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			asked = append(asked, string(body))
+			mu.Unlock()
 			_, _ = w.Write([]byte(`{"results":[{}]}`))
 			return
 		}
@@ -163,11 +178,6 @@ func TestSystemPackagesSkip(t *testing.T) {
 	})
 	s := newStore(t)
 	now := time.Date(2026, 11, 28, 7, 0, 0, 0, time.UTC)
-	kept := store.AdvisoryRecord{AppID: "os:Debian:13/openssl", Source: match.SourceDistro}
-	kept.Vuln.ID, kept.Vuln.Modified = "DEBIAN-CVE-2026-1", now
-	if err := s.ReplaceAdvisories(t.Context(), kept.AppID, match.SourceDistro, []store.AdvisoryRecord{kept}, now); err != nil {
-		t.Fatal(err)
-	}
 	sp := &SystemPackages{Deps: deps(u, s, &now), BaseURL: u.srv.URL, Stored: s.SystemAdvisoryApps,
 		Packages: func(context.Context) ([]distro.Package, error) {
 			return []distro.Package{{Ecosystem: "Debian:13", Name: "curl", Version: "8.0"}, {Ecosystem: "npm", Name: "lodash", Version: "4.17.20"}}, nil
@@ -176,8 +186,10 @@ func TestSystemPackagesSkip(t *testing.T) {
 	if _, err := sp.Refresh(t.Context(), nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := records(t, s, "os:Debian:13/openssl"); len(got) != 1 {
-		t.Errorf("records of a covered ecosystem removed: %+v", got)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) != 1 || strings.Contains(asked[0], "curl") || !strings.Contains(asked[0], "lodash") {
+		t.Errorf("asked %v", asked)
 	}
 }
 

@@ -424,6 +424,24 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
+// AdvisoryApps returns the app IDs with stored advisories of source.
+func (s *Store) AdvisoryApps(ctx context.Context, source string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT app_id FROM advisories WHERE source = ?`, source)
+	if err != nil {
+		return nil, fmt.Errorf("query advisory apps of %s: %w", source, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan advisory app: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // SystemAdvisoryApps returns the app IDs of system packages with stored
 // records (ADR 0032).
 func (s *Store) SystemAdvisoryApps(ctx context.Context) ([]string, error) {

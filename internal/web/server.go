@@ -71,6 +71,12 @@ type Deps struct {
 	// analysis does without a data package channel.
 	Advisories func(app *catalog.App, recs []store.AdvisoryRecord) []match.Advisory
 
+	// PackagesCovered reports whether the packages of an ecosystem
+	// ("Debian:12", "Go") are compared with security data right now: the
+	// vulnerability datasets are in use and downloaded, or osv.dev is
+	// asked. Nil counts none as covered.
+	PackagesCovered func(ecosystem string) bool
+
 	AllowDirectSocket bool
 	CookieNever       bool
 	BehindTLS         bool

@@ -134,7 +134,7 @@ func (a *app) buildGuide(ctx context.Context, r *http.Request, s *snapshot) (gui
 	}
 	checkStep := guideStep{
 		Title: "Check the installed packages", Done: a.packagesChecked(),
-		Text: "Varde asks osv.dev, the open vulnerability database, which security fixes the installed packages of your systems lack, and reports every update that fixes one. This tells osv.dev the names and versions of those packages; without it, only apps are checked.",
+		Text: "Varde checks every installed package of your systems and images against the security data of its distribution or ecosystem (Debian, Ubuntu, Alpine, Go, Python, Java and more), downloaded whole so that nobody learns which packages you run. Without it, only apps are checked.",
 		Link: "/settings#sources", Action: "Turn on package checks",
 	}
 	if len(s.system) > 0 && !checkStep.Done {
@@ -158,9 +158,9 @@ func (a *app) buildGuide(ctx context.Context, r *http.Request, s *snapshot) (gui
 }
 
 // packagesChecked reports that the installed packages of the systems are
-// checked: their switch is on, or a full feed brings the data. The data
-// package does not carry distribution data.
+// checked: the vulnerability datasets or osv.dev's queries are switched on,
+// or a full feed brings the data.
 func (a *app) packagesChecked() bool {
 	m := a.mode()
-	return a.d.Settings.Get().DirectOSV || (m != "direct" && m != "package")
+	return a.d.Settings.Get().PackagesChecked() || (m != "direct" && m != "package")
 }

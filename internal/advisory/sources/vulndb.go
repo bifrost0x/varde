@@ -29,9 +29,10 @@ import (
 	"github.com/bifrost0x/varde/internal/vulndb"
 )
 
-// SourceVulnDB is the source state name of the complete vulnerability
-// datasets (ADR 0047); each dataset keeps its own state under its key.
-const SourceVulnDB = "vulndb"
+// SourceVulnDB is the source name of the complete vulnerability datasets
+// (ADR 0047): of their stored records and their state; each dataset keeps
+// its state under its key.
+const SourceVulnDB = match.SourceVulnDB
 
 const (
 	// vulnDBEvery is how often a dataset is checked for a newer file.
@@ -51,9 +52,13 @@ type VulnDB struct {
 	Deps
 	// Dir holds the cache files; it is created when missing.
 	Dir string
-	// Packages returns the packages present, deduplicated.
+	// Packages returns the packages present, deduplicated: the system
+	// packages of hosts and the packages of images.
 	Packages func(ctx context.Context) ([]distro.Package, error)
-	// Stored returns the app IDs with stored package records, so that
+	// Apps, if set, returns the distribution packages of catalog apps
+	// installed on hosts, by app ID; their records are stored under it.
+	Apps func(ctx context.Context) (map[string][]distro.Package, error)
+	// Stored returns the app IDs with records of this source, so that
 	// packages no longer present lose theirs.
 	Stored func(ctx context.Context) ([]string, error)
 	// URL, if set, replaces the address of a dataset (tests, mirrors).
@@ -82,11 +87,17 @@ func (v *VulnDB) Refresh(ctx context.Context, _ []*catalog.App) (Result, error) 
 	if err != nil {
 		return res, fmt.Errorf("vulndb packages: %w", err)
 	}
+	var byApp map[string][]distro.Package
+	if v.Apps != nil {
+		if byApp, err = v.Apps(ctx); err != nil {
+			return res, fmt.Errorf("vulndb app packages: %w", err)
+		}
+	}
 	if err := os.MkdirAll(v.Dir, 0o700); err != nil {
 		return res, fmt.Errorf("vulndb directory: %w", err)
 	}
 	now := v.now()
-	want := vulndb.Want(pkgs, now)
+	want := vulndb.Want(pkgs, byApp, now)
 	byKey := map[string]vulndb.Dataset{}
 	// Ecosystems whose every dataset has a cache file: only their
 	// packages' stored records are replaced or removed.
@@ -274,14 +285,19 @@ func (v *VulnDB) store(ctx context.Context, want *vulndb.Wanted, keys []string, 
 	}
 	vulndb.Tidy(sel)
 	changed := 0
-	for app := range want.Apps() {
-		eco, _, ok := distro.ParseSystemAppID(app)
-		if !ok || !ready[eco] {
+	for app, ecos := range want.Apps() {
+		complete := true
+		for eco := range ecos {
+			complete = complete && ready[eco]
+		}
+		if !complete {
+			// A dataset of the app is missing: its stored records stay
+			// until the dataset is there.
 			continue
 		}
 		recs := make([]store.AdvisoryRecord, 0, len(sel[app]))
 		for _, s := range sel[app] {
-			recs = append(recs, store.AdvisoryRecord{AppID: app, Source: match.SourceDistro, Vuln: s.Vuln, CVSS: s.CVSS, SeverityLabel: s.Severity})
+			recs = append(recs, store.AdvisoryRecord{AppID: app, Source: SourceVulnDB, Vuln: s.Vuln, CVSS: s.CVSS, SeverityLabel: s.Severity})
 		}
 		same, err := v.sameStored(ctx, app, recs)
 		if err != nil {
@@ -290,13 +306,12 @@ func (v *VulnDB) store(ctx context.Context, want *vulndb.Wanted, keys []string, 
 		if same {
 			continue
 		}
-		if err := v.Store.ReplaceAdvisories(ctx, app, match.SourceDistro, recs, now); err != nil {
+		if err := v.Store.ReplaceAdvisories(ctx, app, SourceVulnDB, recs, now); err != nil {
 			return changed, err
 		}
 		changed++
 	}
-	// Packages no longer present lose their records, in the ecosystems
-	// this source covers.
+	// Packages no longer present lose their records.
 	if v.Stored != nil {
 		stored, err := v.Stored(ctx)
 		if err != nil {
@@ -304,11 +319,10 @@ func (v *VulnDB) store(ctx context.Context, want *vulndb.Wanted, keys []string, 
 		}
 		wanted := want.Apps()
 		for _, app := range stored {
-			eco, _, ok := distro.ParseSystemAppID(app)
-			if !ok || wanted[app] || !vulndb.Covered(eco) {
+			if _, ok := wanted[app]; ok {
 				continue
 			}
-			if err := v.Store.ReplaceAdvisories(ctx, app, match.SourceDistro, nil, now); err != nil {
+			if err := v.Store.ReplaceAdvisories(ctx, app, SourceVulnDB, nil, now); err != nil {
 				return changed, err
 			}
 			changed++
@@ -326,7 +340,7 @@ func (v *VulnDB) sameStored(ctx context.Context, app string, recs []store.Adviso
 	}
 	var old []store.AdvisoryRecord
 	for _, r := range have {
-		if r.Source == match.SourceDistro {
+		if r.Source == SourceVulnDB {
 			old = append(old, r)
 		}
 	}
@@ -364,8 +378,10 @@ func recordJSON(r store.AdvisoryRecord) ([]byte, error) {
 func (v *VulnDB) signature(want *vulndb.Wanted, keys []string, byKey map[string]vulndb.Dataset) string {
 	h := sha256.New()
 	apps := make([]string, 0)
-	for a := range want.Apps() {
-		apps = append(apps, a)
+	for a, ecos := range want.Apps() {
+		for e := range ecos {
+			apps = append(apps, a+"\x00"+e)
+		}
 	}
 	sort.Strings(apps)
 	_, _ = io.WriteString(h, strings.Join(apps, "\n"))

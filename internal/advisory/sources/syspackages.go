@@ -50,8 +50,9 @@ type SystemPackages struct {
 	// Stored returns the app IDs with stored system package records, so
 	// that packages no longer present lose theirs.
 	Stored func(ctx context.Context) ([]string, error)
-	// Skip, if set, names ecosystems another source covers: their
-	// packages are neither asked about nor have their records removed.
+	// Skip, if set, names ecosystems another source covers without
+	// asking anyone (ADR 0047): their packages are not asked about, and
+	// what this source stored for them goes.
 	Skip func(ecosystem string) bool
 }
 
@@ -227,9 +228,6 @@ func (s *SystemPackages) Refresh(ctx context.Context, _ []*catalog.App) (Result,
 			return res, err
 		}
 		for _, app := range stored {
-			if eco, _, ok := distro.ParseSystemAppID(app); ok && s.Skip != nil && s.Skip(eco) {
-				continue
-			}
 			if _, ok := want[app]; !ok {
 				if err := s.Store.ReplaceAdvisories(ctx, app, match.SourceDistro, nil, now); err != nil {
 					return res, err

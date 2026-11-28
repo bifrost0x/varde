@@ -181,6 +181,36 @@ func CVEDataset() Dataset {
 		URL: "https://" + ubuntuHost + "/oval/com.ubuntu." + cveRelease + ".cve.oval.xml.bz2", MaxBytes: 128 << 20}
 }
 
+// Title names the dataset of a key for people ("debian" gives "Debian
+// security tracker"); the key itself when it is not one Varde makes.
+func Title(key string) string {
+	switch {
+	case key == "debian":
+		return "Debian security tracker"
+	case key == "wolfi":
+		return "Wolfi security data"
+	case key == "chainguard":
+		return "Chainguard security data"
+	case key == CVEDataset().Key:
+		return CVEDataset().Title
+	}
+	if code, ok := strings.CutPrefix(key, "ubuntu:"); ok {
+		for v, c := range ubuntuReleases {
+			if c == code {
+				return "Ubuntu OVAL (" + v + ")"
+			}
+		}
+	}
+	if rest, ok := strings.CutPrefix(key, "alpine:"); ok {
+		rel, repo, _ := strings.Cut(rest, ":")
+		return "Alpine secdb (" + rel + " " + repo + ")"
+	}
+	if eco, ok := strings.CutPrefix(key, "osv:"); ok {
+		return "osv.dev export (" + eco + ")"
+	}
+	return key
+}
+
 // Covered reports whether a complete dataset covers an ecosystem.
 func Covered(ecosystem string) bool { return len(Datasets(ecosystem)) > 0 }
 
@@ -224,30 +254,44 @@ func CanonicalName(ecosystem, name string) string {
 // release (distro.Variants) leads to it.
 type Wanted struct {
 	byKey map[string][]wantedPkg
-	ecos  map[string]bool
+	// apps are the ecosystems of the packages of each app ID.
+	apps map[string]map[string]bool
 }
 
 type wantedPkg struct {
-	appID, name string
+	appID, ecosystem, name string
 }
 
-// Want indexes pkgs for Select.
-func Want(pkgs []distro.Package, now time.Time) *Wanted {
-	w := &Wanted{byKey: map[string][]wantedPkg{}, ecos: map[string]bool{}}
-	seen := map[string]bool{}
-	for _, p := range pkgs {
+// Want indexes pkgs for Select: the system packages of hosts and the
+// packages of images, each under its own app ID (distro.SystemAppID), and
+// byApp, the distribution packages of catalog apps, under the app's ID.
+func Want(pkgs []distro.Package, byApp map[string][]distro.Package, now time.Time) *Wanted {
+	w := &Wanted{byKey: map[string][]wantedPkg{}, apps: map[string]map[string]bool{}}
+	seen := map[wantedPkg]bool{}
+	add := func(app string, p distro.Package) {
 		if p.Name == "" || !Covered(p.Ecosystem) {
-			continue
+			return
 		}
-		app := distro.SystemAppID(p.Ecosystem, p.Name)
-		if seen[app] {
-			continue
+		wp := wantedPkg{appID: app, ecosystem: p.Ecosystem, name: p.Name}
+		if seen[wp] {
+			return
 		}
-		seen[app] = true
-		w.ecos[p.Ecosystem] = true
+		seen[wp] = true
+		if w.apps[app] == nil {
+			w.apps[app] = map[string]bool{}
+		}
+		w.apps[app][p.Ecosystem] = true
 		for _, v := range distro.Variants(p.Ecosystem, now) {
 			k := Key(v, p.Name)
-			w.byKey[k] = append(w.byKey[k], wantedPkg{appID: app, name: p.Name})
+			w.byKey[k] = append(w.byKey[k], wp)
+		}
+	}
+	for _, p := range pkgs {
+		add(distro.SystemAppID(p.Ecosystem, p.Name), p)
+	}
+	for app, ps := range byApp {
+		for _, p := range ps {
+			add(app, p)
 		}
 	}
 	return w
@@ -255,23 +299,22 @@ func Want(pkgs []distro.Package, now time.Time) *Wanted {
 
 // Ecosystems lists the ecosystems of the wanted packages.
 func (w *Wanted) Ecosystems() []string {
-	out := make([]string, 0, len(w.ecos))
-	for e := range w.ecos {
+	set := map[string]bool{}
+	for _, ecos := range w.apps {
+		for e := range ecos {
+			set[e] = true
+		}
+	}
+	out := make([]string, 0, len(set))
+	for e := range set {
 		out = append(out, e)
 	}
 	return out
 }
 
-// Apps lists the app IDs of the wanted packages.
-func (w *Wanted) Apps() map[string]bool {
-	out := map[string]bool{}
-	for _, ps := range w.byKey {
-		for _, p := range ps {
-			out[p.appID] = true
-		}
-	}
-	return out
-}
+// Apps maps the app IDs of the wanted packages to the ecosystems of their
+// packages.
+func (w *Wanted) Apps() map[string]map[string]bool { return w.apps }
 
 // Len is the number of keys wanted.
 func (w *Wanted) Len() int { return len(w.byKey) }

@@ -101,6 +101,14 @@ func (a *app) imagePlan(c *appCard, wl inventory.Workload, fs []store.Finding, s
 		c.Action = "No fixed image upstream yet"
 		c.Fixes = inImage + "; no newer image of this tag exists"
 		c.Mitigation = mitigationOf(c, wl, fs, st)
+	case st != nil && st.Reason == upstream.ReasonLocal:
+		// Nobody publishes this image: whoever builds it fixes it.
+		c.Action = "Rebuild the image"
+		c.Fixes = inImage + "; it was built on this host, so a rebuild with current packages fixes them"
+		c.Mitigation = mitigationOf(c, wl, fs, st)
+		if m := c.Mitigation; m != nil && m.Rebuild != "" {
+			c.Command = m.Rebuild
+		}
 	default:
 		c.Action = "Varde cannot tell whether a fixed image exists"
 		reason := "the image has not been compared yet"
@@ -168,6 +176,12 @@ type mitigation struct {
 	// that installs its package updates; empty when Varde does not know
 	// how the distribution upgrades.
 	Distro, Dockerfile string
+	// Local is set for an image without a registry digest: built from a
+	// Dockerfile on the host, so no maker will publish a fixed image.
+	// Rebuild is the command that builds it again, when the container is a
+	// Compose service.
+	Local   bool
+	Rebuild string
 	// Snooze is set when open findings can be snoozed until a fixed image
 	// appears.
 	Snooze bool
@@ -200,6 +214,14 @@ func mitigationOf(c *appCard, wl inventory.Workload, fs []store.Finding, st *ups
 			user = wl.Container.Runtime.User
 		}
 		m.Distro, m.Dockerfile = derivedImage(wl.Container.ImageRef, eco, user)
+	}
+	if st != nil && st.Reason == upstream.ReasonLocal {
+		m.Local, m.Snooze = true, false
+		if c := remedy.ComposeOf(wl.Container); c != nil {
+			m.Rebuild = c.Rebuild()
+		}
+		m.Recheck = "Varde reads the packages of the rebuilt image when the container runs it, and clears what the rebuild fixed."
+		return m
 	}
 	switch {
 	case st != nil && st.Source == upstream.SourceRegistry:

@@ -4,6 +4,7 @@ package web
 
 import (
 	"encoding/json"
+	"html"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -199,7 +200,8 @@ func TestCardRegistryRefused(t *testing.T) {
 	mustNotContain(t, "card", card, "Update now", "Pull a newer image", "Update to ")
 }
 
-// A locally built image: unknown, and why.
+// A locally built image: nobody publishes a fixed one, so the card says to
+// rebuild it, not to wait for a release.
 func TestCardLocallyBuilt(t *testing.T) {
 	h := newHarness(t)
 	h.signIn(t)
@@ -220,8 +222,11 @@ func TestCardLocallyBuilt(t *testing.T) {
 		t.Fatal(err)
 	}
 	card := overviewCard(t, h)
-	mustContain(t, "card", card, "Varde cannot tell whether a fixed image exists", "built locally")
-	mustNotContain(t, "card", card, "Update now", "Update to ")
+	mustContain(t, "card", card, "Rebuild the image", "built on this host", "docker build --pull --no-cache")
+	mustNotContain(t, "card", card, "Update now", "Update to ", "wait for the next release", "Varde cannot tell whether a fixed image exists")
+	_, page := h.do(t, "GET", "/apps/"+inventory.WorkloadID("docker", inventory.KindContainer, "c1"), nil, nil)
+	mustContain(t, "app page", stripTags(html.UnescapeString(page)), "built on this host from a Dockerfile", "--no-cache")
+	mustNotContain(t, "app page", page, "Snooze until a fixed image appears")
 }
 
 // Snoozing until a fixed image appears snoozes the image findings.

@@ -86,6 +86,10 @@ type appCard struct {
 	Introduced string
 	// Mitigation is what to do while no update fixes the findings.
 	Mitigation *mitigation
+	// Sev counts the card's confirmed flaws by severity, the three worst
+	// severities present; Exploited those known to be exploited.
+	Sev       []sevCount
+	Exploited int
 	// Release says which flaws in the image's packages the newest release
 	// of the app fixes, Groups are the app and package versions behind
 	// the card; both are set on the list of updates only.
@@ -211,6 +215,7 @@ func (a *app) updateCards(s *snapshot, groups []todoGroup, fs []store.Finding) [
 		}
 		c.Label = appLabels[c.State]
 		c.Why = why(c, g, workloadOf(s, c.Key), byWorkload[c.Key])
+		c.Sev, c.Exploited = cardSeverities(byWorkload[c.Key])
 		out = append(out, c)
 	}
 	return out
@@ -469,6 +474,15 @@ func why(c appCard, g todoGroup, wl *inventory.Workload, fs []store.Finding) str
 		case appSoon:
 			return "serious flaws, but not directly reachable"
 		case appLater:
+			// The priority is low because nothing reaches the flaws, not
+			// always because they are mild: the card must not call a
+			// critical flaw minor.
+			if r := buildReport(fs, ""); len(r.Counts) > 0 && severityRank(r.Counts[0].Severity) >= severityRank("high") {
+				if imageOnly {
+					return "serious flaws in packages of the image, but no known attack path uses them"
+				}
+				return "serious flaws, but no known attack path reaches them"
+			}
 			return "minor flaws"
 		case appCheck:
 			return "Varde cannot tell whether these apply to the version running"
@@ -666,4 +680,15 @@ func appHref(wl inventory.Workload) string {
 		return ""
 	}
 	return "/apps/" + wl.ID
+}
+
+// cardSeverities counts the confirmed open flaws of a card by severity,
+// the three worst severities present, and those known to be exploited.
+func cardSeverities(fs []store.Finding) ([]sevCount, int) {
+	r := buildReport(fs, "")
+	out := r.Counts
+	if len(out) > 3 {
+		out = out[:3]
+	}
+	return out, r.Exploited
 }

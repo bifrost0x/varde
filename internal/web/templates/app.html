@@ -30,7 +30,17 @@
   {{else if $c.Command}}
   <div class="secret"><pre id="app-cmd" class="mono install">{{$c.Command}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
   {{end}}
-  {{with $c.Mitigation}}
+  {{with $c.Mitigation}}{{if .Local}}
+  <p class="small">The image was built on this host from a Dockerfile, not pulled from a registry: no maker publishes a fixed one. A rebuild with the newest base image and current packages fixes what the distribution has fixed.</p>
+  <ol class="howto">
+    {{if .Rebuild}}<li>Run{{with $c.Compose}}{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}{{end}}:
+      <div class="secret"><pre id="app-rebuild" class="mono install">{{.Rebuild}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-rebuild"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+      <span class="cell-sub"><code>--pull</code> fetches the newest base image, <code>--no-cache</code> runs the package installs of the Dockerfile again.</span></li>
+    {{else}}<li>Build the image again with <code>docker build --pull --no-cache</code> from its Dockerfile and recreate the container.</li>{{end}}
+    {{if .Dockerfile}}<li>If the Dockerfile pins old package versions or an old base image, raise them first{{if .Distro}}; or add <code>RUN</code> with the {{.Distro}} upgrade to it:<span class="cell-sub mono">{{.Dockerfile}}</span>{{end}}.</li>{{end}}
+    <li>{{.Recheck}}</li>
+  </ol>
+  {{else}}
   <p class="small">Pulling the image again changes nothing until a fixed image is published. Until then:</p>
   <ol class="howto">
     {{if .Exposed}}<li><strong>Limit who can reach it.</strong> Remove the published port, or put the container behind your reverse proxy's authentication or a VPN.</li>{{end}}
@@ -42,7 +52,7 @@
       <span class="cell-sub">The flaws stop notifying and come back by themselves once an image fixes them, or after 180 days.</span></li>{{end}}
   </ol>
   <p class="small muted">{{.Recheck}}</p>
-  {{end}}
+  {{end}}{{end}}
   {{else}}
   <p class="lead"><strong>Nothing.</strong></p>
   <p class="small">{{if eq $c.State "ok"}}Varde compared this version with the advisories of the project and found none that applies.{{else}}{{$c.Note}}.{{end}}</p>

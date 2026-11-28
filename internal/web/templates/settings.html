@@ -118,13 +118,29 @@
   {{end}}
 </section>
 
+<section class="panel" id="vulndb" aria-labelledby="vdb-title">
+  <h2 id="vdb-title">Package vulnerability data</h2>
+  <p class="small">Every package Varde reads, on your systems and inside your images, is checked against the complete security data of its distribution or ecosystem: the Debian security tracker, Canonical's data for Ubuntu, the secdb files of Alpine, Wolfi and Chainguard, and osv.dev's exports for Go, Python, Java, Rust, Ruby, PHP, .NET and the RPM distributions. Varde downloads each file whole, at most once a day and only for what you run, so a request names no package and no version. npm packages are checked only with osv.dev queries below.</p>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <input type="hidden" name="VULNDB" value="false">
+    <label class="check"><input type="checkbox" name="VULNDB" value="true" {{if $d.VulnDB}}checked{{end}} {{if index $d.Locked "VULNDB"}}disabled{{end}}><span>Check packages against the downloaded vulnerability data {{template "locked" (index $d.Locked "VULNDB")}}<span class="cell-sub">The download hosts learn that an installation uses a release (for example Debian 13) or an ecosystem (for example Go), as the package manager of that system tells them anyway.</span></span></label>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+  {{if $d.Datasets}}
+  <table class="table"><thead><tr><th scope="col">Dataset</th><th scope="col">Last update</th><th scope="col">State</th></tr></thead><tbody>
+  {{range $d.Datasets}}<tr><td data-label="Dataset">{{.Title}}</td><td data-label="Last update">{{if .Success.IsZero}}<span class="muted">never</span>{{else}}{{since .Success}}{{end}}</td><td data-label="State">{{if .Error}}<svg class="icon icon--sm" aria-hidden="true"><use href="/static/icons.svg#alert"></use></svg> {{.Error}}<span class="cell-sub">Next attempt {{date .Retry}}</span>{{else}}<span class="muted">up to date</span>{{end}}</td></tr>{{end}}
+  </tbody></table>
+  {{end}}
+</section>
+
 <section class="panel" id="sources" aria-labelledby="src-title">
   <h2 id="src-title">Ask more sources yourself</h2>
   <p class="small muted">Not needed for the apps the data package covers. Each source learns what you run.</p>
   <form class="form" method="post" action="/settings">
     {{template "csrf" $csrf}}
     <input type="hidden" name="DIRECT_OSV" value="false"><input type="hidden" name="DIRECT_NVD" value="false">
-    <label class="check"><input type="checkbox" name="DIRECT_OSV" value="true" {{if $d.OSV}}checked{{end}} {{if index $d.Locked "DIRECT_OSV"}}disabled{{end}}><span>Query osv.dev {{template "locked" (index $d.Locked "DIRECT_OSV")}}<span class="cell-sub">Reveals the package names of apps you run to osv.dev. Also checks every installed package of your systems (Debian, Ubuntu, Alpine, AlmaLinux, Rocky Linux, openSUSE Leap) against its distribution's security data, which knows backported fixes, and reports each update that fixes one; this reveals the names, versions and releases of those packages to osv.dev.</span></span></label>
+    <label class="check"><input type="checkbox" name="DIRECT_OSV" value="true" {{if $d.OSV}}checked{{end}} {{if index $d.Locked "DIRECT_OSV"}}disabled{{end}}><span>Query osv.dev {{template "locked" (index $d.Locked "DIRECT_OSV")}}<span class="cell-sub">Reveals the package names of apps you run to osv.dev. Also checks the packages the downloaded vulnerability data does not cover (npm, and every package while that data is switched off), which reveals their names, versions and releases to osv.dev.</span></span></label>
     <label class="check"><input type="checkbox" name="DIRECT_NVD" value="true" {{if $d.NVD}}checked{{end}} {{if index $d.Locked "DIRECT_NVD"}}disabled{{end}}><span>Query the NVD by product {{template "locked" (index $d.Locked "DIRECT_NVD")}}<span class="cell-sub">Reveals which products you run to NIST. Helps apps without structured advisories.</span></span></label>
     <button class="btn btn--primary" type="submit">Save</button>
   </form>

@@ -560,6 +560,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .sev--medium { color: var(--info); border-color: var(--info); }
 .sev--negligible, .sev--unrated { border-style: dashed; }
 
+.app__sev { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0 0 8px; }
+.app__sev .sev { min-width: 0; }
+
 /* The security report of an app: flaws by package. */
 .report__lead { margin-bottom: 8px; }
 .report__kev { color: var(--ember); }

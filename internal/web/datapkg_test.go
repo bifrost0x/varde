@@ -74,6 +74,13 @@ func (c *countingPackage) Status(ctx context.Context) datapkg.Status {
 func TestGuidePackageStepNeedsItsSwitch(t *testing.T) {
 	deps := testDeps(t, withPackage(&fakePackage{status: datapkg.Status{Available: true}}))
 	a := &app{d: deps}
+	// The vulnerability datasets are on by default.
+	if !a.packagesChecked() {
+		t.Fatal("the package check does not count with the vulnerability datasets on")
+	}
+	if err := deps.Settings.Update(t.Context(), map[string]string{settings.KeyVulnDB: "false"}, "admin", time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	if a.packagesChecked() {
 		t.Fatal("the package check counts as done although it is switched off")
 	}
@@ -81,7 +88,7 @@ func TestGuidePackageStepNeedsItsSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !a.packagesChecked() {
-		t.Error("the package check is not done after it was switched on")
+		t.Error("the package check is not done after osv.dev was switched on")
 	}
 	// The static feed modes bring the data with the feed.
 	deps.Package, deps.Mode = nil, "feed"

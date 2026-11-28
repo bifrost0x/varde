@@ -290,7 +290,7 @@ func TestOSVZip(t *testing.T) {
 	if st.Records != 1 || st.Packages != 2 {
 		t.Errorf("stats %+v", st)
 	}
-	w := Want([]distro.Package{{Ecosystem: "PyPI", Name: "pyyaml", Version: "5.4"}}, stamp)
+	w := Want([]distro.Package{{Ecosystem: "PyPI", Name: "pyyaml", Version: "5.4"}}, nil, stamp)
 	sel := map[string][]Selected{}
 	if err := Select(out, w, sel); err != nil {
 		t.Fatal(err)
@@ -345,7 +345,7 @@ func TestNormalizeAndSelect(t *testing.T) {
 		{Ecosystem: "Debian:13", Name: "openssl", Version: "3.5.0-1"},
 		{Ecosystem: "Ubuntu:24.04:LTS", Name: "openssl", Version: "3.0.13-0ubuntu3"},
 		{Ecosystem: "Debian:12", Name: "curl", Version: "7.88.1-10"},
-	}, stamp)
+	}, nil, stamp)
 	if got := len(w.Apps()); got != 4 {
 		t.Errorf("wanted apps %d, want 4", got)
 	}
@@ -404,7 +404,7 @@ func TestSelectRejectsCorruptCache(t *testing.T) {
 	if err := os.WriteFile(path, []byte("not gzip"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := Select(path, Want(nil, stamp), map[string][]Selected{}); err == nil {
+	if err := Select(path, Want(nil, nil, stamp), map[string][]Selected{}); err == nil {
 		t.Fatal("corrupt cache accepted")
 	}
 }
@@ -513,7 +513,7 @@ func TestTidyDropsRecordsOfTwoExports(t *testing.T) {
 		}
 		paths = append(paths, CachePath(dir, d))
 	}
-	w := Want([]distro.Package{{Ecosystem: "Go", Name: "golang.org/x/net", Version: "0.10.0"}}, stamp)
+	w := Want([]distro.Package{{Ecosystem: "Go", Name: "golang.org/x/net", Version: "0.10.0"}}, nil, stamp)
 	sel := map[string][]Selected{}
 	for _, p := range paths {
 		if err := Select(p, w, sel); err != nil {

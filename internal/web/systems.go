@@ -80,7 +80,7 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 		return
 	}
 	v := systemView{Machine: *m, Query: strings.TrimSpace(r.URL.Query().Get("q")), AppNames: map[string]string{}, Updates: map[string]int{}, Unfixed: map[string]int{},
-		Checked: a.d.Settings.Get().DirectOSV}
+		Checked: a.d.Settings.Get().PackagesChecked()}
 	for _, c := range s.machines {
 		if c.ParentID == m.ID {
 			v.Children = append(v.Children, c)
