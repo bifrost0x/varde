@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The exact way to apply each update, in the terms of what deployed it (ADR 0048): a Compose
+  command that runs from any directory with the project's name and files, the clicks in
+  Portainer for its stacks and on Unraid's Docker page for its containers, the image pull for a
+  container started with `docker run`, and for a host the package manager's command for exactly
+  the packages an update fixes, also through `pct exec` on the Proxmox node for an LXC container.
+  Varde shows these and runs nothing.
+- `VARDE_WEBSSH_URL` (Settings › WebSSH): every command offers **Copy and open WebSSH**, which
+  copies it and opens your WebSSH in a new tab to paste it on the host.
+
 - Every package of hosts and container images is checked against complete public vulnerability
   data by default (ADR 0047): the Debian security tracker, Canonical's OVAL data for Ubuntu, the
   secdb files of Alpine, Wolfi and Chainguard, and osv.dev's exports for Go, PyPI, Maven,

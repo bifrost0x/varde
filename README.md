@@ -161,8 +161,10 @@ flowchart LR
 | P3 | **Next update** | weekly digest |
 | unverified | **Check yourself**: not comparable, never counted as affected | not notified |
 
-Every app has a page with numbered steps (the Compose line, the commands; for an image built on
-the host, the rebuild), why it is urgent, where the version came from, and a security report:
+Every app has a page with numbered steps in the terms of what deployed it (the Compose command
+that runs from anywhere, the clicks in Portainer or on Unraid, the rebuild of an image built on the
+host, the package manager's command for exactly the packages a host needs; with
+[WebSSH](https://github.com/bifrost0x/webssh) one click copies it and opens a terminal), why it is urgent, where the version came from, and a security report:
 its flaws by severity, grouped by the package that has them, each with the fixed version and
 its evidence, downloadable as CSV. Findings keep their identity
 across `docker compose up -d`, so the history shows what an update actually fixed.
