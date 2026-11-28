@@ -146,6 +146,16 @@
   </form>
 </section>
 
+<section class="panel" id="webssh" aria-labelledby="ws-title">
+  <h2 id="ws-title">WebSSH</h2>
+  <p class="small">Where a fix runs on a host, the pages offer <strong>Copy and open WebSSH</strong>: the command goes to the clipboard and your <a href="https://github.com/bifrost0x/webssh" target="_blank" rel="noopener noreferrer">WebSSH</a>, a self-hosted SSH and SFTP workspace, opens in a new tab. You connect to the host there and paste the command; nothing runs until you press Enter. Varde sends WebSSH nothing and keeps no SSH credentials.</p>
+  <form class="form" method="post" action="/settings">
+    {{template "csrf" $csrf}}
+    <div class="field"><label for="webssh-url">Address of your WebSSH {{template "locked" (index $d.Locked "WEBSSH_URL")}}</label><input id="webssh-url" name="WEBSSH_URL" type="url" maxlength="512" value="{{$d.WebSSH}}" placeholder="https://webssh.example.lan" {{if index $d.Locked "WEBSSH_URL"}}disabled{{end}}><span class="hint">Leave it empty to show no link.</span></div>
+    <button class="btn btn--primary" type="submit">Save</button>
+  </form>
+</section>
+
 <section class="panel" id="users" aria-labelledby="u-title">
   <h2 id="u-title">Users and password</h2>
   <table class="table"><thead><tr><th scope="col">User</th><th scope="col">Created</th><th scope="col">Last sign-in</th><th scope="col"></th></tr></thead><tbody>

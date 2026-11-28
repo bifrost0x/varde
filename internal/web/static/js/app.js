@@ -36,7 +36,16 @@
     var btn = e.target.closest ? e.target.closest("[data-copy]") : null;
     if (!btn) { return; }
     var src = document.querySelector(btn.getAttribute("data-copy"));
-    if (!src || !navigator.clipboard) { return; }
+    if (!src) { return; }
+    if (!navigator.clipboard) {
+      // Plain http outside localhost has no clipboard API: select the
+      // text so that one key press copies it. A link still opens.
+      var range = document.createRange();
+      range.selectNodeContents(src);
+      var sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+      return;
+    }
     navigator.clipboard.writeText(src.textContent.trim()).then(function () {
       var label = btn.querySelector("[data-copy-label]");
       if (label) { label.textContent = "Copied"; }

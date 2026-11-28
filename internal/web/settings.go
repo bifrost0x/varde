@@ -54,6 +54,8 @@ type settingsData struct {
 	// their state.
 	VulnDB   bool
 	Datasets []datasetRow
+	// WebSSH is the address of the user's WebSSH.
+	WebSSH string
 }
 
 // datasetRow is the state of one downloaded vulnerability dataset.
@@ -95,7 +97,7 @@ func (a *app) settingsView(r *http.Request, cur *auth.Current, newToken, errMsg 
 		ScanPeriods: scanPeriods, Locked: map[string]bool{}, Policy: eff.Policy, DigestHour: eff.DigestHour,
 		DigestWeekday: strings.ToLower(eff.DigestWeekday.String()), OSV: eff.DirectOSV, NVD: eff.DirectNVD,
 		Channels: a.d.Channels, Me: cur.User.ID, NewToken: newToken, Error: errMsg,
-		Uplink: a.uplinkStatus(), Package: a.packageStatus(ctx), Direct: eff.DirectQueries, VulnDB: eff.VulnDB,
+		Uplink: a.uplinkStatus(), Package: a.packageStatus(ctx), Direct: eff.DirectQueries, VulnDB: eff.VulnDB, WebSSH: eff.WebSSHURL,
 	}
 	for _, k := range settings.Keys {
 		d.Locked[k] = a.d.Settings.Locked(k)

@@ -318,3 +318,44 @@ func TestCardDigestPinnedRebuild(t *testing.T) {
 	mustContain(t, "card", card, "Update the image&#39;s digest pin", "image: mpepping/cyberchef:v10.19.0@"+newDigest)
 	mustNotContain(t, "card", card, "Pull the rebuilt image")
 }
+
+// Snoozed flaws are put aside: the app leaves the updates to do on the
+// front page and the list of updates, and waits in "Snoozed" with what
+// brings it back; its page still lists the flaws, marked, and can wake
+// them.
+func TestSnoozedFlawsLeaveTheUpdates(t *testing.T) {
+	h := newHarness(t)
+	csrf := h.signIn(t)
+	chefLab(t, h, "mpepping/cyberchef:latest", "openssl", &store.UpstreamCheck{HeadDigest: runDigest})
+	id := inventory.WorkloadID("docker", inventory.KindContainer, "c1")
+	if resp, _ := h.do(t, "POST", "/apps/"+id+"/snooze-upstream", url.Values{"csrf": {csrf}}, nil); resp.StatusCode != 303 {
+		t.Fatalf("snooze: %d", resp.StatusCode)
+	}
+	_, body := h.do(t, "GET", "/", nil, nil)
+	text := stripTags(html.UnescapeString(body))
+	mustNotContain(t, "front page", body, `<article class="app app--`, `chip--now`, `chip--soon`, `chip--later`)
+	mustContain(t, "front page", text, "Snoozed", "snoozed until a fixed image appears")
+	_, body = h.do(t, "GET", "/findings", nil, nil)
+	mustNotContain(t, "updates", body, `<article class="app app--`)
+	mustContain(t, "updates", stripTags(html.UnescapeString(body)), "snoozed")
+	// They can still be listed on purpose.
+	_, body = h.do(t, "GET", "/findings?state=snoozed", nil, nil)
+	mustContain(t, "snoozed updates", body, `<article class="app app--`)
+	_, body = h.do(t, "GET", "/apps/"+id, nil, nil)
+	text = stripTags(html.UnescapeString(body))
+	mustContain(t, "app page", text, "Snoozed", "Security report", "Wake them now")
+	// Waking them puts the app back among the updates.
+	if resp, _ := h.do(t, "POST", "/apps/"+id+"/wake", url.Values{"csrf": {csrf}}, nil); resp.StatusCode != 303 {
+		t.Fatalf("wake: %d", resp.StatusCode)
+	}
+	mustContain(t, "card after waking", overviewCard(t, h), "cyberchef")
+	fs, err := h.store.Findings(t.Context(), store.FindingFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fs {
+		if f.State != store.StateOpen {
+			t.Errorf("finding %s is %s after waking", f.ID, f.State)
+		}
+	}
+}

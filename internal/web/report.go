@@ -133,6 +133,8 @@ type reportPackage struct {
 	// counts the flaws without one.
 	FixedIn string
 	Unfixed int
+	// Snoozed counts the package's flaws the user snoozed.
+	Snoozed int
 	Worst   string
 	KEV     bool
 	Flaws   []reportFlaw
@@ -144,9 +146,9 @@ type report struct {
 	// Counts are the confirmed flaws by severity, in severities' order.
 	Counts                         []sevCount
 	Total, Fixable, Exploited, Max int
-	// Unconfirmed counts the flaws Varde cannot confirm; they are listed
-	// but not counted by severity.
-	Unconfirmed int
+	// Unconfirmed counts the flaws Varde cannot confirm, Snoozed those the
+	// user put aside; both are listed but not counted by severity.
+	Unconfirmed, Snoozed int
 }
 
 type sevCount struct {
@@ -186,6 +188,16 @@ func buildReport(fs []store.Finding, appName string) report {
 			URL: m.URL, Aliases: m.Aliases,
 		}
 		p.Flaws = append(p.Flaws, fl)
+		if f.State == store.StateSnoozed {
+			// Put aside, not counted; the package still says what fixes
+			// every flaw it lists.
+			r.Snoozed++
+			p.Snoozed++
+			if f.MatchState == string(match.Affected) {
+				p.addFix(eco, f.FixedIn)
+			}
+			continue
+		}
 		if f.MatchState != string(match.Affected) {
 			r.Unconfirmed++
 			continue
@@ -199,19 +211,18 @@ func buildReport(fs []store.Finding, appName string) report {
 		if severityRank(sev) > severityRank(p.Worst) {
 			p.Worst = sev
 		}
-		if f.FixedIn == "" {
-			p.Unfixed++
-			continue
+		if f.FixedIn != "" {
+			r.Fixable++
 		}
-		r.Fixable++
-		if p.FixedIn == "" || newer(eco, f.FixedIn, p.FixedIn) {
-			p.FixedIn = f.FixedIn
-		}
+		p.addFix(eco, f.FixedIn)
 	}
 	for _, k := range order {
 		p := byKey[k]
 		sort.SliceStable(p.Flaws, func(i, j int) bool {
 			a, b := p.Flaws[i], p.Flaws[j]
+			if (a.Status == store.StateSnoozed) != (b.Status == store.StateSnoozed) {
+				return b.Status == store.StateSnoozed
+			}
 			if (a.State == string(match.Affected)) != (b.State == string(match.Affected)) {
 				return a.State == string(match.Affected)
 			}
@@ -361,4 +372,36 @@ func safeFilename(s string) string {
 		return "app"
 	}
 	return b.String()
+}
+
+// runOn is where a fix command runs: the machine, an address to reach it,
+// and the user's WebSSH, which the page opens with the command (the
+// element ID) copied. Varde sends WebSSH nothing and runs nothing itself.
+type runOn struct {
+	ID, Host, Address, WebSSH string
+}
+
+// machineOf names the machine a host record belongs to and an address of
+// it, for "run it on".
+func machineOf(s *snapshot, hostID string) (name, address string) {
+	m := s.hostOf[hostID]
+	if m == nil {
+		return "", ""
+	}
+	if len(m.Addresses) > 0 {
+		address = m.Addresses[0]
+	}
+	return m.Name, address
+}
+
+// addFix takes a flaw's fixed version into the package's: the highest
+// fixed version, or one more flaw without a fix.
+func (p *reportPackage) addFix(ecosystem, fixed string) {
+	if fixed == "" {
+		p.Unfixed++
+		return
+	}
+	if p.FixedIn == "" || newer(ecosystem, fixed, p.FixedIn) {
+		p.FixedIn = fixed
+	}
 }

@@ -162,6 +162,7 @@ func New(d Deps) (http.Handler, error) {
 	mux.Handle("GET /apps/{id}", a.user(a.appPage))
 	mux.Handle("GET /apps/{id}/report.csv", a.user(a.reportCSV))
 	mux.Handle("POST /apps/{id}/snooze-upstream", a.user(a.snoozeUpstream))
+	mux.Handle("POST /apps/{id}/wake", a.user(a.wakeApp))
 	mux.Handle("GET /systems/gaps", a.user(a.coverage))
 	mux.Handle("GET /systems/gaps/unrecognised.txt", a.user(a.unrecognised))
 	mux.Handle("POST /systems/gaps/not-an-app", a.user(a.markNotAnApp))
@@ -370,6 +371,7 @@ var notices = map[string]string{
 	"package-current":  "The data package is already current.",
 	"ack":              "Finding acknowledged.",
 	"snoozed":          "Finding snoozed.",
+	"woken":            "The snoozed flaws are back among the updates.",
 	"snoozed-upstream": "Snoozed until a fixed image appears. The flaws come back by themselves once one does, or after 180 days.",
 	"reopened":         "Finding reopened.",
 	"suppressed":       "Advisory suppressed.",
@@ -412,6 +414,13 @@ func (a *app) newP1(ctx context.Context) int {
 }
 
 func active(state string) bool { return status.Active(state) }
+
+// actionable reports whether an active finding asks for something now: a
+// snoozed one is put aside until its snooze ends, and the pages that list
+// what to do leave it out (it still counts as open for the API).
+func actionable(state string) bool {
+	return state == store.StateOpen || state == store.StateAcknowledged
+}
 
 // movedPages maps the pages of earlier versions to their area.
 var movedPages = map[string]string{

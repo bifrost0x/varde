@@ -55,7 +55,8 @@ func TestSuggest(t *testing.T) {
 		t.Errorf("lowest fixing tag: %+v", s)
 	}
 	if s.Compose == nil || s.Compose.Service != "immich-server" || s.Compose.Dir != "/opt/immich" || len(s.Compose.Files) != 2 ||
-		s.Compose.Pull() != "docker compose pull 'immich-server' && docker compose up -d 'immich-server'" {
+		s.Compose.Pull() != "cd '/opt/immich' && docker compose -f 'docker-compose.yml' -f 'override.yml' pull 'immich-server' && "+
+			"docker compose -f 'docker-compose.yml' -f 'override.yml' up -d 'immich-server'" {
 		t.Errorf("compose: %+v", s.Compose)
 	}
 	// No tag list: the running form, not verified.

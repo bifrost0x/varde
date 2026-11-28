@@ -179,6 +179,10 @@ var funcs = template.FuncMap{
 		return tm.Local().Format("15:04")
 	},
 	"plural": plural,
+	// runon says where a command runs and offers WebSSH to run it there.
+	"runon": func(id, host, address, webssh string) runOn {
+		return runOn{ID: id, Host: host, Address: address, WebSSH: webssh}
+	},
 	// flawID is the CVE or advisory a person looks a flaw up by.
 	"flawID": flawID,
 	// dataset names the dataset a record comes from.

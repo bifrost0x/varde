@@ -38,8 +38,10 @@
       <p><strong>What to do:</strong> {{if $i.Pinned}}the container is pinned to an image digest, so a pull changes nothing: replace the digest in its definition with that of a newer image (or remove it), then recreate the container{{else if $i.Floating}}pull the image again and recreate the container{{else}}update the container to a newer image{{end}}. Varde then reads the packages of the new image and closes this finding by itself when the package is fixed. If it stays open, the image's maker has not rebuilt it yet; you can wait, or limit who can reach the container.</p>
       {{with $i.Compose}}
       <div class="update" id="update">
-        <p class="small">It is the Compose service <strong>{{.Service}}</strong> of the project <strong>{{.Project}}</strong>{{if .Files}}, defined in <span class="mono">{{join .Files ", "}}</span>{{end}}.{{if $i.Pinned}} Change the digest in its <code>image:</code> line.{{else if not $i.Floating}} Change the tag of its <code>image:</code> line to a newer release.{{end}} Then{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}:</p>
+        {{if .Portainer}}<p class="small">Portainer deployed it as the service <strong>{{.Service}}</strong> of the stack <strong>{{.Project}}</strong>: open <strong>Stacks › {{.Project}}</strong> in Portainer{{if $i.Pinned}}, change the digest in its <code>image:</code> line{{else if not $i.Floating}}, change the tag of its <code>image:</code> line to a newer release{{end}} and click <strong>Update the stack</strong> with <strong>Re-pull image and redeploy</strong> switched on.</p>
+        {{else}}<p class="small">It is the Compose service <strong>{{.Service}}</strong> of the project <strong>{{.Project}}</strong>{{if .Files}}, defined in <span class="mono">{{join .Files ", "}}</span>{{end}}.{{if $i.Pinned}} Change the digest in its <code>image:</code> line.{{else if not $i.Floating}} Change the tag of its <code>image:</code> line to a newer release.{{end}} Then run:</p>
         <div class="secret"><pre id="compose-cmd" class="mono install">{{.Pull}}</pre><button class="btn btn--ghost" type="button" data-copy="#compose-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+        {{template "runon" (runon "compose-cmd" $.Data.HostName $.Data.HostAddress $.Data.WebSSH)}}{{end}}
       </div>
       {{end}}{{end}}
     {{else if $f.FixedIn}}
@@ -61,10 +63,11 @@
       <p class="small">Run <span class="mono">{{.Image}}</span>{{if .Verified}}, a release tag the registry lists{{else}}. Varde has not seen this tag in the registry{{if not $.Data.RegistryTags}} (<a href="/settings#registry">registry versions</a> are off){{end}}; check that it exists{{end}}.</p>
       {{end}}
       {{with .Compose}}
-      <p class="small">It is the Compose service <strong>{{.Service}}</strong> of the project <strong>{{.Project}}</strong>{{if .Files}}, defined in <span class="mono">{{join .Files ", "}}</span>{{end}}.{{if not $.Data.Update.Floating}} Change its line to:{{end}}</p>
+      <p class="small">{{if .Portainer}}Portainer deployed it as the service <strong>{{.Service}}</strong> of the stack <strong>{{.Project}}</strong>: open <strong>Stacks › {{.Project}}</strong> in Portainer{{if not $.Data.Update.Floating}} and change its line to the one below{{end}}, then click <strong>Update the stack</strong> with <strong>Re-pull image and redeploy</strong> switched on.{{else}}It is the Compose service <strong>{{.Service}}</strong> of the project <strong>{{.Project}}</strong>{{if .Files}}, defined in <span class="mono">{{join .Files ", "}}</span>{{end}}.{{if not $.Data.Update.Floating}} Change its line to:{{end}}{{end}}</p>
       {{if not $.Data.Update.Floating}}<div class="secret"><pre id="compose-line" class="mono install">image: {{$.Data.Update.Image}}</pre><button class="btn btn--ghost" type="button" data-copy="#compose-line"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>{{end}}
-      <p class="small">Then{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}:</p>
+      {{if not .Portainer}}<p class="small">Then run:</p>
       <div class="secret"><pre id="compose-cmd" class="mono install">{{.Pull}}</pre><button class="btn btn--ghost" type="button" data-copy="#compose-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+      {{template "runon" (runon "compose-cmd" $.Data.HostName $.Data.HostAddress $.Data.WebSSH)}}{{end}}
       {{end}}
     </div>
     {{end}}

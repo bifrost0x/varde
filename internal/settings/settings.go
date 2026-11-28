@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +64,9 @@ type Effective struct {
 	// UpstreamCrossMajor lets the newer image of a pinned tag be of a new
 	// major version (off by default: a major version may break the app).
 	UpstreamCrossMajor bool
+	// WebSSHURL is the address of the user's WebSSH, which the pages open
+	// with a fix command copied; empty when there is none.
+	WebSSHURL string
 }
 
 // ScanPeriods are the allowed periods of scheduled scans.
@@ -79,6 +83,7 @@ const (
 	KeyDirectNVD        = "DIRECT_NVD"
 	KeyDirectQueries    = "DIRECT_QUERIES"
 	KeyVulnDB           = "VULNDB"
+	KeyWebSSHURL        = "WEBSSH_URL"
 	KeyP1CVSSPublic     = "P1_CVSS_PUBLIC"
 	KeyP1CVSSPublicEPSS = "P1_CVSS_PUBLIC_EPSS"
 	KeyP1EPSS           = "P1_EPSS"
@@ -109,7 +114,7 @@ const (
 var Keys = []string{
 	KeyPublicDomains, KeyInternalDomains, KeyDigestHour, KeyDigestWeekday, KeyDirectOSV, KeyDirectNVD,
 	KeyP1CVSSPublic, KeyP1CVSSPublicEPSS, KeyP1EPSS, KeyP2CVSS, KeyP2CVSSExposed, KeyNetworks, KeyScanEvery, KeyRegistryTags,
-	KeyContainerPackages, KeyEOLData, KeyDirectQueries, KeyUpstreamCandidates, KeyUpstreamCrossMajor, KeyVulnDB,
+	KeyContainerPackages, KeyEOLData, KeyDirectQueries, KeyUpstreamCandidates, KeyUpstreamCrossMajor, KeyVulnDB, KeyWebSSHURL,
 }
 
 // Service provides the effective settings.
@@ -216,6 +221,7 @@ func (s *Service) merge(ui map[string]string) (Effective, error) {
 		DirectNVD:         c.DirectNVD,
 		DirectQueries:     c.DirectQueries,
 		VulnDB:            c.VulnDB,
+		WebSSHURL:         c.WebSSHURL,
 		ContainerPackages: true,
 	}
 	var errs []error
@@ -315,6 +321,13 @@ func (s *Service) merge(ui map[string]string) (Effective, error) {
 		}
 		eff.ContainerPackages = b
 	}
+	if v, ok := use(KeyWebSSHURL); ok {
+		if err := WebSSHURL(v); err != nil {
+			errs = append(errs, err)
+		} else {
+			eff.WebSSHURL = v
+		}
+	}
 	if v, ok := use(KeyScanEvery); ok {
 		d, known := ScanPeriods[v]
 		if !known {
@@ -352,3 +365,14 @@ func domains(v string) ([]string, error) {
 // compared with security data at all: through the complete datasets or
 // through osv.dev's queries.
 func (e Effective) PackagesChecked() bool { return e.VulnDB || e.DirectOSV }
+
+// WebSSHURL checks the address of a WebSSH installation: an absolute http
+// or https URL without credentials, a query or a fragment, which the pages
+// put into a link.
+func WebSSHURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(raw) > 512 {
+		return errors.New("webssh_url must be an http(s) address such as https://webssh.example.lan, without credentials")
+	}
+	return nil
+}

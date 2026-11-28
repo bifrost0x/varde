@@ -28,11 +28,13 @@
 <section class="hero hero--clear" aria-labelledby="status-title">
   <img class="hero__mark" src="/static/brand/mark-unlit.svg" alt="">
   <div>
-    <h1 class="hero__title" id="status-title">{{if $d.Unassessed}}Nothing checked yet{{else if $d.Acknowledged}}Nothing new{{else}}All clear{{end}}</h1>
+    <h1 class="hero__title" id="status-title">{{if $d.Unassessed}}Nothing checked yet{{else if or $d.Acknowledged $d.Snoozed}}Nothing new{{else}}All clear{{end}}</h1>
     {{if $d.Unassessed}}
     <p class="hero__text">Varde knows what is installed on {{plural $d.Machines.Read "system"}}, but checks none of it yet.{{if ge $d.Guide.Next 0}} Next: <a href="{{(index $d.Guide.Steps $d.Guide.Next).Link}}">{{(index $d.Guide.Steps $d.Guide.Next).Action}}</a>.{{end}}</p>
     {{else if $d.Acknowledged}}
-    <p class="hero__text">No new finding. {{plural $d.Acknowledged "acknowledged finding"}} {{if eq $d.Acknowledged 1}}is still open and no longer notifies{{else}}are still open and no longer notify{{end}}{{if $d.Quiet}}, listed below{{end}}.</p>
+    <p class="hero__text">No new finding. {{plural $d.Acknowledged "acknowledged finding"}} {{if eq $d.Acknowledged 1}}is still open and no longer notifies{{else}}are still open and no longer notify{{end}}{{if $d.Quiet}}, listed below{{end}}.{{if $d.Snoozed}} {{plural $d.Snoozed "snoozed finding"}} {{if eq $d.Snoozed 1}}waits{{else}}wait{{end}} under Snoozed.{{end}}</p>
+    {{else if $d.Snoozed}}
+    <p class="hero__text">No finding asks for something now. {{plural $d.Snoozed "snoozed finding"}} {{if eq $d.Snoozed 1}}waits{{else}}wait{{end}} under Snoozed and {{if eq $d.Snoozed 1}}comes{{else}}come{{end}} back by {{if eq $d.Snoozed 1}}itself{{else}}themselves{{end}} when the snooze ends.</p>
     {{else if $d.Notices}}
     <p class="hero__text">No known vulnerability in what Varde can check. {{plural (len $d.Notices) "blind spot"}} listed below.</p>
     {{else if $d.Unchecked}}
@@ -51,10 +53,11 @@
   {{if $d.Apps.Soon}}<a class="chip chip--soon" href="#soon"><strong>{{$d.Apps.Soon}}</strong> update soon</a>{{end}}
   {{if $d.Apps.Later}}<a class="chip chip--later" href="#later"><strong>{{$d.Apps.Later}}</strong> with the next update</a>{{end}}
   {{if $d.Apps.Check}}<a class="chip chip--check" href="#check"><strong>{{$d.Apps.Check}}</strong> to check yourself</a>{{end}}
+  {{if $d.Apps.Snoozed}}<a class="chip chip--snoozed" href="#snoozed"><strong>{{$d.Apps.Snoozed}}</strong> snoozed</a>{{end}}
   {{if $d.Apps.Unknown}}<a class="chip chip--unknown" href="#unknown"><strong>{{$d.Apps.Unknown}}</strong> not checked</a>{{end}}
   {{if $d.Apps.Fine}}<a class="chip chip--ok" href="#ok"><strong>{{$d.Apps.Fine}}</strong> nothing to do</a>{{end}}
 </nav>
-{{if $d.Acknowledged}}<p class="small muted"><a href="/findings?state=acknowledged">{{plural $d.Acknowledged "acknowledged or snoozed finding"}}</a> no longer notify; their apps stay listed until the update is installed.</p>{{end}}{{end}}
+{{if $d.Acknowledged}}<p class="small muted"><a href="/findings?state=acknowledged">{{plural $d.Acknowledged "acknowledged finding"}}</a> no longer notify; their apps stay listed until the update is installed.</p>{{end}}{{end}}
 
 {{if or (not $d.Empty) $d.Guide.Started}}{{template "setup" .}}{{end}}
 

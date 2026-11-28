@@ -236,6 +236,8 @@ type overviewData struct {
 	// Containers counts the running containers, ImagesChecked those whose
 	// image's packages are compared with security data (ADR 0047).
 	Containers, ImagesChecked int
+	// Snoozed counts the snoozed findings: open, but put aside.
+	Snoozed int
 	// Restarts are the systems whose updates wait for a restart.
 	Restarts []systemRow
 	// Apps counts the apps by what they ask for; Sections are the cards
@@ -265,8 +267,9 @@ func (d overviewData) Unassessed() bool {
 // enough to notify at once.
 func (d overviewData) NotUrgent() int { return d.Findings.New.P2 + d.Findings.New.P3 }
 
-// Acknowledged is the number of acknowledged or snoozed findings.
-func (d overviewData) Acknowledged() int { return d.Findings.Acknowledged.Total() }
+// Acknowledged is the number of acknowledged findings, still listed among
+// the updates; snoozed ones are counted apart.
+func (d overviewData) Acknowledged() int { return d.Findings.Acknowledged.Total() - d.Snoozed }
 
 // Unchecked is the number of app workloads Varde cannot check against
 // advisories (not identified, or version unknown).
@@ -300,8 +303,11 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	d.State = d.Findings.State()
 	var open []store.Finding
 	for _, f := range s.findings {
-		if status.Active(f.State) {
+		switch {
+		case actionable(f.State):
 			open = append(open, f)
+		case f.State == store.StateSnoozed:
+			d.Snoozed++
 		}
 	}
 	for _, g := range a.groupFindings(s, open) {
@@ -413,6 +419,7 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		return
 	}
 	var selected []store.Finding
+	snoozed := 0
 	seenApps := map[string]bool{}
 	var apps []appOption
 	for _, fd := range s.findings {
@@ -422,7 +429,11 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		}
 		switch f.State {
 		case "":
-			if !active(fd.State) {
+			// The updates to do: snoozed findings wait apart.
+			if !actionable(fd.State) {
+				if fd.State == store.StateSnoozed {
+					snoozed++
+				}
 				continue
 			}
 		case "all":
@@ -470,7 +481,8 @@ func (a *app) findings(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		Apps     []appOption
 		Filtered bool
 		Query    string
-	}{sections, rows, groups, todo, len(selected), list, mode, f, apps, filtered, filterQuery(f)}})
+		Snoozed  int
+	}{sections, rows, groups, todo, len(selected), list, mode, f, apps, filtered, filterQuery(f), snoozed}})
 }
 
 // filterQuery keeps the filters when switching between the grouped and the
@@ -499,9 +511,12 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 	var m match.Finding
 	_ = json.Unmarshal(f.Detail, &m)
 	wl, _ := a.d.Store.Workload(ctx, f.WorkloadID)
-	host := ""
+	host, address := "", ""
 	if h, err := a.d.Store.Host(ctx, wl.HostID); err == nil {
 		host = h.Name
+		if len(h.Addresses) > 0 {
+			address = h.Addresses[0]
+		}
 	}
 	details := ""
 	recs, err := a.d.Store.Advisories(ctx, f.AppID)
@@ -526,8 +541,11 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		// AppHref is the page of the app the flaw belongs to; empty for
 		// a package of a system, which has none.
 		AppHref string
+		// HostAddress and WebSSH say where a fix command runs and offer
+		// to open it there (see runOn).
+		HostAddress, WebSSH string
 	}{f, m, a.appName(f.AppID), wl.Name, host, details, a.update(r.Context(), f, m, wl), a.d.Settings.Get().RegistryTags, a.findingPaths(r, f.ID),
-		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl), appHref(wl)}})
+		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl), appHref(wl), address, a.d.Settings.Get().WebSSHURL}})
 }
 
 // imageFinding is what the page says about a flaw in a package of a
@@ -781,7 +799,7 @@ func (a *app) inventory(w http.ResponseWriter, r *http.Request, cur *auth.Curren
 	}
 	open := map[string]int{}
 	for _, f := range s.findings {
-		if status.Active(f.State) && f.MatchState == string(match.Affected) {
+		if actionable(f.State) && f.MatchState == string(match.Affected) {
 			open[f.WorkloadID]++
 		}
 	}

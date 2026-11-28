@@ -3,17 +3,21 @@
 package web
 
 import (
+	"context"
 	"net/http"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/coverage"
+	"github.com/bifrost0x/varde/internal/distro"
 	"github.com/bifrost0x/varde/internal/identify"
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
-	"github.com/bifrost0x/varde/internal/status"
+	"github.com/bifrost0x/varde/internal/remedy"
 	"github.com/bifrost0x/varde/internal/store"
 )
 
@@ -110,7 +114,7 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 		}
 		v.Findings = append(v.Findings, f)
 		v.AppNames[f.AppID] = a.appName(f.AppID)
-		if status.Active(f.State) && f.MatchState == string(match.Affected) {
+		if actionable(f.State) && f.MatchState == string(match.Affected) {
 			open[f.WorkloadID]++
 			if w := s.byID[f.WorkloadID]; identify.IsSystem(w) {
 				v.Updates[w.Name]++
@@ -194,11 +198,17 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 			updates = append(updates, c)
 		}
 	}
+	fix, err := a.hostFix(ctx, s, *m)
+	if err != nil {
+		a.fail(w, r, cur, err)
+		return
+	}
 	a.page(w, r, cur, http.StatusOK, "system", view{Title: m.Name, Nav: "systems", Tabs: tabs("systems", "/systems"), Data: struct {
 		systemView
 		Total int
 		ToDo  []appCard
-	}{v, total, updates}})
+		Fix   *hostFix
+	}{v, total, updates, fix}})
 }
 
 // blindSpots says what Varde does not read on a machine and how to change
@@ -223,4 +233,139 @@ func blindSpots(m *coverage.Machine, packages, containers int, nodeKey, agentIns
 		out = append(out, blindSpot{Text: "Varde knows this machine exists but not what is installed on it.", Link: "/connections/connect/packages?address=" + addr, Action: "Read its packages over SSH"})
 	}
 	return out
+}
+
+// hostFix is how to install the security updates a system's packages wait
+// for: the command for a shell on the system, and for an LXC container the
+// same from its Proxmox node.
+type hostFix struct {
+	// Command runs on the system through sudo; Guest runs it from Node.
+	Command, Guest, Node string
+	// Packages are the installed packages the command upgrades, Flaws the
+	// flaws their updates fix.
+	Packages []string
+	Flaws    int
+	// Kernel is set when the kernel is among them: it takes effect after
+	// a restart.
+	Kernel bool
+	// Host and Address are the machine, WebSSH the user's WebSSH.
+	Host, Address, WebSSH string
+}
+
+// Proxmox guest records: the API's ("pve-3-105", with its node as parent)
+// and the node inventory's, which holds the package list ("pvelxc-3-105").
+var (
+	apiGuestID  = regexp.MustCompile(`^pve-.+-(\d{1,9})$`)
+	nodeGuestID = regexp.MustCompile(`^pvelxc-.+-(\d{1,9})$`)
+)
+
+// hostFix builds the command that installs exactly the updates the flaws
+// of the system packages on hosts need: the installed packages built from
+// each affected source package, and for a kernel the metapackage that
+// brings the new one. Nil when no flaw has a fix or Varde does not know the
+// package manager.
+func (a *app) hostFix(ctx context.Context, s *snapshot, m coverage.Machine) (*hostFix, error) {
+	hosts := map[string]bool{}
+	for _, h := range m.HostIDs {
+		hosts[h] = true
+	}
+	affected := map[string]bool{}
+	f := &hostFix{Host: m.Name, WebSSH: a.d.Settings.Get().WebSSHURL}
+	if len(m.Addresses) > 0 {
+		f.Address = m.Addresses[0]
+	}
+	for _, fd := range s.findings {
+		w := s.byID[fd.WorkloadID]
+		if !actionable(fd.State) || fd.MatchState != string(match.Affected) || fd.FixedIn == "" || !identify.IsSystem(w) || !hosts[w.HostID] {
+			continue
+		}
+		eco, name, ok := distro.ParseSystemAppID(fd.AppID)
+		if !ok {
+			continue
+		}
+		affected[name] = true
+		f.Flaws++
+		f.Kernel = f.Kernel || distro.Kernel(eco, name)
+	}
+	if len(affected) == 0 {
+		return nil, nil
+	}
+	release, guest := "", 0
+	for _, h := range m.HostIDs {
+		pk, ok, err := a.d.Store.HostPackageList(ctx, h)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		release = pk.Distro
+		for _, p := range pk.Packages {
+			src := p.Source
+			if src == "" {
+				src = p.Name
+			}
+			if affected[src] || affected[p.Name] || f.Kernel && kernelImage(p.Name) {
+				f.Packages = append(f.Packages, p.Name)
+			}
+		}
+	}
+	// The guest and its node come from whichever records of the machine
+	// know them, not only from the one with the package list.
+	for _, h := range m.HostIDs {
+		if vmid, node := a.lxcGuest(ctx, s, h); vmid > 0 {
+			guest = vmid
+			if node != "" {
+				f.Node = node
+			}
+		}
+	}
+	cmd := remedy.PackageCommand(release, f.Packages)
+	if cmd == "" {
+		return nil, nil
+	}
+	f.Command = remedy.AsRoot(cmd)
+	if guest > 0 && f.Node != "" {
+		f.Guest = remedy.InLXC(guest, cmd)
+	}
+	sort.Strings(f.Packages)
+	return f, nil
+}
+
+// kernelImage reports whether a package is a kernel image of a Debian or
+// Ubuntu system: the kernel of one version ("linux-image-6.1.0-18-amd64",
+// built from linux-signed-amd64, not from "linux") and the metapackage that
+// brings the newest one ("linux-image-amd64"). Upgrading them installs the
+// fixed kernel; a package without an update is left as it is.
+func kernelImage(name string) bool {
+	rest, ok := strings.CutPrefix(name, "linux-image-")
+	return ok && rest != ""
+}
+
+// lxcGuest reads the VMID of an LXC container from a host record of it and
+// names its Proxmox node where the record tells: the API's record has the
+// node as parent; the node inventory's names the node by the address its
+// integration connects to.
+func (a *app) lxcGuest(ctx context.Context, s *snapshot, hostID string) (vmid int, node string) {
+	host, err := a.d.Store.Host(ctx, hostID)
+	if err != nil || host.Kind != inventory.HostProxmoxGuest {
+		return 0, ""
+	}
+	if mm := nodeGuestID.FindStringSubmatch(host.ID); mm != nil {
+		vmid, _ = strconv.Atoi(mm[1])
+		for _, in := range s.integrations {
+			if in.ID == host.IntegrationID {
+				node = in.Address
+			}
+		}
+		return vmid, node
+	}
+	if mm := apiGuestID.FindStringSubmatch(host.ID); mm != nil && strings.Contains(strings.ToLower(host.OS), "lxc") {
+		vmid, _ = strconv.Atoi(mm[1])
+		if n, err := a.d.Store.Host(ctx, host.ParentID); err == nil {
+			node = n.Name
+		}
+		return vmid, node
+	}
+	return 0, ""
 }

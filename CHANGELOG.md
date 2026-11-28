@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The exact way to apply each update, in the terms of what deployed it (ADR 0048): a Compose
+  command that runs from any directory with the project's name and files, the clicks in
+  Portainer for its stacks and on Unraid's Docker page for its containers, the image pull for a
+  container started with `docker run`, and for a host the package manager's command for exactly
+  the packages an update fixes, also through `pct exec` on the Proxmox node for an LXC container.
+  Varde shows these and runs nothing.
+- `VARDE_WEBSSH_URL` (Settings › WebSSH): every command offers **Copy and open WebSSH**, which
+  copies it and opens your WebSSH in a new tab to paste it on the host.
+
 - Every package of hosts and container images is checked against complete public vulnerability
   data by default (ADR 0047): the Debian security tracker, Canonical's OVAL data for Ubuntu, the
   secdb files of Alpine, Wolfi and Chainguard, and osv.dev's exports for Go, PyPI, Maven,
@@ -29,6 +38,11 @@ All notable changes to this project are documented here. The format follows
   compared. Cards and the overview now say how many packages were checked and why some were not.
 - An image built on the host got "wait for the next release". The card and the pages now say to
   rebuild it with the newest base image, with the Compose command when it is a service.
+- Snoozing had no effect on the pages: snoozed flaws kept their app among the updates, with their
+  priority and severity. They now leave the front page's updates, the list of updates and the
+  counts; an app whose flaws are all snoozed waits under **Snoozed** with what brings it back, its
+  page lists the flaws marked "snoozed", and **Wake them now** takes the snooze back. The API and
+  the notifications are unchanged.
 - A card whose flaws are serious but unreachable no longer calls them "minor flaws"; cards show
   their flaws by severity, and containers of one image that need the same update share one card.
 

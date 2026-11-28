@@ -5,9 +5,11 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/catalog"
@@ -39,13 +41,14 @@ const (
 	appSoon     = "soon"     // P2: update soon
 	appLater    = "later"    // P3: with the next regular update
 	appCheck    = "check"    // only findings Varde cannot confirm
+	appSnoozed  = "snoozed"  // every open flaw snoozed by the user
 	appOK       = "ok"       // compared with complete data, nothing found
 	appKnown    = "known"    // compared, but the advisory data is incomplete
 	appUnknown  = "unknown"  // nothing could be compared
 )
 
 // appStateRank orders the states for the list.
-var appStateRank = map[string]int{appNow: 0, appMitigate: 1, appSoon: 2, appLater: 3, appCheck: 4, appUnknown: 5, appKnown: 6, appOK: 7}
+var appStateRank = map[string]int{appNow: 0, appMitigate: 1, appSoon: 2, appLater: 3, appCheck: 4, appSnoozed: 5, appUnknown: 6, appKnown: 7, appOK: 8}
 
 // appCard is one app on the front page and the head of its own page.
 type appCard struct {
@@ -93,6 +96,12 @@ type appCard struct {
 	// Others are further containers of the same image on the front page,
 	// which the same update fixes; the card stands for all of them.
 	Others []string
+	// Platform is what deployed the container, which decides how an
+	// update is applied: "compose", "portainer" (a Portainer stack),
+	// "unraid" (Unraid's Docker manager) or "run" (docker run); empty for
+	// anything else. RunHost and RunAddr name the machine a command runs
+	// on.
+	Platform, RunHost, RunAddr string
 	// Release says which flaws in the image's packages the newest release
 	// of the app fixes, Groups are the app and package versions behind
 	// the card; both are set on the list of updates only.
@@ -103,7 +112,7 @@ type appCard struct {
 // appLabels are the states in the words of the pages.
 var appLabels = map[string]string{
 	appNow: "Update now", appMitigate: "Mitigate now", appSoon: "Update soon", appLater: "With the next update", appCheck: "Check yourself",
-	appOK: "Nothing found", appKnown: "Nothing known", appUnknown: "Not checked",
+	appOK: "Nothing found", appKnown: "Nothing known", appUnknown: "Not checked", appSnoozed: "Snoozed",
 }
 
 // stateOfPriority maps a policy priority to the app state it asks for.
@@ -123,9 +132,13 @@ func stateOfPriority(p string) string {
 // update (todoGroups), the others from what they were checked against.
 func (a *app) appCards(s *snapshot) []appCard {
 	var open []store.Finding
+	snoozed := map[string][]store.Finding{}
 	for _, f := range s.findings {
-		if status.Active(f.State) {
+		switch {
+		case actionable(f.State):
 			open = append(open, f)
+		case f.State == store.StateSnoozed:
+			snoozed[f.WorkloadID] = append(snoozed[f.WorkloadID], f)
 		}
 	}
 	out := a.updateCards(s, a.todoGroups(s, open), open)
@@ -144,6 +157,13 @@ func (a *app) appCards(s *snapshot) []appCard {
 		id := s.ids[wl.ID]
 		c := appCard{Key: wl.ID, Href: "/apps/" + wl.ID}
 		a.describe(&c, s, wl, hostNames)
+		if fs := snoozed[wl.ID]; len(fs) > 0 {
+			// Put aside by the user: not an update to do until the snooze
+			// ends.
+			c.State, c.Label, c.Note = appSnoozed, appLabels[appSnoozed], snoozeNote(fs)
+			out = append(out, c)
+			continue
+		}
 		row := workloadRow{Derived: id.Derived}
 		if kind, skip := coverage.NotAnApp(wl, id, s.marked); skip {
 			row.NotApp = kind
@@ -234,6 +254,10 @@ func (a *app) describe(c *appCard, s *snapshot, wl inventory.Workload, hostNames
 	c.Version = id.Version
 	c.Exposure = string(s.exposure.Detect(wl).Exposure)
 	host := hostNames[wl.HostID]
+	c.RunHost, c.RunAddr = machineOf(s, wl.HostID)
+	if wl.Container != nil {
+		c.Platform = platformOf(wl.Container)
+	}
 	switch {
 	case wl.Container != nil:
 		c.Image = wl.Container.ImageRef
@@ -355,6 +379,13 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 	}
 	switch {
 	case target != "":
+		if p := wl.Package; p != nil && !p.System {
+			// An app installed from its distribution: its package manager
+			// installs the update.
+			if cmd := remedy.PackageCommand(p.Distro, []string{p.Name}); cmd != "" {
+				c.Command = remedy.AsRoot(cmd)
+			}
+		}
 		fixed, fixedTop := 0, false
 		for _, f := range fixes {
 			if match.AtLeast(scheme, target, f.fixedIn) {
@@ -376,6 +407,7 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 				}
 			}
 		}
+		defer c.fitCommand()
 		// sameImage is set when the image the card suggests is the one the
 		// upstream status judged: only then do its fixes count for it.
 		sameImage := false
@@ -563,6 +595,7 @@ func onlyImage(fs []store.Finding) bool {
 
 // appCounts are the numbers the front page leads with.
 type appCounts struct {
+	Snoozed                                                 int
 	Now, Mitigate, Soon, Later, Check, Fine, Unknown, Total int
 }
 
@@ -583,6 +616,8 @@ func countApps(cards []appCard) appCounts {
 			n.Check++
 		case appUnknown:
 			n.Unknown++
+		case appSnoozed:
+			n.Snoozed++
 		default:
 			n.Fine++
 		}
@@ -663,6 +698,7 @@ func appSections(cards []appCard) []appSection {
 	add(appSoon, "Update soon", "Serious, but not directly reachable. They are in the daily digest.", false)
 	add(appLater, "With the next update", "Nothing pressing. They are in the weekly digest.", false)
 	add(appCheck, "Check yourself", "Varde found advisories for these apps but cannot tell whether they apply to the version running.", false)
+	add(appSnoozed, "Snoozed", "You put their flaws aside. They come back by themselves when the snooze ends, and Varde does not notify about them until then.", true)
 	add(appUnknown, "Not checked", "Varde cannot say anything about these. Each says why.", true)
 	add(appOK, "Nothing to do", "", true, appKnown)
 	return out
@@ -709,7 +745,8 @@ func (a *app) appPage(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		Doubt   string
 		Basis   string
 		Machine string
-	}{Card: *card, Groups: a.groupFindings(s, fs), Report: buildReport(fs, card.Name), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
+		WebSSH  string
+	}{WebSSH: a.d.Settings.Get().WebSSHURL, Card: *card, Groups: a.groupFindings(s, fs), Report: buildReport(fs, card.Name), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
 	if app, ok := a.d.Catalog.Current().App(ident.AppID); ok && app.Origin != catalog.OriginBuiltin && app.Origin != catalog.OriginFeed {
 		d.Basis = "recognised automatically"
 	}
@@ -737,4 +774,69 @@ func cardSeverities(fs []store.Finding) ([]sevCount, int) {
 		out = out[:3]
 	}
 	return out, r.Exploited
+}
+
+// snoozeNote says what was snoozed and what brings it back: the end of the
+// latest snooze, or a fixed image for flaws snoozed until one appears.
+func snoozeNote(fs []store.Finding) string {
+	var until time.Time
+	upstream := false
+	for _, f := range fs {
+		upstream = upstream || f.SnoozeUpstream
+		if f.SnoozedUntil != nil && f.SnoozedUntil.After(until) {
+			until = *f.SnoozedUntil
+		}
+	}
+	note := plural(len(fs), "flaw") + " snoozed"
+	switch {
+	case upstream && !until.IsZero():
+		note += " until a fixed image appears, at the latest " + until.Local().Format("2 Jan 2006")
+	case upstream:
+		note += " until a fixed image appears"
+	case !until.IsZero():
+		note += " until " + until.Local().Format("2 Jan 2006")
+	}
+	return note
+}
+
+// platformOf says what deployed a container (see appCard.Platform).
+func platformOf(c *inventory.Container) string {
+	switch cp := remedy.ComposeOf(c); {
+	case remedy.Unraid(c):
+		return "unraid"
+	case cp != nil && cp.Portainer != "":
+		return "portainer"
+	case cp != nil:
+		return "compose"
+	}
+	return "run"
+}
+
+// imageRefPattern accepts the image references a command may name.
+// The reference must also parse (imageref): tags may hold upper case.
+var imageRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,255}$`)
+
+// fitCommand makes the card's command fit what deployed the container: a
+// Portainer stack and Unraid are updated in their own interface, with no
+// command on the host; a container started with docker run pulls the new
+// image, and is then recreated with the options it was started with.
+func (c *appCard) fitCommand() {
+	switch c.Platform {
+	case "portainer", "unraid":
+		c.Command = ""
+	case "run":
+		if c.Mitigation != nil {
+			// No image to pull: none fixes the flaws, or it is built here.
+			return
+		}
+		ref := strings.TrimPrefix(c.Line, "image: ")
+		if ref == "" && strings.HasPrefix(c.Action, "Pull the ") {
+			// A floating tag: the same reference brings the new image.
+			ref = c.Image
+		}
+		c.Command = ""
+		if _, err := imageref.Parse(ref); err == nil && imageRefPattern.MatchString(ref) {
+			c.Command = "docker pull " + ref
+		}
+	}
 }
