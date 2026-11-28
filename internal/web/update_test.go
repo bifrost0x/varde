@@ -38,7 +38,7 @@ func TestFindingUpdate(t *testing.T) {
 	}
 	body := page()
 	for _, want := range []string{"How to update", "ghcr.io/immich-app/immich-server:v1.121.0", "has not seen this tag in the registry",
-		"image: ghcr.io/immich-app/immich-server:v1.121.0", "docker compose pull 'immich-server' && docker compose up -d 'immich-server'", "/opt/immich/docker-compose.yml"} {
+		"image: ghcr.io/immich-app/immich-server:v1.121.0", "cd '/opt/immich' && docker compose -f 'docker-compose.yml' pull 'immich-server' && docker compose -f 'docker-compose.yml' up -d 'immich-server'", "/opt/immich/docker-compose.yml"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

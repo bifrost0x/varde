@@ -24,11 +24,13 @@ func TestComposeCommands(t *testing.T) {
 			pull:   "docker compose pull 'immich-server' && docker compose up -d 'immich-server'",
 		},
 		{
-			name: "default file in its directory: nothing to name",
+			// Named also when it is the default: Compose would otherwise
+			// add a compose.override.yml the project was started without.
+			name: "a single default file is named",
 			labels: map[string]string{labelProject: "immich", labelService: "immich-server",
 				labelWorkingDir: "/srv/immich", labelConfigFiles: "/srv/immich/docker-compose.yml"},
-			pull:    "cd '/srv/immich' && docker compose pull 'immich-server' && docker compose up -d 'immich-server'",
-			rebuild: "cd '/srv/immich' && docker compose build --pull --no-cache 'immich-server' && docker compose up -d 'immich-server'",
+			pull:    "cd '/srv/immich' && docker compose -f 'docker-compose.yml' pull 'immich-server' && docker compose -f 'docker-compose.yml' up -d 'immich-server'",
+			rebuild: "cd '/srv/immich' && docker compose -f 'docker-compose.yml' build --pull --no-cache 'immich-server' && docker compose -f 'docker-compose.yml' up -d 'immich-server'",
 		},
 		{
 			name: "two files and a project name of its own",
@@ -41,14 +43,14 @@ func TestComposeCommands(t *testing.T) {
 			name: "an environment file other than .env",
 			labels: map[string]string{labelProject: "webssh-lab", labelService: "ssh-bastion",
 				labelWorkingDir: "/srv/lab", labelConfigFiles: "/srv/lab/compose.yml", labelEnvFiles: "/srv/lab/lab.env"},
-			pull: "cd '/srv/lab' && docker compose -p 'webssh-lab' --env-file 'lab.env' pull 'ssh-bastion' && " +
-				"docker compose -p 'webssh-lab' --env-file 'lab.env' up -d 'ssh-bastion'",
+			pull: "cd '/srv/lab' && docker compose -p 'webssh-lab' -f 'compose.yml' --env-file 'lab.env' pull 'ssh-bastion' && " +
+				"docker compose -p 'webssh-lab' -f 'compose.yml' --env-file 'lab.env' up -d 'ssh-bastion'",
 		},
 		{
 			name: "the default .env is read without naming it",
 			labels: map[string]string{labelProject: "app", labelService: "web",
 				labelWorkingDir: "/srv/app", labelConfigFiles: "/srv/app/compose.yml", labelEnvFiles: "/srv/app/.env"},
-			pull: "cd '/srv/app' && docker compose pull 'web' && docker compose up -d 'web'",
+			pull: "cd '/srv/app' && docker compose -f 'compose.yml' pull 'web' && docker compose -f 'compose.yml' up -d 'web'",
 		},
 		{
 			name: "a file outside the directory keeps its path",

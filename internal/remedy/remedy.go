@@ -90,11 +90,11 @@ func (c *Compose) command(verb string) string {
 		if c.Project != defaultProject(c.Dir) {
 			b.WriteString(" -p " + shellQuote(c.Project))
 		}
-		files := c.relative(c.Files)
-		if len(files) > 1 || len(files) == 1 && !defaultComposeFiles[files[0]] {
-			for _, f := range files {
-				b.WriteString(" -f " + shellQuote(f))
-			}
+		// The files exactly as recorded, also a single default one:
+		// without -f Compose would add an override file the project may
+		// have been started without.
+		for _, f := range c.relative(c.Files) {
+			b.WriteString(" -f " + shellQuote(f))
 		}
 		// Variables from another file than .env would be missing, and
 		// the service recreated with other values.
@@ -124,8 +124,6 @@ func (c *Compose) relative(paths []string) []string {
 	}
 	return out
 }
-
-var defaultComposeFiles = map[string]bool{"compose.yaml": true, "compose.yml": true, "docker-compose.yaml": true, "docker-compose.yml": true}
 
 // defaultProject is the project name Compose derives from a directory: its
 // base name in lower case, without characters a project name cannot hold.
