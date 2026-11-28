@@ -265,8 +265,28 @@ func cveKey(id string) string { return "cve/" + id }
 // Ratings are CVE ratings by CVE ID.
 type Ratings map[string]Record
 
-// LoadRatings reads the cache file of the CVE dataset.
-func LoadRatings(path string) (Ratings, error) {
+// Unrated lists the CVEs of the selected records that carry no score of
+// their own: the ratings LoadRatings needs to read.
+func Unrated(sel map[string][]Selected) map[string]bool {
+	out := map[string]bool{}
+	for _, rs := range sel {
+		for _, r := range rs {
+			if r.CVSS > 0 {
+				continue
+			}
+			for _, id := range append(append([]string{r.Vuln.ID}, r.Vuln.Upstream...), r.Vuln.Aliases...) {
+				if strings.HasPrefix(id, "CVE-") {
+					out[id] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+// LoadRatings reads the ratings of the CVEs in only from the cache file of
+// the CVE dataset; a nil only reads all of them.
+func LoadRatings(path string, only map[string]bool) (Ratings, error) {
 	f, err := os.Open(path) //nolint:gosec // path built by the caller inside the data directory
 	if err != nil {
 		return nil, fmt.Errorf("vulndb: %w", err)
@@ -284,6 +304,9 @@ func LoadRatings(path string) (Ratings, error) {
 		var l line
 		if err := json.Unmarshal(sc.Bytes(), &l); err != nil {
 			return nil, fmt.Errorf("vulndb %s: %w", filepath.Base(path), err)
+		}
+		if only != nil && (len(l.Keys) == 0 || !only[strings.TrimPrefix(l.Keys[0], "cve/")]) {
+			continue
 		}
 		var rec Record
 		if err := json.Unmarshal(l.Record, &rec); err != nil {

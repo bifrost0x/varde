@@ -685,11 +685,11 @@ func (p *Pipeline) RunLogged(ctx context.Context) {
 // Catalog returns the live catalog holder shared with the UI.
 func (p *Pipeline) Catalog() *catalog.Live { return p.cat }
 
-// feedAlone is the default of Pipeline.Superseded: an app whose catalog
+// FeedAlone is the default of Pipeline.Superseded: an app whose catalog
 // entry comes from the feed is judged by the feed alone. The direct sources
 // stop refreshing it (hybrid mode), so their earlier records would go stale
 // and keep findings open.
-func feedAlone(app *catalog.App, source string) bool {
+func FeedAlone(app *catalog.App, source string) bool {
 	return app != nil && app.Origin == catalog.OriginFeed && source != store.FeedSource
 }
 
@@ -728,7 +728,7 @@ func (p *Pipeline) Advisories(app *catalog.App, recs []store.AdvisoryRecord) []m
 // The records stay stored and count again when that changes.
 func AdvisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded func(*catalog.App, string) bool) []match.Advisory {
 	if superseded == nil {
-		superseded = feedAlone
+		superseded = FeedAlone
 	}
 	out := make([]match.Advisory, 0, len(recs))
 	for _, r := range recs {

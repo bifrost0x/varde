@@ -465,7 +465,7 @@ func TestRatings(t *testing.T) {
 	if _, err := Normalize(d, "testdata/ubuntu.cve.oval.xml.bz2", CachePath(dir, d), stamp); err != nil {
 		t.Fatal(err)
 	}
-	r, err := LoadRatings(CachePath(dir, d))
+	r, err := LoadRatings(CachePath(dir, d), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,6 +475,16 @@ func TestRatings(t *testing.T) {
 	}
 	if _, ok := r["CVE-2025-3001"]; ok {
 		t.Error("a CVE without score and description carries nothing")
+	}
+	// Only the CVEs asked for are read.
+	some, err := LoadRatings(CachePath(dir, d), map[string]bool{"CVE-2025-9999": true})
+	if err != nil || len(some) != 0 {
+		t.Errorf("ratings %v %v", some, err)
+	}
+	sel := map[string][]Selected{"a": {{Vuln: advisory.Vulnerability{ID: "DEBIAN-CVE-2025-3000", Upstream: []string{"CVE-2025-3000"}}},
+		{Vuln: advisory.Vulnerability{ID: "GHSA-x", Aliases: []string{"CVE-2025-1"}}, CVSS: 5}}}
+	if u := Unrated(sel); len(u) != 1 || !u["CVE-2025-3000"] {
+		t.Errorf("unrated %v", u)
 	}
 
 	// A Debian record without a rating takes the CVE's score and a label
@@ -523,5 +533,29 @@ func TestTidyDropsRecordsOfTwoExports(t *testing.T) {
 	Tidy(sel)
 	if got := sel["os:Go/golang.org/x/net"]; len(got) != 1 {
 		t.Fatalf("records %d, want 1", len(got))
+	}
+}
+
+// Ubuntu kernels stay with the sources that compare them; Debian's tracker
+// covers its kernel, and other packages of Ubuntu are covered.
+func TestHandles(t *testing.T) {
+	cases := []struct {
+		p    distro.Package
+		want bool
+	}{
+		{distro.Package{Ecosystem: "Ubuntu:24.04:LTS", Name: "linux-hwe-6.8"}, false},
+		{distro.Package{Ecosystem: "Ubuntu:24.04:LTS", Name: "linux"}, false},
+		{distro.Package{Ecosystem: "Ubuntu:24.04:LTS", Name: "linux-firmware"}, true},
+		{distro.Package{Ecosystem: "Ubuntu:24.04:LTS", Name: "openssl"}, true},
+		{distro.Package{Ecosystem: "Debian:12", Name: "linux"}, true},
+		{distro.Package{Ecosystem: "npm", Name: "lodash"}, false},
+	}
+	for _, c := range cases {
+		if got := Handles(c.p); got != c.want {
+			t.Errorf("Handles(%+v) = %v, want %v", c.p, got, c.want)
+		}
+	}
+	if w := Want([]distro.Package{{Ecosystem: "Ubuntu:24.04:LTS", Name: "linux", Version: "6.8.0-1"}}, nil, stamp); len(w.Apps()) != 0 {
+		t.Error("an Ubuntu kernel is not wanted from the datasets")
 	}
 }

@@ -303,8 +303,9 @@ func parseUbuntuCVE(r io.Reader, modified time.Time, emit func(Record) error) er
 		}
 		v := advisory.Vulnerability{ID: id, Modified: modified}
 		if desc := strings.TrimSpace(d.Description); desc != "" {
+			// The summary only: the ratings of every CVE are read at
+			// once, and the record's own source has the description.
 			v.Summary = summary(desc)
-			v.Details = truncate(desc, 4<<10)
 		}
 		rec := Record{Severity: ubuntuPriority(c.Priority)}
 		if s, err := strconv.ParseFloat(c.CVSSScore, 64); err == nil && s > 0 && s <= 10 {

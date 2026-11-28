@@ -33,9 +33,9 @@ type Distro struct {
 	BaseURL string
 	// Packages returns the distribution packages present, by app ID.
 	Packages func(ctx context.Context) (map[string][]distro.Package, error)
-	// Skip, if set, names ecosystems another source covers without asking
-	// anyone (ADR 0047): their packages are not asked about.
-	Skip func(ecosystem string) bool
+	// Skip, if set, names packages another source covers without asking
+	// anyone (ADR 0047): they are not asked about.
+	Skip func(p distro.Package) bool
 }
 
 // Name implements Source.
@@ -61,7 +61,7 @@ func (d *Distro) Refresh(ctx context.Context, apps []*catalog.App) (Result, erro
 		if d.Skip != nil {
 			kept := pkgs[:0:0]
 			for _, p := range pkgs {
-				if !d.Skip(p.Ecosystem) {
+				if !d.Skip(p) {
 					kept = append(kept, p)
 				}
 			}

@@ -214,6 +214,17 @@ func Title(key string) string {
 // Covered reports whether a complete dataset covers an ecosystem.
 func Covered(ecosystem string) bool { return len(Datasets(ecosystem)) > 0 }
 
+// Handles reports whether the datasets cover a package: its ecosystem is
+// covered, and it is not an Ubuntu kernel, whose records compare the
+// running kernel and are left out of Canonical's package data here.
+func Handles(p distro.Package) bool {
+	if !Covered(p.Ecosystem) {
+		return false
+	}
+	fam, _, _ := strings.Cut(p.Ecosystem, ":")
+	return fam != "Ubuntu" || !distro.Kernel(p.Ecosystem, p.Name)
+}
+
 // Record is one vulnerability record as the cache keeps it.
 type Record struct {
 	Vuln advisory.Vulnerability `json:"v"`
@@ -269,7 +280,7 @@ func Want(pkgs []distro.Package, byApp map[string][]distro.Package, now time.Tim
 	w := &Wanted{byKey: map[string][]wantedPkg{}, apps: map[string]map[string]bool{}}
 	seen := map[wantedPkg]bool{}
 	add := func(app string, p distro.Package) {
-		if p.Name == "" || !Covered(p.Ecosystem) {
+		if p.Name == "" || !Handles(p) {
 			return
 		}
 		wp := wantedPkg{appID: app, ecosystem: p.Ecosystem, name: p.Name}

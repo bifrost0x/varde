@@ -39,6 +39,9 @@ const (
 	vulnDBEvery = 24 * time.Hour
 	// vulnDBRetry is the wait after a failed download.
 	vulnDBRetry = time.Hour
+	// vulnDBDownload bounds one download: a server that stalls must not
+	// hold up the other sources.
+	vulnDBDownload = 15 * time.Minute
 )
 
 // VulnDB checks every package Varde reads, of hosts and of images, against
@@ -96,6 +99,7 @@ func (v *VulnDB) Refresh(ctx context.Context, _ []*catalog.App) (Result, error) 
 	if err := os.MkdirAll(v.Dir, 0o700); err != nil {
 		return res, fmt.Errorf("vulndb directory: %w", err)
 	}
+	v.removeLeftovers()
 	now := v.now()
 	want := vulndb.Want(pkgs, byApp, now)
 	byKey := map[string]vulndb.Dataset{}
@@ -186,6 +190,8 @@ func (v *VulnDB) update(ctx context.Context, d vulndb.Dataset, now time.Time, re
 		}
 	}
 	res.Requests++
+	ctx, cancel := context.WithTimeout(ctx, vulnDBDownload)
+	defer cancel()
 	stream, err := v.HTTP.Open(ctx, httpx.Request{URL: u, Header: h})
 	var se *httpx.StatusError
 	switch {
@@ -259,7 +265,7 @@ func (v *VulnDB) store(ctx context.Context, want *vulndb.Wanted, keys []string, 
 		return 0, nil
 	}
 	sel := map[string][]vulndb.Selected{}
-	var ratings vulndb.Ratings
+	ratingsPath := ""
 	for _, k := range keys {
 		d := byKey[k]
 		path := vulndb.CachePath(v.Dir, d)
@@ -267,20 +273,23 @@ func (v *VulnDB) store(ctx context.Context, want *vulndb.Wanted, keys []string, 
 			continue
 		}
 		if d.Format == vulndb.FormatUbuntuCVE {
-			r, err := vulndb.LoadRatings(path)
-			if err != nil {
-				return 0, err
-			}
-			ratings = r
+			ratingsPath = path
 			continue
 		}
 		if err := vulndb.Select(path, want, sel); err != nil {
 			return 0, err
 		}
 	}
-	for _, rs := range sel {
-		for i := range rs {
-			ratings.Rate(&rs[i])
+	if ratingsPath != "" {
+		// Only the ratings of the CVEs whose records rate nothing.
+		ratings, err := vulndb.LoadRatings(ratingsPath, vulndb.Unrated(sel))
+		if err != nil {
+			return 0, err
+		}
+		for _, rs := range sel {
+			for i := range rs {
+				ratings.Rate(&rs[i])
+			}
 		}
 	}
 	vulndb.Tidy(sel)
@@ -394,6 +403,20 @@ func (v *VulnDB) signature(want *vulndb.Wanted, keys []string, byKey map[string]
 		_, _ = fmt.Fprintf(h, "\n%s:%d:%d", k, fi.Size(), fi.ModTime().UnixNano())
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// removeLeftovers deletes the temporary files of a download or a
+// conversion that a crash interrupted.
+func (v *VulnDB) removeLeftovers() {
+	entries, err := os.ReadDir(v.Dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if n := e.Name(); e.Type().IsRegular() && (strings.HasPrefix(n, ".download-") || strings.HasPrefix(n, ".tmp-")) {
+			_ = os.Remove(filepath.Join(v.Dir, n))
+		}
+	}
 }
 
 // VulnDBCovered reports whether every dataset of an ecosystem has a cache

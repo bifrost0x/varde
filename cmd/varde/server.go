@@ -46,6 +46,7 @@ import (
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/uplink"
 	"github.com/bifrost0x/varde/internal/upstream"
+	"github.com/bifrost0x/varde/internal/vulndb"
 	"github.com/bifrost0x/varde/internal/web"
 )
 
@@ -513,7 +514,16 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 	}
 	// osv.dev is not asked about what the downloaded datasets cover.
 	vulnDir := filepath.Join(cfg.DataDir, "vulndb")
-	vulnDBReady := func(ecosystem string) bool { return set.Get().VulnDB && sources.VulnDBCovered(vulnDir, ecosystem) }
+	vulnDBReady := func(p distro.Package) bool {
+		return set.Get().VulnDB && vulndb.Handles(p) && sources.VulnDBCovered(vulnDir, p.Ecosystem)
+	}
+	// Every package of every host and image against complete datasets
+	// downloaded whole (ADR 0047): no request names a package. It needs
+	// no catalog app, so no mode narrows it to some.
+	vulnSource := sources.Toggle{Source: &sources.VulnDB{Deps: deps, Dir: vulnDir, Log: logger, Apps: appPackages,
+		Stored:   func(ctx context.Context) ([]string, error) { return st.AdvisoryApps(ctx, sources.SourceVulnDB) },
+		Packages: func(ctx context.Context) ([]distro.Package, error) { return checkedPackages(ctx, st) },
+	}, Enabled: func() bool { return set.Get().VulnDB }}
 	// Sources with a switch of their own. None of their data is in the
 	// data package, so they work the same with and without it.
 	optional := []sources.Source{
@@ -522,12 +532,6 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 		// Distribution security data also comes from osv.dev and reveals
 		// package names and releases the same way, so one switch covers both.
 		sources.Toggle{Source: &sources.Distro{Deps: deps, Packages: appPackages, Skip: vulnDBReady}, Enabled: func() bool { return set.Get().DirectOSV }},
-		// Every package of every host and image against complete datasets
-		// downloaded whole (ADR 0047): no request names a package.
-		sources.Toggle{Source: &sources.VulnDB{Deps: deps, Dir: vulnDir, Log: logger, Apps: appPackages,
-			Stored:   func(ctx context.Context) ([]string, error) { return st.AdvisoryApps(ctx, sources.SourceVulnDB) },
-			Packages: func(ctx context.Context) ([]distro.Package, error) { return checkedPackages(ctx, st) },
-		}, Enabled: func() bool { return set.Get().VulnDB }},
 		// Every system package of every host, the same way (ADR 0032),
 		// through osv.dev's queries: for the ecosystems the datasets above
 		// do not cover, or all of them when those are switched off.
@@ -550,7 +554,7 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 		logger.Info("first-party index loaded", "images", embedded.Len())
 	}
 	// Enrichment last: EPSS needs the CVE IDs of freshly stored advisories.
-	directSet := append(append([]sources.Source{github}, optional...), &sources.KEV{Deps: deps}, &sources.EPSS{Deps: deps})
+	directSet := append(append([]sources.Source{github, vulnSource}, optional...), &sources.KEV{Deps: deps}, &sources.EPSS{Deps: deps})
 
 	var refresher *sources.Refresher
 	ch, err := newChannels(ctx, cfg, st, analysis, hc, localCatalog, logger, func() bool { return set.Get().DirectQueries }, func() {
@@ -573,7 +577,7 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 	// CVEs; CVEs the other sources bring get their score from FIRST, last,
 	// and only while one of those sources is on.
 	channelSet := func(fsrc *feed.Source) []sources.Source {
-		out := []sources.Source{fsrc, sources.Toggle{Source: sources.Only{Source: github, Keep: ch.cov.uncovered}, Enabled: ch.direct}}
+		out := []sources.Source{fsrc, sources.Toggle{Source: sources.Only{Source: github, Keep: ch.cov.uncovered}, Enabled: ch.direct}, vulnSource}
 		out = append(out, optional...)
 		// Only for CVEs the feed did not bring: it carries their scores.
 		outside := func(ctx context.Context) ([]string, error) { return st.AdvisoryCVEsExcept(ctx, store.FeedSource) }
@@ -586,7 +590,7 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 	// apps the feed does not.
 	hybridSet := func(fsrc sources.Source) []sources.Source {
 		notFromFeed := func(a *catalog.App) bool { return a.Origin != catalog.OriginFeed }
-		out := []sources.Source{fsrc}
+		out := []sources.Source{fsrc, vulnSource}
 		for _, s := range append([]sources.Source{github}, optional...) {
 			out = append(out, sources.Only{Source: s, Keep: notFromFeed})
 		}
@@ -606,6 +610,8 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 			return embedded(image)
 		}
 	}
+
+	analysis.Superseded = withVulnDB(analysis.Superseded, func() bool { return set.Get().VulnDB })
 
 	r := sources.Refresher{Apps: analysis.Apps, OnChange: analysis.RunLogged, Log: logger, Interval: cfg.AdvisoryRefresh}
 	switch {
@@ -636,6 +642,21 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 	logger.Info("advisory mode", "mode", cfg.Mode, "data package", ch.pkg.Available(), "uplink", ch.uplink.Status().State)
 	refresher = sources.NewRefresher(r)
 	return refresher, ch.uplink, ch.pkg, nil
+}
+
+// withVulnDB extends base (the pipeline's default when nil) so that the
+// records of the vulnerability datasets count only while on reports them
+// switched on: nothing refreshes them otherwise (ADR 0047).
+func withVulnDB(base func(*catalog.App, string) bool, on func() bool) func(*catalog.App, string) bool {
+	if base == nil {
+		base = pipeline.FeedAlone
+	}
+	return func(app *catalog.App, source string) bool {
+		if source == sources.SourceVulnDB {
+			return !on()
+		}
+		return base(app, source)
+	}
 }
 
 // loadCatalog loads the built-in catalog plus local entries from dir, if

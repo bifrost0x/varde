@@ -92,7 +92,18 @@ func TestVulnDBRefresh(t *testing.T) {
 		},
 		URL: func(d vulndb.Dataset) string { return strings.Replace(d.URL, "https://"+d.Host, u.srv.URL, 1) },
 	}
+	// A download a crash interrupted is cleaned up.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	leftover := filepath.Join(dir, ".download-123")
+	if err := os.WriteFile(leftover, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	res, err := v.Refresh(t.Context(), nil)
+	if _, statErr := os.Stat(leftover); !os.IsNotExist(statErr) {
+		t.Error("the leftover of an interrupted download stays")
+	}
 	if err == nil || !strings.Contains(err.Error(), "Alpine secdb") {
 		t.Fatalf("a dataset that cannot be fetched must be reported: %v", err)
 	}
@@ -182,7 +193,7 @@ func TestSystemPackagesSkip(t *testing.T) {
 		Packages: func(context.Context) ([]distro.Package, error) {
 			return []distro.Package{{Ecosystem: "Debian:13", Name: "curl", Version: "8.0"}, {Ecosystem: "npm", Name: "lodash", Version: "4.17.20"}}, nil
 		},
-		Skip: vulndb.Covered}
+		Skip: vulndb.Handles}
 	if _, err := sp.Refresh(t.Context(), nil); err != nil {
 		t.Fatal(err)
 	}
