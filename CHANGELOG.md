@@ -411,6 +411,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- Text an image controls no longer changes a copyable command: paths in commands are printable
+  ASCII only (PowerShell also ends a quoted string at typographic quotes), and the Dockerfile
+  suggested for a rebuild checks the image's user and reference.
 - Built with Go 1.27.4, which fixes GO-2026-6859 in `net/http`.
 - Login, setup, password change and agent enrollment reserve throttle attempts atomically; waiting
   for password hashing is bounded.
