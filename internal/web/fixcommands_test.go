@@ -296,3 +296,26 @@ func TestUpdateOnlyForOpenFlaws(t *testing.T) {
 	mustContain(t, "card", card, "No fixed image for the open flaws yet")
 	mustNotContain(t, "card", card, "Update to v10.20.0")
 }
+
+// A path Varde refuses to copy (here an environment file with characters
+// beyond ASCII) leaves no command: one without the file could start the
+// service with other values. The page says how to update instead.
+func TestFixComposeWithRefusedPath(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	id := labWithLabels(t, h, map[string]string{"com.docker.compose.project": "chef", "com.docker.compose.service": "cyber-chef",
+		"com.docker.compose.project.working_dir": "/srv/chef", "com.docker.compose.project.environment_file": "/srv/chef/生产.env"})
+	body, text := appPageText(t, h, id)
+	mustContain(t, "app page", text, "image: mpepping/cyberchef:v10.20.0", "Varde shows no command")
+	mustNotContain(t, "app page", body, "cd '/srv/chef'", "app-cmd")
+	link := regexp.MustCompile(`href="(/findings/[^"#]+)"`).FindStringSubmatch(body)
+	if link == nil {
+		t.Fatal("no finding linked from the app page")
+	}
+	resp, page := h.do(t, "GET", link[1], nil, nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("finding page: %d", resp.StatusCode)
+	}
+	mustContain(t, "finding page", stripTags(html.UnescapeString(page)), "Varde shows no command")
+	mustNotContain(t, "finding page", page, "compose-cmd", "cd '/srv/chef'")
+}

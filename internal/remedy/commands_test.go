@@ -163,3 +163,20 @@ func TestPlainPathRefusesBeyondASCII(t *testing.T) {
 		t.Errorf("Pull() names the hostile directory: %q", c.Pull())
 	}
 }
+
+func TestComposeWithRefusedPathHasNoCommand(t *testing.T) {
+	for _, labels := range []map[string]string{
+		{"com.docker.compose.project.environment_file": "/srv/app/生产.env"},
+		{"com.docker.compose.project.config_files": "/srv/app/compose.yaml,/srv/app/$(x).yaml"},
+		{"com.docker.compose.project.working_dir": "/srv/café"},
+	} {
+		labels["com.docker.compose.project"], labels["com.docker.compose.service"] = "app", "web"
+		if labels["com.docker.compose.project.working_dir"] == "" {
+			labels["com.docker.compose.project.working_dir"] = "/srv/app"
+		}
+		c := composeOf(labels)
+		if c == nil || c.Pull() != "" || c.Rebuild() != "" {
+			t.Errorf("%v: commands %q / %q", labels, c.Pull(), c.Rebuild())
+		}
+	}
+}
