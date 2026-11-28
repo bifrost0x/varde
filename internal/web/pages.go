@@ -351,9 +351,7 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		a.fail(w, r, cur, err)
 		return
 	}
-	if a.d.Settings.Get().PackagesChecked() {
-		d.SystemChecked = len(s.system)
-	}
+	d.SystemChecked = a.systemPackagesCovered(s.system)
 	for _, wl := range s.workloads {
 		if wl.Container == nil || wl.RemovedAt != nil {
 			continue
@@ -737,6 +735,25 @@ func (a *app) imagePackagesChecked(id identify.Result) string {
 		return ""
 	}
 	return plural(n, "package") + " of its image"
+}
+
+// systemPackagesCovered counts the system packages whose ecosystem is
+// compared with security data right now: a package of a release without
+// data (Debian 11, Fedora) or whose dataset is not downloaded yet is not.
+func (a *app) systemPackagesCovered(ws []inventory.Workload) int {
+	if a.d.PackagesCovered == nil {
+		return 0
+	}
+	n := 0
+	for _, wl := range ws {
+		if wl.Package == nil || wl.RemovedAt != nil {
+			continue
+		}
+		if eco, _, ok := distro.Ecosystem(wl.Package.Distro); ok && a.d.PackagesCovered(eco) {
+			n++
+		}
+	}
+	return n
 }
 
 // packagesNote says why the packages of a container's image are not

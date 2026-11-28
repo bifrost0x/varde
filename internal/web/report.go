@@ -268,7 +268,10 @@ func packageOf(f store.Finding, m match.Finding, appName string) (key, name, kin
 		kind = strings.TrimSuffix(strings.TrimPrefix(label, pkg+" ("), ")")
 		return f.AppID, pkg, kind, eco
 	}
-	if eco, pkg, ok := strings.Cut(m.Evidence.Package, "/"); ok && m.Image {
+	if eco, pkg, ok := strings.Cut(m.Evidence.Package, "/"); ok && (m.Image || distro.Supported(eco) && !distro.Language(eco)) {
+		// A package inside an image, or a catalog app installed from its
+		// distribution: its versions compare in the package manager's
+		// order.
 		return m.Evidence.Package, pkg, strings.ReplaceAll(eco, ":", " ") + " package", eco
 	}
 	return "app:" + f.AppID, appName, "the app itself", ""

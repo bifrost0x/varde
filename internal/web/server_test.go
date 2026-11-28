@@ -24,6 +24,7 @@ import (
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/config"
+	"github.com/bifrost0x/varde/internal/distro"
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/settings"
 	"github.com/bifrost0x/varde/internal/store"
@@ -92,6 +93,9 @@ verified: 2026-11-08
 		Store: st, Catalog: catalog.NewLive(cat), Settings: set, Sessions: sessions, Throttle: auth.NewThrottle(), Proxies: proxies, APIAuth: apiAuth,
 		API: api.New(api.Options{Store: st, Authenticate: apiAuth.Authenticate, Log: log}),
 		Log: log,
+		// As the server has it, without downloaded datasets: covered while
+		// osv.dev is asked.
+		PackagesCovered: func(eco string) bool { return set.Get().DirectOSV && distro.Supported(eco) },
 	}
 	for _, o := range opts {
 		o(&deps)

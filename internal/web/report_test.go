@@ -169,3 +169,36 @@ func TestMergeSameImage(t *testing.T) {
 		t.Error("a command naming one service must not stand for another")
 	}
 }
+
+// System packages count as checked only where security data covers their
+// release: Debian 11 is out of every dataset.
+func TestSystemPackagesCovered(t *testing.T) {
+	a := &app{d: Deps{PackagesCovered: func(eco string) bool { return eco == "Debian:12" }}}
+	pkg := func(distro string) inventory.Workload {
+		return inventory.Workload{Kind: inventory.KindPackage, Package: &inventory.Package{Manager: "dpkg", Name: "openssl", Distro: distro, System: true}}
+	}
+	if n := a.systemPackagesCovered([]inventory.Workload{pkg("debian-12"), pkg("debian-11"), pkg("fedora-40")}); n != 1 {
+		t.Errorf("covered %d, want 1", n)
+	}
+	if n := (&app{d: Deps{}}).systemPackagesCovered([]inventory.Workload{pkg("debian-12")}); n != 0 {
+		t.Errorf("without coverage %d, want 0", n)
+	}
+}
+
+// A catalog app installed from its distribution: its package's fixed
+// versions compare in the package manager's order, so the report names the
+// version that fixes both flaws.
+func TestReportHostPackageOfCatalogApp(t *testing.T) {
+	ev := match.Evidence{Package: "Debian:12/nginx", Version: "1.22.1-9+deb12u2"}
+	fs := []store.Finding{
+		reportFinding(t, "nginx", "DEBIAN-CVE-2026-1", "1.22.1-9+deb12u10", match.Finding{Evidence: ev}),
+		reportFinding(t, "nginx", "DEBIAN-CVE-2026-2", "1.22.1-9+deb12u9", match.Finding{Evidence: ev}),
+	}
+	// Either order gives the same answer.
+	for _, order := range [][]store.Finding{fs, {fs[1], fs[0]}} {
+		r := buildReport(order, "nginx")
+		if len(r.Packages) != 1 || r.Packages[0].FixedIn != "1.22.1-9+deb12u10" || r.Packages[0].Kind != "Debian 12 package" {
+			t.Fatalf("packages %+v", r.Packages)
+		}
+	}
+}
