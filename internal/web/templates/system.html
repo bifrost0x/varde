@@ -78,6 +78,20 @@
 </section>
 {{end}}
 
+{{with $d.Fix}}
+<section class="panel" id="updates" aria-labelledby="upd-title">
+  <h2 id="upd-title">Install the security updates</h2>
+  <p class="small">{{plural (len .Packages) "installed package"}} {{if eq (len .Packages) 1}}has{{else}}have{{end}} an update that fixes {{plural .Flaws "flaw"}}. This command installs exactly {{if eq (len .Packages) 1}}it{{else}}those{{end}}, nothing else:</p>
+  <div class="secret"><pre id="host-cmd" class="mono install">{{.Command}}</pre><button class="btn btn--ghost" type="button" data-copy="#host-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+  {{template "runon" (runon "host-cmd" .Host .Address .WebSSH)}}
+  {{if .Guest}}<p class="small">It is an LXC container: the same from its Proxmox node <strong>{{.Node}}</strong>, without signing in to the container:</p>
+  <div class="secret"><pre id="guest-cmd" class="mono install">{{.Guest}}</pre><button class="btn btn--ghost" type="button" data-copy="#guest-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+  {{template "runon" (runon "guest-cmd" .Node "" .WebSSH)}}{{end}}
+  {{if .Kernel}}<p class="small">A kernel is among them: it takes effect after a restart of the system, when it suits you.</p>{{end}}
+  <p class="small muted">Varde reads the package list again at the next report and closes what the updates fixed.</p>
+</section>
+{{end}}
+
 <section class="panel" id="packages" aria-labelledby="pk-title">
   <div class="panel__head"><h2 id="pk-title">Installed packages <span class="muted small">{{$d.Total}}</span></h2>{{if $d.Total}}<span class="small muted">{{if $d.PackageOS}}{{$d.PackageOS}}, {{end}}{{if $d.Kernel}}kernel <span class="mono">{{$d.Kernel}}</span>, {{end}}read {{date $d.PackageRead}}</span>{{end}}</div>
   {{if $d.Total}}

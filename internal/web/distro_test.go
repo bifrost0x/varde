@@ -17,9 +17,8 @@ import (
 	"github.com/bifrost0x/varde/internal/settings"
 )
 
-func withNginx(t *testing.T) func(*Deps) {
-	return func(d *Deps) {
-		cat, err := catalog.Load(fstest.MapFS{"nginx.yaml": {Data: []byte(`id: nginx
+// nginxEntry is a catalog entry for nginx as an image and a dpkg package.
+const nginxEntry = `id: nginx
 name: nginx
 homepage: https://nginx.org
 images: [{match: library/nginx}]
@@ -29,7 +28,11 @@ version: {scheme: semver}
 advisories: {coverage: limited, notes: test}
 maintainers_of_entry: [bifrost0x]
 verified: 2026-11-09
-`)}}, nil)
+`
+
+func withNginx(t *testing.T) func(*Deps) {
+	return func(d *Deps) {
+		cat, err := catalog.Load(fstest.MapFS{"nginx.yaml": {Data: []byte(nginxEntry)}}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

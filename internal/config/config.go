@@ -121,6 +121,9 @@ type Config struct {
 	// PublicDomains and InternalDomains feed exposure detection.
 	PublicDomains   []string
 	InternalDomains []string
+	// WebSSHURL is the address of a WebSSH installation: the pages offer to
+	// open it with a fix command copied; empty when there is none.
+	WebSSHURL string
 	// BaseURL is the externally reachable UI address, used for links in
 	// notifications. Optional.
 	BaseURL string
@@ -355,6 +358,10 @@ func Load(lookup LookupFunc) (Config, error) {
 	l.str("BASE_URL", &cfg.BaseURL)
 	if cfg.BaseURL != "" {
 		l.httpURL("BASE_URL", cfg.BaseURL)
+	}
+	l.str("WEBSSH_URL", &cfg.WebSSHURL)
+	if cfg.WebSSHURL != "" {
+		l.httpURL("WEBSSH_URL", cfg.WebSSHURL)
 	}
 	l.notify(&cfg.Notify)
 

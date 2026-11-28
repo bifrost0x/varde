@@ -94,3 +94,16 @@ func TestDirectQueriesSetting(t *testing.T) {
 		t.Fatal("bad value accepted")
 	}
 }
+
+func TestWebSSHURL(t *testing.T) {
+	for _, ok := range []string{"https://webssh.example.lan", "http://192.168.1.4:5000", "https://example.com/webssh/"} {
+		if err := WebSSHURL(ok); err != nil {
+			t.Errorf("%s refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"javascript:alert(1)", "ftp://x", "https://user:pw@x.lan", "https://x.lan/?next=//evil", "https://x.lan/#a", "webssh.lan", "https://"} {
+		if WebSSHURL(bad) == nil {
+			t.Errorf("%s accepted", bad)
+		}
+	}
+}

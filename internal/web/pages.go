@@ -511,9 +511,12 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 	var m match.Finding
 	_ = json.Unmarshal(f.Detail, &m)
 	wl, _ := a.d.Store.Workload(ctx, f.WorkloadID)
-	host := ""
+	host, address := "", ""
 	if h, err := a.d.Store.Host(ctx, wl.HostID); err == nil {
 		host = h.Name
+		if len(h.Addresses) > 0 {
+			address = h.Addresses[0]
+		}
 	}
 	details := ""
 	recs, err := a.d.Store.Advisories(ctx, f.AppID)
@@ -538,8 +541,11 @@ func (a *app) finding(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		// AppHref is the page of the app the flaw belongs to; empty for
 		// a package of a system, which has none.
 		AppHref string
+		// HostAddress and WebSSH say where a fix command runs and offer
+		// to open it there (see runOn).
+		HostAddress, WebSSH string
 	}{f, m, a.appName(f.AppID), wl.Name, host, details, a.update(r.Context(), f, m, wl), a.d.Settings.Get().RegistryTags, a.findingPaths(r, f.ID),
-		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl), appHref(wl)}})
+		a.findingHistory(r, f.ID), a.imageFinding(ctx, m, wl), appHref(wl), address, a.d.Settings.Get().WebSSHURL}})
 }
 
 // imageFinding is what the page says about a flaw in a package of a

@@ -5,6 +5,7 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -95,6 +96,12 @@ type appCard struct {
 	// Others are further containers of the same image on the front page,
 	// which the same update fixes; the card stands for all of them.
 	Others []string
+	// Platform is what deployed the container, which decides how an
+	// update is applied: "compose", "portainer" (a Portainer stack),
+	// "unraid" (Unraid's Docker manager) or "run" (docker run); empty for
+	// anything else. RunHost and RunAddr name the machine a command runs
+	// on.
+	Platform, RunHost, RunAddr string
 	// Release says which flaws in the image's packages the newest release
 	// of the app fixes, Groups are the app and package versions behind
 	// the card; both are set on the list of updates only.
@@ -247,6 +254,10 @@ func (a *app) describe(c *appCard, s *snapshot, wl inventory.Workload, hostNames
 	c.Version = id.Version
 	c.Exposure = string(s.exposure.Detect(wl).Exposure)
 	host := hostNames[wl.HostID]
+	c.RunHost, c.RunAddr = machineOf(s, wl.HostID)
+	if wl.Container != nil {
+		c.Platform = platformOf(wl.Container)
+	}
 	switch {
 	case wl.Container != nil:
 		c.Image = wl.Container.ImageRef
@@ -368,6 +379,13 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 	}
 	switch {
 	case target != "":
+		if p := wl.Package; p != nil && !p.System {
+			// An app installed from its distribution: its package manager
+			// installs the update.
+			if cmd := remedy.PackageCommand(p.Distro, []string{p.Name}); cmd != "" {
+				c.Command = remedy.AsRoot(cmd)
+			}
+		}
 		fixed, fixedTop := 0, false
 		for _, f := range fixes {
 			if match.AtLeast(scheme, target, f.fixedIn) {
@@ -389,6 +407,7 @@ func (a *app) plan(c *appCard, s *snapshot, wl inventory.Workload, fs []store.Fi
 				}
 			}
 		}
+		defer c.fitCommand()
 		// sameImage is set when the image the card suggests is the one the
 		// upstream status judged: only then do its fixes count for it.
 		sameImage := false
@@ -726,7 +745,8 @@ func (a *app) appPage(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 		Doubt   string
 		Basis   string
 		Machine string
-	}{Card: *card, Groups: a.groupFindings(s, fs), Report: buildReport(fs, card.Name), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
+		WebSSH  string
+	}{WebSSH: a.d.Settings.Get().WebSSHURL, Card: *card, Groups: a.groupFindings(s, fs), Report: buildReport(fs, card.Name), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
 	if app, ok := a.d.Catalog.Current().App(ident.AppID); ok && app.Origin != catalog.OriginBuiltin && app.Origin != catalog.OriginFeed {
 		d.Basis = "recognised automatically"
 	}
@@ -777,4 +797,45 @@ func snoozeNote(fs []store.Finding) string {
 		note += " until " + until.Local().Format("2 Jan 2006")
 	}
 	return note
+}
+
+// platformOf says what deployed a container (see appCard.Platform).
+func platformOf(c *inventory.Container) string {
+	switch cp := remedy.ComposeOf(c); {
+	case remedy.Unraid(c):
+		return "unraid"
+	case cp != nil && cp.Portainer != "":
+		return "portainer"
+	case cp != nil:
+		return "compose"
+	}
+	return "run"
+}
+
+// imageRefPattern accepts the image references a command may name.
+var imageRefPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._/:@-]{0,255}$`)
+
+// fitCommand makes the card's command fit what deployed the container: a
+// Portainer stack and Unraid are updated in their own interface, with no
+// command on the host; a container started with docker run pulls the new
+// image, and is then recreated with the options it was started with.
+func (c *appCard) fitCommand() {
+	switch c.Platform {
+	case "portainer", "unraid":
+		c.Command = ""
+	case "run":
+		if c.Mitigation != nil {
+			// No image to pull: none fixes the flaws, or it is built here.
+			return
+		}
+		ref := strings.TrimPrefix(c.Line, "image: ")
+		if ref == "" && strings.HasPrefix(c.Action, "Pull the ") {
+			// A floating tag: the same reference brings the new image.
+			ref = c.Image
+		}
+		c.Command = ""
+		if ref != "" && imageRefPattern.MatchString(ref) {
+			c.Command = "docker pull " + ref
+		}
+	}
 }

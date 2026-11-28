@@ -25,6 +25,7 @@ const (
 	labelService     = "com.docker.compose.service"
 	labelWorkingDir  = "com.docker.compose.project.working_dir"
 	labelConfigFiles = "com.docker.compose.project.config_files"
+	labelEnvFiles    = "com.docker.compose.project.environment_file"
 )
 
 // Suggestion is how to update one container.
@@ -44,22 +45,114 @@ type Suggestion struct {
 type Compose struct {
 	Project, Service, Dir string
 	Files                 []string
+	// EnvFiles are the environment files the project was started with,
+	// as Compose records them.
+	EnvFiles []string
+	// Portainer is the ID of the Portainer stack the service belongs to,
+	// "" when Portainer did not deploy it: Portainer keeps a stack's files
+	// in its own volume, so the stack is updated in Portainer, not with a
+	// command on the host.
+	Portainer string
 }
 
-// Pull is the command that fetches the new image and recreates the service.
-// The service name follows the Compose grammar (checked in compose) and is
-// quoted besides: the labels come from the image, and users paste this.
+// Pull is the command that fetches the new image and recreates the
+// service, runnable from any directory of the host: it changes to the
+// project directory and names the project and its files where they differ
+// from what Compose would assume there. The names follow the Compose
+// grammar and the paths are plain (checked in compose); everything is
+// quoted besides, since the labels come from the image and users paste
+// this.
 func (c *Compose) Pull() string {
-	q := "'" + c.Service + "'"
-	return "docker compose pull " + q + " && docker compose up -d " + q
+	return c.inDir(c.command("pull") + " && " + c.command("up -d"))
 }
 
 // Rebuild is the command that builds the service's image again, with the
 // newest base image, and recreates the service: the fix for an image built
 // from a local Dockerfile.
 func (c *Compose) Rebuild() string {
-	q := "'" + c.Service + "'"
-	return "docker compose build --pull --no-cache " + q + " && docker compose up -d " + q
+	return c.inDir(c.command("build --pull --no-cache") + " && " + c.command("up -d"))
+}
+
+func (c *Compose) inDir(cmd string) string {
+	if c.Dir == "" {
+		return cmd
+	}
+	return "cd " + shellQuote(c.Dir) + " && " + cmd
+}
+
+// command is one docker compose command for the service.
+func (c *Compose) command(verb string) string {
+	var b strings.Builder
+	b.WriteString("docker compose")
+	if c.Dir != "" {
+		// From the project directory Compose takes its name for the
+		// project and looks for one of the default files.
+		if c.Project != defaultProject(c.Dir) {
+			b.WriteString(" -p " + shellQuote(c.Project))
+		}
+		files := c.relative(c.Files)
+		if len(files) > 1 || len(files) == 1 && !defaultComposeFiles[files[0]] {
+			for _, f := range files {
+				b.WriteString(" -f " + shellQuote(f))
+			}
+		}
+		// Variables from another file than .env would be missing, and
+		// the service recreated with other values.
+		if env := c.relative(c.EnvFiles); len(env) > 1 || len(env) == 1 && env[0] != ".env" {
+			for _, f := range env {
+				b.WriteString(" --env-file " + shellQuote(f))
+			}
+		}
+	}
+	b.WriteString(" " + verb + " " + shellQuote(c.Service))
+	return b.String()
+}
+
+// relative are paths relative to the project directory when they lie in
+// it.
+func (c *Compose) relative(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, f := range paths {
+		rel := f
+		for _, sep := range []string{"/", "\\"} {
+			if r, ok := strings.CutPrefix(f, strings.TrimRight(c.Dir, sep)+sep); ok && r != "" {
+				rel = r
+				break
+			}
+		}
+		out = append(out, rel)
+	}
+	return out
+}
+
+var defaultComposeFiles = map[string]bool{"compose.yaml": true, "compose.yml": true, "docker-compose.yaml": true, "docker-compose.yml": true}
+
+// defaultProject is the project name Compose derives from a directory: its
+// base name in lower case, without characters a project name cannot hold.
+func defaultProject(dir string) string {
+	base := dir
+	if i := strings.LastIndexAny(strings.TrimRight(dir, "/\\"), "/\\"); i >= 0 {
+		base = strings.TrimRight(dir, "/\\")[i+1:]
+	}
+	var b strings.Builder
+	for _, r := range strings.ToLower(base) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// shellQuote quotes s for a POSIX shell; PowerShell reads the same quotes.
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// portainerDir is where Portainer keeps the files of a stack.
+var portainerDir = regexp.MustCompile(`^/data/compose/(\d{1,9})(?:/.*)?$`)
+
+// Unraid reports whether Unraid's Docker manager created the container:
+// it is updated on Unraid's Docker page.
+func Unraid(c *inventory.Container) bool {
+	return c != nil && c.Labels["net.unraid.docker.managed"] == "dockerman"
 }
 
 // Suggest returns the update of container c of app to target (a canonical
@@ -254,9 +347,17 @@ func compose(labels map[string]string) *Compose {
 	if plainPath(labels[labelWorkingDir]) {
 		c.Dir = labels[labelWorkingDir]
 	}
+	if m := portainerDir.FindStringSubmatch(c.Dir); m != nil {
+		c.Portainer = m[1]
+	}
 	for _, f := range strings.Split(labels[labelConfigFiles], ",") {
 		if f = strings.TrimSpace(f); plainPath(f) {
 			c.Files = append(c.Files, f)
+		}
+	}
+	for _, f := range strings.Split(labels[labelEnvFiles], ",") {
+		if f = strings.TrimSpace(f); plainPath(f) {
+			c.EnvFiles = append(c.EnvFiles, f)
 		}
 	}
 	return c

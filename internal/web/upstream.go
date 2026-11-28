@@ -65,6 +65,7 @@ func workloadOf(s *snapshot, key string) *inventory.Workload {
 // only for an image known to fix at least one of them.
 func (a *app) imagePlan(c *appCard, wl inventory.Workload, fs []store.Finding, st *upstream.Status, image int) {
 	c.Compose = remedy.ComposeOf(wl.Container)
+	defer c.fitCommand()
 	inImage := plural(image, "flaw") + " in packages inside the image"
 	switch {
 	case st != nil && st.Actionable():
@@ -217,7 +218,7 @@ func mitigationOf(c *appCard, wl inventory.Workload, fs []store.Finding, st *ups
 	}
 	if st != nil && st.Reason == upstream.ReasonLocal {
 		m.Local, m.Snooze = true, false
-		if c := remedy.ComposeOf(wl.Container); c != nil {
+		if c := remedy.ComposeOf(wl.Container); c != nil && c.Portainer == "" {
 			m.Rebuild = c.Rebuild()
 		}
 		m.Recheck = "Varde reads the packages of the rebuilt image when the container runs it, and clears what the rebuild fixed."

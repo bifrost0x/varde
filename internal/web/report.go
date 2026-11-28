@@ -372,3 +372,23 @@ func safeFilename(s string) string {
 	}
 	return b.String()
 }
+
+// runOn is where a fix command runs: the machine, an address to reach it,
+// and the user's WebSSH, which the page opens with the command (the
+// element ID) copied. Varde sends WebSSH nothing and runs nothing itself.
+type runOn struct {
+	ID, Host, Address, WebSSH string
+}
+
+// machineOf names the machine a host record belongs to and an address of
+// it, for "run it on".
+func machineOf(s *snapshot, hostID string) (name, address string) {
+	m := s.hostOf[hostID]
+	if m == nil {
+		return "", ""
+	}
+	if len(m.Addresses) > 0 {
+		address = m.Addresses[0]
+	}
+	return m.Name, address
+}
