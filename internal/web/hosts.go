@@ -14,7 +14,6 @@ import (
 	"github.com/bifrost0x/varde/internal/fleet/wire"
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
-	"github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
 )
 
@@ -127,7 +126,7 @@ func (a *app) systemRows(ctx context.Context, s *snapshot) ([]systemRow, error) 
 		}
 	}
 	for _, f := range s.findings {
-		if !status.Active(f.State) {
+		if !actionable(f.State) {
 			continue
 		}
 		m := s.hostOf[s.byID[f.WorkloadID].HostID]

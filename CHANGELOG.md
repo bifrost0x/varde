@@ -29,6 +29,11 @@ All notable changes to this project are documented here. The format follows
   compared. Cards and the overview now say how many packages were checked and why some were not.
 - An image built on the host got "wait for the next release". The card and the pages now say to
   rebuild it with the newest base image, with the Compose command when it is a service.
+- Snoozing had no effect on the pages: snoozed flaws kept their app among the updates, with their
+  priority and severity. They now leave the front page's updates, the list of updates and the
+  counts; an app whose flaws are all snoozed waits under **Snoozed** with what brings it back, its
+  page lists the flaws marked "snoozed", and **Wake them now** takes the snooze back. The API and
+  the notifications are unchanged.
 - A card whose flaws are serious but unreachable no longer calls them "minor flaws"; cards show
   their flaws by severity, and containers of one image that need the same update share one card.
 

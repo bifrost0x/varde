@@ -13,7 +13,6 @@ import (
 	"github.com/bifrost0x/varde/internal/identify"
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
-	"github.com/bifrost0x/varde/internal/status"
 	"github.com/bifrost0x/varde/internal/store"
 )
 
@@ -110,7 +109,7 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 		}
 		v.Findings = append(v.Findings, f)
 		v.AppNames[f.AppID] = a.appName(f.AppID)
-		if status.Active(f.State) && f.MatchState == string(match.Affected) {
+		if actionable(f.State) && f.MatchState == string(match.Affected) {
 			open[f.WorkloadID]++
 			if w := s.byID[f.WorkloadID]; identify.IsSystem(w) {
 				v.Updates[w.Name]++

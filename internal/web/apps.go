@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/catalog"
@@ -39,13 +40,14 @@ const (
 	appSoon     = "soon"     // P2: update soon
 	appLater    = "later"    // P3: with the next regular update
 	appCheck    = "check"    // only findings Varde cannot confirm
+	appSnoozed  = "snoozed"  // every open flaw snoozed by the user
 	appOK       = "ok"       // compared with complete data, nothing found
 	appKnown    = "known"    // compared, but the advisory data is incomplete
 	appUnknown  = "unknown"  // nothing could be compared
 )
 
 // appStateRank orders the states for the list.
-var appStateRank = map[string]int{appNow: 0, appMitigate: 1, appSoon: 2, appLater: 3, appCheck: 4, appUnknown: 5, appKnown: 6, appOK: 7}
+var appStateRank = map[string]int{appNow: 0, appMitigate: 1, appSoon: 2, appLater: 3, appCheck: 4, appSnoozed: 5, appUnknown: 6, appKnown: 7, appOK: 8}
 
 // appCard is one app on the front page and the head of its own page.
 type appCard struct {
@@ -103,7 +105,7 @@ type appCard struct {
 // appLabels are the states in the words of the pages.
 var appLabels = map[string]string{
 	appNow: "Update now", appMitigate: "Mitigate now", appSoon: "Update soon", appLater: "With the next update", appCheck: "Check yourself",
-	appOK: "Nothing found", appKnown: "Nothing known", appUnknown: "Not checked",
+	appOK: "Nothing found", appKnown: "Nothing known", appUnknown: "Not checked", appSnoozed: "Snoozed",
 }
 
 // stateOfPriority maps a policy priority to the app state it asks for.
@@ -123,9 +125,13 @@ func stateOfPriority(p string) string {
 // update (todoGroups), the others from what they were checked against.
 func (a *app) appCards(s *snapshot) []appCard {
 	var open []store.Finding
+	snoozed := map[string][]store.Finding{}
 	for _, f := range s.findings {
-		if status.Active(f.State) {
+		switch {
+		case actionable(f.State):
 			open = append(open, f)
+		case f.State == store.StateSnoozed:
+			snoozed[f.WorkloadID] = append(snoozed[f.WorkloadID], f)
 		}
 	}
 	out := a.updateCards(s, a.todoGroups(s, open), open)
@@ -144,6 +150,13 @@ func (a *app) appCards(s *snapshot) []appCard {
 		id := s.ids[wl.ID]
 		c := appCard{Key: wl.ID, Href: "/apps/" + wl.ID}
 		a.describe(&c, s, wl, hostNames)
+		if fs := snoozed[wl.ID]; len(fs) > 0 {
+			// Put aside by the user: not an update to do until the snooze
+			// ends.
+			c.State, c.Label, c.Note = appSnoozed, appLabels[appSnoozed], snoozeNote(fs)
+			out = append(out, c)
+			continue
+		}
 		row := workloadRow{Derived: id.Derived}
 		if kind, skip := coverage.NotAnApp(wl, id, s.marked); skip {
 			row.NotApp = kind
@@ -563,6 +576,7 @@ func onlyImage(fs []store.Finding) bool {
 
 // appCounts are the numbers the front page leads with.
 type appCounts struct {
+	Snoozed                                                 int
 	Now, Mitigate, Soon, Later, Check, Fine, Unknown, Total int
 }
 
@@ -583,6 +597,8 @@ func countApps(cards []appCard) appCounts {
 			n.Check++
 		case appUnknown:
 			n.Unknown++
+		case appSnoozed:
+			n.Snoozed++
 		default:
 			n.Fine++
 		}
@@ -663,6 +679,7 @@ func appSections(cards []appCard) []appSection {
 	add(appSoon, "Update soon", "Serious, but not directly reachable. They are in the daily digest.", false)
 	add(appLater, "With the next update", "Nothing pressing. They are in the weekly digest.", false)
 	add(appCheck, "Check yourself", "Varde found advisories for these apps but cannot tell whether they apply to the version running.", false)
+	add(appSnoozed, "Snoozed", "You put their flaws aside. They come back by themselves when the snooze ends, and Varde does not notify about them until then.", true)
 	add(appUnknown, "Not checked", "Varde cannot say anything about these. Each says why.", true)
 	add(appOK, "Nothing to do", "", true, appKnown)
 	return out
@@ -737,4 +754,27 @@ func cardSeverities(fs []store.Finding) ([]sevCount, int) {
 		out = out[:3]
 	}
 	return out, r.Exploited
+}
+
+// snoozeNote says what was snoozed and what brings it back: the end of the
+// latest snooze, or a fixed image for flaws snoozed until one appears.
+func snoozeNote(fs []store.Finding) string {
+	var until time.Time
+	upstream := false
+	for _, f := range fs {
+		upstream = upstream || f.SnoozeUpstream
+		if f.SnoozedUntil != nil && f.SnoozedUntil.After(until) {
+			until = *f.SnoozedUntil
+		}
+	}
+	note := plural(len(fs), "flaw") + " snoozed"
+	switch {
+	case upstream && !until.IsZero():
+		note += " until a fixed image appears, at the latest " + until.Local().Format("2 Jan 2006")
+	case upstream:
+		note += " until a fixed image appears"
+	case !until.IsZero():
+		note += " until " + until.Local().Format("2 Jan 2006")
+	}
+	return note
 }

@@ -133,6 +133,8 @@ type reportPackage struct {
 	// counts the flaws without one.
 	FixedIn string
 	Unfixed int
+	// Snoozed counts the package's flaws the user snoozed.
+	Snoozed int
 	Worst   string
 	KEV     bool
 	Flaws   []reportFlaw
@@ -144,9 +146,9 @@ type report struct {
 	// Counts are the confirmed flaws by severity, in severities' order.
 	Counts                         []sevCount
 	Total, Fixable, Exploited, Max int
-	// Unconfirmed counts the flaws Varde cannot confirm; they are listed
-	// but not counted by severity.
-	Unconfirmed int
+	// Unconfirmed counts the flaws Varde cannot confirm, Snoozed those the
+	// user put aside; both are listed but not counted by severity.
+	Unconfirmed, Snoozed int
 }
 
 type sevCount struct {
@@ -186,6 +188,11 @@ func buildReport(fs []store.Finding, appName string) report {
 			URL: m.URL, Aliases: m.Aliases,
 		}
 		p.Flaws = append(p.Flaws, fl)
+		if f.State == store.StateSnoozed {
+			r.Snoozed++
+			p.Snoozed++
+			continue
+		}
 		if f.MatchState != string(match.Affected) {
 			r.Unconfirmed++
 			continue
@@ -212,6 +219,9 @@ func buildReport(fs []store.Finding, appName string) report {
 		p := byKey[k]
 		sort.SliceStable(p.Flaws, func(i, j int) bool {
 			a, b := p.Flaws[i], p.Flaws[j]
+			if (a.Status == store.StateSnoozed) != (b.Status == store.StateSnoozed) {
+				return b.Status == store.StateSnoozed
+			}
 			if (a.State == string(match.Affected)) != (b.State == string(match.Affected)) {
 				return a.State == string(match.Affected)
 			}

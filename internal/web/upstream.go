@@ -302,3 +302,33 @@ func (a *app) snoozeUpstream(w http.ResponseWriter, r *http.Request, cur *auth.C
 	a.d.Analyze(ctx)
 	http.Redirect(w, r, "/apps/"+url.PathEscape(id)+"?ok=snoozed-upstream", http.StatusSeeOther) //nolint:gosec // local path only
 }
+
+// wakeApp reopens every snoozed finding of an app: the user takes back a
+// snooze, which puts the app among the updates again.
+func (a *app) wakeApp(w http.ResponseWriter, r *http.Request, cur *auth.Current) {
+	ctx := r.Context()
+	id := r.PathValue("id")
+	s, err := a.load(ctx, false)
+	if err != nil {
+		a.fail(w, r, cur, err)
+		return
+	}
+	if wl, ok := s.byID[id]; !ok || identify.IsSystem(wl) {
+		a.renderError(w, r, cur, http.StatusNotFound, "App not found", "It may have been removed.")
+		return
+	}
+	n := 0
+	for _, f := range s.findings {
+		if f.WorkloadID != id || f.State != store.StateSnoozed {
+			continue
+		}
+		if err := a.d.Store.Reopen(ctx, f.ID, a.d.Now()); err != nil {
+			a.fail(w, r, cur, err)
+			return
+		}
+		n++
+	}
+	a.audit(r, cur, "finding.wake", id, strconv.Itoa(n)+" findings")
+	a.d.Analyze(ctx)
+	http.Redirect(w, r, "/apps/"+url.PathEscape(id)+"?ok=woken", http.StatusSeeOther) //nolint:gosec // local path only
+}

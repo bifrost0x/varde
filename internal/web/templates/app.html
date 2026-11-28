@@ -53,6 +53,10 @@
   </ol>
   <p class="small muted">{{.Recheck}}</p>
   {{end}}{{end}}
+  {{else if eq $c.State "snoozed"}}
+  <p class="lead"><strong>Nothing for now.</strong> <span class="muted">{{$c.Note}}.</span></p>
+  <p class="small">Varde does not notify about them and lists them under Snoozed until the snooze ends.</p>
+  <form class="form form--inline" method="post" action="/apps/{{$c.Key}}/wake">{{template "csrf" $.CSRF}}<button class="btn" type="submit">Wake them now</button></form>
   {{else}}
   <p class="lead"><strong>Nothing.</strong></p>
   <p class="small">{{if eq $c.State "ok"}}Varde compared this version with the advisories of the project and found none that applies.{{else}}{{$c.Note}}.{{end}}</p>
@@ -84,6 +88,7 @@
   <svg class="sevbar" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="Flaws by severity">{{range .Counts}}<rect class="sevbar__{{.Severity}}" x="{{.Offset}}" width="{{.Width}}" height="6"></rect>{{end}}</svg>
   <ul class="sevcounts">{{range .Counts}}<li><span class="sev sev--{{.Severity}}">{{.Severity}}</span> <strong>{{.N}}</strong></li>{{end}}</ul>
   {{end}}
+  {{if .Snoozed}}<p class="small muted">{{plural .Snoozed "snoozed flaw"}} {{if eq .Snoozed 1}}is{{else}}are{{end}} listed with {{if eq .Snoozed 1}}its package{{else}}their packages{{end}}, marked "snoozed", and not counted above.</p>{{end}}
   {{if .Unconfirmed}}<p class="small muted">{{plural .Unconfirmed "more advisory"}} Varde cannot confirm for the version running {{if eq .Unconfirmed 1}}is{{else}}are{{end}} listed with {{if eq .Unconfirmed 1}}its package{{else}}their packages{{end}}, marked "check yourself".</p>{{end}}
   <div class="report__table" role="table" aria-label="Packages with flaws">
     <div class="report__row report__row--head" role="row"><span role="columnheader">Package</span><span role="columnheader">Installed</span><span role="columnheader">Fixed in</span><span role="columnheader">Flaws</span></div>
@@ -93,10 +98,10 @@
         <span class="report__name" role="cell"><strong>{{.Name}}</strong><span class="cell-sub">{{.Kind}}</span></span>
         <span class="mono report__ver" role="cell">{{if .Installed}}{{.Installed}}{{else}}<span class="muted">unknown</span>{{end}}</span>
         <span class="mono report__ver" role="cell">{{if .FixedIn}}{{.FixedIn}}{{else}}<span class="muted">no fix yet</span>{{end}}{{if and .FixedIn .Unfixed}}<span class="cell-sub">{{.Unfixed}} without a fix</span>{{end}}</span>
-        <span class="report__count" role="cell">{{if .KEV}}<span class="badge badge--kev">exploited</span> {{end}}<span class="sev sev--{{.Worst}}">{{.Worst}}</span> {{len .Flaws}}</span>
+        <span class="report__count" role="cell">{{if eq .Snoozed (len .Flaws)}}<span class="badge badge--muted">snoozed</span>{{else}}{{if .KEV}}<span class="badge badge--kev">exploited</span> {{end}}<span class="sev sev--{{.Worst}}">{{.Worst}}</span>{{end}} {{len .Flaws}}</span>
       </summary>
       <ul class="flaws">{{range .Flaws}}
-        <li class="flaw"><span class="sev sev--{{.Severity}}">{{if eq .State "unverified"}}check{{else}}{{.Severity}}{{end}}</span><a href="/findings/{{.FindingID}}"><span class="mono">{{.ID}}</span>{{if .Summary}} · {{truncate .Summary 140}}{{end}}</a><span class="cell-sub">{{if .CVSS}}CVSS {{printf "%.1f" .CVSS}} · {{end}}{{if .KEV}}known to be exploited · {{end}}{{if .Fixed}}fixed in <span class="mono">{{.Fixed}}</span>{{else if eq .State "unverified"}}Varde cannot confirm it{{else}}no fix yet{{end}}{{with dataset .Record}} · {{.}}{{end}} · since {{date .FirstSeen}}</span></li>
+        <li class="flaw"><span class="sev sev--{{.Severity}}">{{if eq .State "unverified"}}check{{else}}{{.Severity}}{{end}}</span><a href="/findings/{{.FindingID}}"><span class="mono">{{.ID}}</span>{{if .Summary}} · {{truncate .Summary 140}}{{end}}</a><span class="cell-sub">{{if eq .Status "snoozed"}}snoozed · {{end}}{{if .CVSS}}CVSS {{printf "%.1f" .CVSS}} · {{end}}{{if .KEV}}known to be exploited · {{end}}{{if .Fixed}}fixed in <span class="mono">{{.Fixed}}</span>{{else if eq .State "unverified"}}Varde cannot confirm it{{else}}no fix yet{{end}}{{with dataset .Record}} · {{.}}{{end}} · since {{date .FirstSeen}}</span></li>
       {{end}}</ul>
     </details>
     {{end}}
