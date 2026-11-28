@@ -70,7 +70,7 @@
     <thead><tr><th scope="col">Container</th><th scope="col">Image</th><th scope="col">App</th><th scope="col">Version</th></tr></thead>
     <tbody>{{range $d.Containers}}
     <tr><td data-label="Container">{{.Name}}{{if .Stack}} <span class="badge badge--muted">{{.Stack}}</span>{{end}}</td>
-      <td data-label="Image"><span class="mono">{{.Image}}</span>{{if .Pulled}} <span class="badge badge--unverified">newer image pulled</span>{{end}}{{if .Open}} <a class="badge badge--p3" href="/findings?workload={{.ID}}">{{.Open}} open</a>{{end}}{{if and .Unfixed $d.Checked}} <span class="badge badge--muted" title="Issues in the image's packages that no newer image fixes yet">{{.Unfixed}} without fix</span>{{end}}</td>
+      <td data-label="Image"><span class="mono">{{.Image}}</span>{{if .Pulled}} <span class="badge badge--unverified">newer image pulled</span>{{end}}{{if .Open}} <a class="badge badge--p3" href="/findings?workload={{.ID}}">{{.Open}} open</a>{{end}}{{if .Unfixed}} <span class="badge badge--muted" title="Issues in the image's packages that no newer image fixes yet">{{.Unfixed}} without fix</span>{{end}}</td>
       <td data-label="App">{{if .AppName}}{{.AppName}}{{else if .NotApp}}<span class="muted">helper</span>{{else}}<span class="muted">not in catalog</span>{{end}}</td>
       <td data-label="Version">{{if .Version}}<span class="mono">{{.Version}}</span><span class="cell-sub">{{.VersionSource}}</span>{{else if .AppID}}<span class="badge badge--unverified">unknown</span>{{else}}<span class="muted">–</span>{{end}}</td></tr>
     {{end}}</tbody>

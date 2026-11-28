@@ -91,6 +91,10 @@ type Config struct {
 	// products run to a third party; off by default.
 	DirectOSV bool
 	DirectNVD bool
+	// VulnDB checks the packages of hosts and images against complete
+	// public vulnerability datasets, downloaded whole (ADR 0047); on by
+	// default.
+	VulnDB bool
 	// PackageURLs are the mirrors of the data package, in order; empty
 	// switches the package off.
 	PackageURLs []string
@@ -198,6 +202,7 @@ func Defaults() Config {
 		CatalogDir:      "/catalog.d",
 		AdvisoryRefresh: 6 * time.Hour,
 		UpstreamTTL:     6 * time.Hour,
+		VulnDB:          true,
 		CookieSecure:    "auto",
 		Notify: NotifyConfig{
 			SMTPPort:      587,
@@ -304,6 +309,7 @@ func Load(lookup LookupFunc) (Config, error) {
 	l.secret("GITHUB_TOKEN", &cfg.GitHubToken)
 	l.boolean("DIRECT_OSV", &cfg.DirectOSV)
 	l.boolean("DIRECT_NVD", &cfg.DirectNVD)
+	l.boolean("VULNDB", &cfg.VulnDB)
 	l.secret("NVD_API_KEY", &cfg.NVDAPIKey)
 	l.secret("SNMP_COMMUNITY", &cfg.SNMPCommunity)
 	l.str("SNMP_USER", &cfg.SNMPUser)

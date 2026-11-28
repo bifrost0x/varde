@@ -179,6 +179,12 @@ var funcs = template.FuncMap{
 		return tm.Local().Format("15:04")
 	},
 	"plural": plural,
+	// flawID is the CVE or advisory a person looks a flaw up by.
+	"flawID": flawID,
+	// dataset names the dataset a record comes from.
+	"dataset": datasetOf,
+	// sev is the severity a flaw is counted under.
+	"sev": severityOf,
 	// pct turns a probability into percent.
 	"pct":        func(p float64) float64 { return p * 100 },
 	"add":        func(a, b int) int { return a + b },

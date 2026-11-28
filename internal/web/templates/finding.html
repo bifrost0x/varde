@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1>{{if $m.Summary}}{{$m.Summary}}{{else}}{{.Data.AppName}}: a flaw without a published summary{{end}}</h1>
-    <p>A flaw in {{.Data.AppName}}{{if .Data.Image}}, a package inside the image of {{.Data.WorkloadName}}{{end}} · <span class="mono">{{$f.AdvisoryID}}</span></p>
+    <p>A flaw in {{.Data.AppName}}{{if .Data.Image}}, a package inside the image of {{.Data.WorkloadName}}{{end}} · <span class="mono">{{flawID $f.AdvisoryID $m.Aliases}}</span>{{if or $m.SeverityLabel $m.CVSS}} · <span class="sev sev--{{sev $m.SeverityLabel $m.CVSS}}">{{sev $m.SeverityLabel $m.CVSS}}</span>{{end}}</p>
   </div>
   <div class="actions">{{template "prio" $f.Priority}}{{if $m.KEV}}<span class="badge badge--kev">known exploited</span>{{end}}{{template "pathclass" $f.PathClass}}{{template "exposure" $f.Exposure}}{{if ne $f.State "open"}}<span class="badge badge--muted">{{$f.State}}</span>{{end}}</div>
 </div>
@@ -30,13 +30,18 @@
       {{else}}<p>The newest release is <span class="mono">{{.Tag}}</span>. Varde cannot compare it with the version {{$.Data.WorkloadName}} runs, so it does not say what that release fixes.</p>
       {{end}}<p class="small muted">From the packages of the release's image for this host's platform, read {{date .Read}}.</p>
       {{end}}
+      {{if $i.Local}}
+      <p><strong>What to do:</strong> the image was built on this host from a Dockerfile, not pulled from a registry, so no maker publishes a fixed one. Build it again with the newest base image and current packages{{with $i.Compose}} (in <span class="mono">{{if .Dir}}{{.Dir}}{{else}}the directory of its Compose file{{end}}</span>):{{else}}: <code>docker build --pull --no-cache</code> from its Dockerfile, then recreate the container.{{end}}</p>
+      {{with $i.Compose}}<div class="secret"><pre id="rebuild-cmd" class="mono install">{{.Rebuild}}</pre><button class="btn btn--ghost" type="button" data-copy="#rebuild-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>{{end}}
+      <p class="small">Varde reads the packages of the rebuilt image and closes this finding by itself once the package is fixed. If it stays open, the Dockerfile pins an old base image or package version.</p>
+      {{else}}
       <p><strong>What to do:</strong> {{if $i.Pinned}}the container is pinned to an image digest, so a pull changes nothing: replace the digest in its definition with that of a newer image (or remove it), then recreate the container{{else if $i.Floating}}pull the image again and recreate the container{{else}}update the container to a newer image{{end}}. Varde then reads the packages of the new image and closes this finding by itself when the package is fixed. If it stays open, the image's maker has not rebuilt it yet; you can wait, or limit who can reach the container.</p>
       {{with $i.Compose}}
       <div class="update" id="update">
         <p class="small">It is the Compose service <strong>{{.Service}}</strong> of the project <strong>{{.Project}}</strong>{{if .Files}}, defined in <span class="mono">{{join .Files ", "}}</span>{{end}}.{{if $i.Pinned}} Change the digest in its <code>image:</code> line.{{else if not $i.Floating}} Change the tag of its <code>image:</code> line to a newer release.{{end}} Then{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}:</p>
         <div class="secret"><pre id="compose-cmd" class="mono install">{{.Pull}}</pre><button class="btn btn--ghost" type="button" data-copy="#compose-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
       </div>
-      {{end}}
+      {{end}}{{end}}
     {{else if $f.FixedIn}}
       {{with $m.Step}}
       <p>Update <strong>{{$.Data.WorkloadName}}</strong> to <span class="mono">{{.Version}}</span>{{if not .Advisory}} or later{{end}}.{{if .NewLine}} It is a new major version; read the upgrade notes first.{{end}}</p>
@@ -109,9 +114,9 @@
       <dt>Affected versions</dt><dd class="mono">{{if $m.Evidence.Range}}{{$m.Evidence.Range}}{{else}}not machine-readable{{end}}</dd>
       {{if $m.Evidence.Package}}<dt>Package</dt><dd class="mono">{{$m.Evidence.Package}}</dd>{{end}}
       {{with $m.Evidence.CompletedBy}}<dt>Fixed version</dt><dd>from <span class="mono">{{.}}</span> <span class="muted">(the project's advisory names where the flaw starts, not where it ends)</span></dd>{{end}}
-      <dt>Source</dt><dd>{{join $m.Sources ", "}} <span class="muted">(record {{$m.Evidence.RecordID}}{{with $m.Evidence.Origin}}, read from {{if eq . "release"}}the project's release notes{{else}}{{.}}{{end}}{{end}})</span></dd>
+      <dt>Source</dt><dd>{{with dataset $m.Evidence.RecordID}}{{.}}{{else}}{{join $m.Sources ", "}}{{end}} <span class="muted">(record {{$m.Evidence.RecordID}}{{with $m.Evidence.Origin}}, read from {{if eq . "release"}}the project's release notes{{else}}{{.}}{{end}}{{end}}{{if not $m.Evidence.RecordDate.IsZero}}, data of {{date $m.Evidence.RecordDate}}{{end}})</span></dd>
       {{if $m.Aliases}}<dt>Also known as</dt><dd class="mono">{{join $m.Aliases ", "}}</dd>{{end}}
-      <dt>Severity</dt><dd>{{if $m.CVSS}}CVSS {{printf "%.1f" $m.CVSS}}{{end}}{{if $m.SeverityLabel}} {{$m.SeverityLabel}}{{end}}{{if not (or $m.CVSS $m.SeverityLabel)}}<span class="muted">not rated</span>{{end}}</dd>
+      <dt>Severity</dt><dd>{{if $m.CVSS}}CVSS {{printf "%.1f" $m.CVSS}}{{end}}{{if $m.SeverityLabel}} {{$m.SeverityLabel}}{{end}}{{if not (or $m.CVSS $m.SeverityLabel)}}<span class="muted">not rated</span>{{end}}{{with $m.Evidence.RatedBy}}<span class="cell-sub">The record rates nothing itself; the score is the {{.}}.</span>{{end}}</dd>
       <dt>Being exploited</dt><dd>{{if $m.KEV}}yes, attackers use it (CISA KEV list){{else}}not known to be (not on the CISA KEV list){{end}}{{if $m.EPSS}}<span class="cell-sub">Chance of exploitation in the next 30 days: {{printf "%.1f" (pct $m.EPSS)}} % (EPSS)</span>{{end}}</dd>
       <dt>Reachable</dt><dd>{{$f.Exposure}}{{range $f.ExposureEvidence}}<span class="cell-sub">{{.}}</span>{{end}}</dd>
       <dt>Attack path</dt><dd>{{if $f.PathReason}}{{$f.PathReason}}{{else}}<span class="muted">not placed yet</span>{{end}}{{if $m.Vector}}<span class="cell-sub mono">{{$m.Vector}}</span>{{end}}</dd>

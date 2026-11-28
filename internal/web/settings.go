@@ -3,6 +3,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"sort"
@@ -12,10 +13,12 @@ import (
 
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/datapkg"
+	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/policy"
 	"github.com/bifrost0x/varde/internal/settings"
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/uplink"
+	"github.com/bifrost0x/varde/internal/vulndb"
 )
 
 type settingsData struct {
@@ -47,6 +50,34 @@ type settingsData struct {
 	// lets Varde ask the public sources about apps it does not cover.
 	Package datapkg.Status
 	Direct  bool
+	// VulnDB is the switch of the package vulnerability datasets, Datasets
+	// their state.
+	VulnDB   bool
+	Datasets []datasetRow
+}
+
+// datasetRow is the state of one downloaded vulnerability dataset.
+type datasetRow struct {
+	Title          string
+	Success, Retry time.Time
+	Error          string
+}
+
+// datasets lists the state of the vulnerability datasets in use.
+func (a *app) datasets(ctx context.Context) ([]datasetRow, error) {
+	states, err := a.d.Store.SourceStates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []datasetRow
+	for _, st := range states {
+		if st.Source != match.SourceVulnDB || st.Key == "" {
+			continue
+		}
+		out = append(out, datasetRow{Title: vulndb.Title(st.Key), Success: st.LastSuccess, Retry: st.NextRun, Error: st.LastError})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
+	return out, nil
 }
 
 func (a *app) settingsView(r *http.Request, cur *auth.Current, newToken, errMsg string) (view, error) {
@@ -64,12 +95,15 @@ func (a *app) settingsView(r *http.Request, cur *auth.Current, newToken, errMsg 
 		ScanPeriods: scanPeriods, Locked: map[string]bool{}, Policy: eff.Policy, DigestHour: eff.DigestHour,
 		DigestWeekday: strings.ToLower(eff.DigestWeekday.String()), OSV: eff.DirectOSV, NVD: eff.DirectNVD,
 		Channels: a.d.Channels, Me: cur.User.ID, NewToken: newToken, Error: errMsg,
-		Uplink: a.uplinkStatus(), Package: a.packageStatus(ctx), Direct: eff.DirectQueries,
+		Uplink: a.uplinkStatus(), Package: a.packageStatus(ctx), Direct: eff.DirectQueries, VulnDB: eff.VulnDB,
 	}
 	for _, k := range settings.Keys {
 		d.Locked[k] = a.d.Settings.Locked(k)
 	}
 	var err error
+	if d.Datasets, err = a.datasets(ctx); err != nil {
+		return view{}, err
+	}
 	if d.Tokens, err = a.d.Store.APITokens(ctx); err != nil {
 		return view{}, err
 	}
@@ -139,6 +173,13 @@ func (a *app) saveSettings(w http.ResponseWriter, r *http.Request, cur *auth.Cur
 		a.audit(r, cur, "network.scope", "", nets)
 	}
 	a.d.Analyze(r.Context())
+	// A source switched on fetches its data now, not at the next refresh.
+	for _, k := range []string{settings.KeyVulnDB, settings.KeyDirectOSV, settings.KeyDirectNVD} {
+		if _, ok := values[k]; ok && a.d.Scan != nil {
+			a.d.Scan()
+			break
+		}
+	}
 	if r.PostFormValue("return") == "network" {
 		http.Redirect(w, r, "/connections?ok=saved#scan", http.StatusSeeOther)
 		return

@@ -67,7 +67,8 @@ func TestCompare(t *testing.T) {
 			t.Errorf("%s %s vs %s: %d %v, want %d %v", c.eco, c.a, c.b, got, ok, c.want, c.ok)
 		}
 	}
-	if !PerCVE("DEBIAN-CVE-2026-1642") || PerCVE("DSA-6131-1") || PerCVE("USN-8955-1") || !PerCVE("ALPINE-CVE-2026-9256") {
+	if !PerCVE("DEBIAN-CVE-2026-1642") || PerCVE("DSA-6131-1") || PerCVE("USN-8955-1") || !PerCVE("ALPINE-CVE-2026-9256") ||
+		!PerCVE("DEBIAN-TEMP-0000000-ABCDEF") || !PerCVE("WOLFI-GHSA-2wp2-chmh-r934") || !PerCVE("CHAINGUARD-CVE-2026-1") || PerCVE("DLA-4000-1") {
 		t.Error("PerCVE")
 	}
 }

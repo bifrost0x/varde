@@ -35,6 +35,9 @@ type Effective struct {
 	DigestWeekday   time.Weekday
 	DirectOSV       bool
 	DirectNVD       bool
+	// VulnDB checks every package of hosts and images against complete
+	// vulnerability datasets downloaded whole (ADR 0047).
+	VulnDB bool
 	// DirectQueries: ask the public sources for apps the data package
 	// does not cover.
 	DirectQueries bool
@@ -75,6 +78,7 @@ const (
 	KeyDirectOSV        = "DIRECT_OSV"
 	KeyDirectNVD        = "DIRECT_NVD"
 	KeyDirectQueries    = "DIRECT_QUERIES"
+	KeyVulnDB           = "VULNDB"
 	KeyP1CVSSPublic     = "P1_CVSS_PUBLIC"
 	KeyP1CVSSPublicEPSS = "P1_CVSS_PUBLIC_EPSS"
 	KeyP1EPSS           = "P1_EPSS"
@@ -105,7 +109,7 @@ const (
 var Keys = []string{
 	KeyPublicDomains, KeyInternalDomains, KeyDigestHour, KeyDigestWeekday, KeyDirectOSV, KeyDirectNVD,
 	KeyP1CVSSPublic, KeyP1CVSSPublicEPSS, KeyP1EPSS, KeyP2CVSS, KeyP2CVSSExposed, KeyNetworks, KeyScanEvery, KeyRegistryTags,
-	KeyContainerPackages, KeyEOLData, KeyDirectQueries, KeyUpstreamCandidates, KeyUpstreamCrossMajor,
+	KeyContainerPackages, KeyEOLData, KeyDirectQueries, KeyUpstreamCandidates, KeyUpstreamCrossMajor, KeyVulnDB,
 }
 
 // Service provides the effective settings.
@@ -211,6 +215,7 @@ func (s *Service) merge(ui map[string]string) (Effective, error) {
 		DirectOSV:         c.DirectOSV,
 		DirectNVD:         c.DirectNVD,
 		DirectQueries:     c.DirectQueries,
+		VulnDB:            c.VulnDB,
 		ContainerPackages: true,
 	}
 	var errs []error
@@ -247,7 +252,7 @@ func (s *Service) merge(ui map[string]string) (Effective, error) {
 			errs = append(errs, fmt.Errorf("digest weekday %q unknown", v))
 		}
 	}
-	for key, dst := range map[string]*bool{KeyDirectOSV: &eff.DirectOSV, KeyDirectNVD: &eff.DirectNVD, KeyDirectQueries: &eff.DirectQueries} {
+	for key, dst := range map[string]*bool{KeyDirectOSV: &eff.DirectOSV, KeyDirectNVD: &eff.DirectNVD, KeyDirectQueries: &eff.DirectQueries, KeyVulnDB: &eff.VulnDB} {
 		if v, ok := use(key); ok {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
@@ -342,3 +347,8 @@ func domains(v string) ([]string, error) {
 	}
 	return out, nil
 }
+
+// PackagesChecked reports whether the packages of hosts and images are
+// compared with security data at all: through the complete datasets or
+// through osv.dev's queries.
+func (e Effective) PackagesChecked() bool { return e.VulnDB || e.DirectOSV }

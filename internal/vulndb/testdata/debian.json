@@ -1,0 +1,43 @@
+{
+  "openssl": {
+    "CVE-2024-0001": {
+      "description": "A buffer overflow in X allows remote attackers to execute code. More text follows here.",
+      "scope": "remote",
+      "releases": {
+        "bookworm": {"status": "resolved", "repositories": {"bookworm": "3.0.15-1~deb12u1"}, "fixed_version": "3.0.14-1~deb12u2", "urgency": "high"},
+        "trixie": {"status": "resolved", "repositories": {"trixie": "3.5.0-1"}, "fixed_version": "0", "urgency": "not yet assigned"},
+        "sid": {"status": "resolved", "repositories": {"sid": "3.5.0-1"}, "fixed_version": "3.4.0-1", "urgency": "not yet assigned"}
+      }
+    },
+    "CVE-2024-0002": {
+      "description": "Unfixed issue.",
+      "releases": {
+        "bookworm": {"status": "open", "repositories": {"bookworm": "3.0.15-1~deb12u1"}, "urgency": "unimportant"},
+        "bullseye": {"status": "open", "repositories": {"bullseye": "1.1.1w-0+deb11u1"}, "urgency": "low"}
+      }
+    },
+    "CVE-2024-0003": {
+      "description": "Postponed.",
+      "releases": {
+        "bookworm": {"status": "open", "repositories": {"bookworm": "3.0.15-1~deb12u1"}, "urgency": "low", "nodsa": "Minor issue", "nodsa_reason": "postponed"}
+      }
+    },
+    "TEMP-0000000-ABCDEF": {
+      "description": "",
+      "releases": {
+        "trixie": {"status": "undetermined", "repositories": {"trixie": "3.5.0-1"}, "urgency": "not yet assigned"}
+      }
+    },
+    "DSA-1234-1": {
+      "releases": {"bookworm": {"status": "resolved", "fixed_version": "1.0"}}
+    }
+  },
+  "bad name": {
+    "CVE-2024-0004": {"releases": {"bookworm": {"status": "open"}}}
+  },
+  "zlib": {
+    "CVE-2024-0005": {
+      "releases": {"sid": {"status": "open", "urgency": "low"}}
+    }
+  }
+}

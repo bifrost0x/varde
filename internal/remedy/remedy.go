@@ -54,6 +54,14 @@ func (c *Compose) Pull() string {
 	return "docker compose pull " + q + " && docker compose up -d " + q
 }
 
+// Rebuild is the command that builds the service's image again, with the
+// newest base image, and recreates the service: the fix for an image built
+// from a local Dockerfile.
+func (c *Compose) Rebuild() string {
+	q := "'" + c.Service + "'"
+	return "docker compose build --pull --no-cache " + q + " && docker compose up -d " + q
+}
+
 // Suggest returns the update of container c of app to target (a canonical
 // version), using the repository's release tags when known. ok is false
 // when nothing concrete can be said.

@@ -51,3 +51,4 @@ Superseded by NNNN. Records are not edited after acceptance except to change the
 | [0044](0044-security-fixes-from-release-notes.md) | Security fixes named only in release notes | Accepted |
 | [0045](0045-upstream-images-before-remediation.md) | An image is suggested only when it is known to fix something | Accepted |
 | [0046](0046-device-identification.md) | Every device is identified from what it states, resolved by data, and learned once for everyone | Accepted |
+| [0047](0047-complete-vulnerability-datasets.md) | Every package is checked against complete vulnerability datasets, downloaded whole | Accepted |

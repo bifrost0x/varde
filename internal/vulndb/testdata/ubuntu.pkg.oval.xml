@@ -1,0 +1,67 @@
+<oval_definitions xmlns="http://oval.mitre.org/XMLSchema/oval-definitions-5" xmlns:ind-def="http://oval.mitre.org/XMLSchema/oval-definitions-5#independent" xmlns:oval="http://oval.mitre.org/XMLSchema/oval-common-5" xmlns:unix-def="http://oval.mitre.org/XMLSchema/oval-definitions-5#unix" xmlns:linux-def="http://oval.mitre.org/XMLSchema/oval-definitions-5#linux">
+  <definitions>
+    <definition id="oval:com.ubuntu.noble:def:100" class="inventory" version="1">
+      <metadata><title>Check that Ubuntu 24.04 LTS (noble) is installed.</title><description /></metadata>
+      <criteria><criterion test_ref="oval:com.ubuntu.noble:tst:100" comment="The host is part of the unix family." /></criteria>
+    </definition>
+    <definition id="oval:com.ubuntu.noble:def:300000" class="vulnerability" version="1">
+      <metadata>
+        <title>openssl</title>
+        <reference source="Package" ref_id="openssl" ref_url="https://launchpad.net/ubuntu/+source/openssl" />
+        <advisory>
+          <cve href="https://ubuntu.com/security/CVE-2025-1000" priority="high" public="20250201" cvss_score="7.5" cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H" cvss_severity="high" usns="7001-1,7001-2" test_ref="oval:com.ubuntu.noble:tst:300000">CVE-2025-1000</cve>
+          <cve href="https://ubuntu.com/security/CVE-2025-1001" priority="low" public="20250301" test_ref="oval:com.ubuntu.noble:tst:300010">CVE-2025-1001</cve>
+          <cve href="https://ubuntu.com/security/CVE-2025-1002" priority="medium" test_ref="oval:com.ubuntu.noble:tst:399999">CVE-2025-1002</cve>
+        </advisory>
+      </metadata>
+      <criteria>
+        <extend_definition applicability_check="true" definition_ref="oval:com.ubuntu.noble:def:100" comment="Ubuntu 24.04 LTS is installed." />
+        <criteria operator="OR">
+          <criterion test_ref="oval:com.ubuntu.noble:tst:300000" comment="(CVE-2025-1000) openssl package in noble was vulnerable but has been fixed (note: '3.0.13-0ubuntu3.5')." />
+        </criteria>
+      </criteria>
+    </definition>
+    <definition id="oval:com.ubuntu.noble:def:400000" class="vulnerability" version="1">
+      <metadata>
+        <title>7zip</title>
+        <advisory>
+          <cve href="https://ubuntu.com/security/CVE-2025-1000" priority="medium" test_ref="oval:com.ubuntu.noble:tst:400000">CVE-2025-1000</cve>
+        </advisory>
+      </metadata>
+      <criteria><criterion test_ref="oval:com.ubuntu.noble:tst:400000" comment="(CVE-2025-1000) 7zip package in noble was vulnerable but has been fixed." /></criteria>
+    </definition>
+    <definition id="oval:com.ubuntu.noble:def:500000" class="vulnerability" version="1">
+      <metadata>
+        <title>linux-aws</title>
+        <advisory>
+          <cve href="https://ubuntu.com/security/CVE-2025-2000" priority="high" test_ref="oval:com.ubuntu.noble:tst:500000">CVE-2025-2000</cve>
+        </advisory>
+      </metadata>
+      <criteria><criterion test_ref="oval:com.ubuntu.noble:tst:500000" comment="Is kernel 'linux-aws' running?" /></criteria>
+    </definition>
+  </definitions>
+  <tests>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:300000" version="1" check="at least one" comment="Does the 'openssl' package exist?">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:300000" />
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:300000" />
+    </linux-def:dpkginfo_test>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:300010" version="1" check="at least one" comment="Does the 'openssl' package exist?">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:300000" />
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:300010" />
+    </linux-def:dpkginfo_test>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:400000" version="1" check="at least one" comment="Does the '7zip' package exist?">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:400000" />
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:400000" />
+    </linux-def:dpkginfo_test>
+    <linux-def:dpkginfo_test id="oval:com.ubuntu.noble:tst:500000" version="1" check="at least one" comment="kernel">
+      <linux-def:object object_ref="oval:com.ubuntu.noble:obj:500000" />
+      <linux-def:state state_ref="oval:com.ubuntu.noble:ste:500000" />
+    </linux-def:dpkginfo_test>
+  </tests>
+  <states>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:300000" version="1"><linux-def:evr datatype="debian_evr_string" operation="less than">3.0.13-0ubuntu3.5</linux-def:evr></linux-def:dpkginfo_state>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:300010" version="1"><linux-def:evr datatype="debian_evr_string" operation="less than">3.0.13-0ubuntu3.6+esm1</linux-def:evr></linux-def:dpkginfo_state>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:400000" version="1"><linux-def:evr datatype="debian_evr_string" operation="less than">23.01+dfsg-11ubuntu0.1</linux-def:evr></linux-def:dpkginfo_state>
+    <linux-def:dpkginfo_state id="oval:com.ubuntu.noble:ste:500000" version="1"><linux-def:evr datatype="debian_evr_string" operation="less than">6.8.0-1010.10</linux-def:evr></linux-def:dpkginfo_state>
+  </states>
+</oval_definitions>

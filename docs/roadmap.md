@@ -21,17 +21,21 @@ history of what was built is in `CHANGELOG.md`; design decisions are in `docs/ad
   lies behind it is at least P2 on a path from the internet.
 - Varde installs agents on Linux hosts with systemd or OpenRC, for linux/amd64 and linux/arm64
   (ADR 0031); elsewhere the agent is run by hand.
-- Every installed package of hosts and container images is checked against its distribution's
-  security data in direct mode (ADR 0032, ADR 0033); issues without a fix yet are counted for
-  hosts, not reported, and feed mode checks catalog apps only.
+- Every installed package of hosts and container images is checked against complete public
+  datasets downloaded whole (ADR 0047): Debian, Ubuntu, Alpine, Wolfi, Chainguard, and through
+  osv.dev's exports Go, PyPI, Maven, crates.io, RubyGems, Packagist, NuGet, AlmaLinux, Rocky
+  Linux, openSUSE and RHEL. npm packages are checked only with `DIRECT_OSV` on. Issues without a
+  fix yet are counted, not reported. Debian releases past their long-term support (11 and older)
+  are not in the tracker and stay unchecked. The datasets come from their publishers, not yet
+  signed in the data package, and air-gapped installations have no copy of them.
 - Agents send a full snapshot when something changed and a heartbeat otherwise, instead of diffs
   (ADR 0019).
 - Exposure reads Traefik labels and the routes of connected reverse proxies (Traefik API, Nginx
   Proxy Manager); other proxies and router port forwards stay invisible.
 - Distribution packages are compared with their distribution's security data on Debian, Ubuntu,
-  Alpine, AlmaLinux, Rocky Linux, openSUSE Leap and Tumbleweed, RHEL/UBI, Wolfi and Chainguard,
-  with `DIRECT_OSV` on (ADR 0028, ADR 0036). Distributions without usable package data, such as
-  Fedora, stay not comparable.
+  Alpine, AlmaLinux, Rocky Linux, openSUSE Leap and Tumbleweed, RHEL/UBI, Wolfi and Chainguard
+  (ADR 0028, ADR 0036, ADR 0047). Distributions without usable package data, such as Fedora, stay
+  not comparable. Ubuntu's data names fixed issues only, and its kernel records are left out.
 - Attack paths are a model (ADR 0034): router port forwards and firewalls are invisible, the
   port-to-package map and library lists are heuristics, and a path through a library is marked
   indirect. Without listening sockets (agents, SSH inventories) a host's findings stay unclear.
@@ -93,6 +97,12 @@ the acceptance of the previous one is met; `make eval` measures it (ADR 0023).
    and Telegram, the product tour (ADR 0029); integration management on the network page.
 
 ## Later
+
+- The vulnerability datasets of ADR 0047 as signed shards of the data package, fetched per
+  release and ecosystem, so that installations contact one host and air-gapped ones get them.
+- CVSS scores and EPSS for every CVE in the data package, for records the ratings do not cover.
+- Reading an image's packages from its layers when every container of it changed its package
+  files.
 
 - More integrations: Docker over TLS, Portainer, the Caddy API, Home Assistant.
 - More dependency metadata formats and dependencies on hosts outside the package manager;

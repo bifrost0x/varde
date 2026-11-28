@@ -233,6 +233,9 @@ type overviewData struct {
 	// SystemChecked is the number of system packages checked against
 	// their distributions' security data (ADR 0032).
 	SystemChecked int
+	// Containers counts the running containers, ImagesChecked those whose
+	// image's packages are compared with security data (ADR 0047).
+	Containers, ImagesChecked int
 	// Restarts are the systems whose updates wait for a restart.
 	Restarts []systemRow
 	// Apps counts the apps by what they ask for; Sections are the cards
@@ -255,7 +258,7 @@ func (d overviewData) Empty() bool {
 // Unassessed reports that no app could be checked and nothing was found:
 // "all clear" would claim more than Varde knows.
 func (d overviewData) Unassessed() bool {
-	return d.Coverage.Assessable == 0 && d.SystemChecked == 0 && d.Findings.Open().Total() == 0
+	return d.Coverage.Assessable == 0 && d.SystemChecked == 0 && d.ImagesChecked == 0 && d.Findings.Open().Total() == 0
 }
 
 // NotUrgent is the number of new P2 and P3 findings: open, but not urgent
@@ -348,8 +351,15 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 		a.fail(w, r, cur, err)
 		return
 	}
-	if a.d.Settings.Get().DirectOSV {
-		d.SystemChecked = len(s.system)
+	d.SystemChecked = a.systemPackagesCovered(s.system)
+	for _, wl := range s.workloads {
+		if wl.Container == nil || wl.RemovedAt != nil {
+			continue
+		}
+		d.Containers++
+		if a.imagePackagesChecked(s.ids[wl.ID]) != "" {
+			d.ImagesChecked++
+		}
 	}
 	ps, err := a.d.Store.Paths(ctx)
 	if err != nil {
@@ -378,7 +388,7 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	d.SetupHidden = a.setupHidden(ctx)
 	// Notifications and HTTPS are steps of the guide here, not banners.
 	cards := a.appCards(s)
-	d.Apps, d.Sections = countApps(cards), appSections(cards)
+	d.Apps, d.Sections = countApps(cards), appSections(mergeSameImage(cards, s))
 	v := view{Title: "Apps", Nav: "overview", Tabs: tabs("systems", "/"), Data: d, OwnSecurityNote: true}
 	a.page(w, r, cur, http.StatusOK, "overview", v)
 }
@@ -532,7 +542,10 @@ type imageFinding struct {
 	// Floating is set when the container runs a moving tag, Pinned when
 	// it is created from a digest and so never changes by a pull.
 	Floating, Pinned bool
-	Compose          *remedy.Compose
+	// Local is set when the image has no registry digest: it was built on
+	// the host, and a rebuild fixes it.
+	Local   bool
+	Compose *remedy.Compose
 	// Release says what the newest release of the app fixes.
 	Release *releaseView
 }
@@ -542,6 +555,14 @@ func (a *app) imageFinding(ctx context.Context, m match.Finding, wl inventory.Wo
 		return nil
 	}
 	v := &imageFinding{Ref: wl.Container.ImageRef, Floating: remedy.Floating(wl.Container), Pinned: remedy.Pinned(wl.Container), Compose: remedy.ComposeOf(wl.Container)}
+	// The same judgement as the app's card: an image without a registry
+	// digest was built on the host.
+	if all, err := a.d.Store.UpstreamStatus(ctx); err == nil {
+		var st upstream.Status
+		if raw, ok := all[wl.ID]; ok && json.Unmarshal(raw, &st) == nil {
+			v.Local = st.Reason == upstream.ReasonLocal
+		}
+	}
 	if ids, err := a.d.Store.Identifications(ctx); err == nil {
 		if id, ok := ids[wl.ID]; ok && id.AppID != "" {
 			v.App, v.AppVersion = a.appName(id.AppID), id.Version
@@ -663,12 +684,22 @@ const (
 // project publishes little, and one Varde could not compare at all.
 func (a *app) checked(id identify.Result, row workloadRow) (kind, note string) {
 	app, known := a.d.Catalog.Current().App(id.AppID)
+	pkgs := a.imagePackagesChecked(id)
 	switch {
 	case row.NotApp != "":
-		return CheckedLimited, "a helper without advisories of its own; the packages of its image are checked"
+		if pkgs == "" {
+			return CheckedNot, "a helper without advisories of its own; " + a.packagesNote(id)
+		}
+		return CheckedLimited, "a helper without advisories of its own; " + pkgs + " checked, nothing found"
 	case !known || id.AppID == "":
-		return CheckedNot, "not recognised, so not compared with any advisory"
+		if pkgs != "" {
+			return CheckedLimited, pkgs + " checked, nothing found; the app itself is not recognised, so its own advisories are not compared"
+		}
+		return CheckedNot, "not recognised, so not compared with any advisory; " + a.packagesNote(id)
 	case a.d.Package != nil && a.d.Package.NoSource(app):
+		if pkgs != "" {
+			return CheckedLimited, pkgs + " checked, nothing found; no advisory source covers the app itself"
+		}
 		return CheckedNot, "no advisory source covers this app"
 	case row.Distro != "":
 		return CheckedFull, ""
@@ -684,6 +715,57 @@ func (a *app) checked(id identify.Result, row workloadRow) (kind, note string) {
 		return CheckedLimited, "the project publishes only part of its flaws in a form a program can compare"
 	}
 	return CheckedFull, ""
+}
+
+// imagePackagesChecked says how many packages of a container's image are
+// compared with security data ("212 packages of its image"), "" when none
+// are.
+func (a *app) imagePackagesChecked(id identify.Result) string {
+	pc := id.Packages
+	if pc == nil || pc.Count == 0 || a.d.PackagesCovered == nil {
+		return ""
+	}
+	n := 0
+	for eco, c := range pc.Ecosystems {
+		if a.d.PackagesCovered(eco) {
+			n += c
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return plural(n, "package") + " of its image"
+}
+
+// systemPackagesCovered counts the system packages whose ecosystem is
+// compared with security data right now: a package of a release without
+// data (Debian 11, Fedora) or whose dataset is not downloaded yet is not.
+func (a *app) systemPackagesCovered(ws []inventory.Workload) int {
+	if a.d.PackagesCovered == nil {
+		return 0
+	}
+	n := 0
+	for _, wl := range ws {
+		if wl.Package == nil || wl.RemovedAt != nil {
+			continue
+		}
+		if eco, _, ok := distro.Ecosystem(wl.Package.Distro); ok && a.d.PackagesCovered(eco) {
+			n++
+		}
+	}
+	return n
+}
+
+// packagesNote says why the packages of a container's image are not
+// checked.
+func (a *app) packagesNote(id identify.Result) string {
+	switch pc := id.Packages; {
+	case pc != nil && pc.Note != "":
+		return "its packages: " + pc.Note
+	case pc != nil && pc.Count > 0:
+		return "no security data covers the packages of its image yet"
+	}
+	return "the packages of its image were not read"
 }
 
 type hostGroup struct {
@@ -933,7 +1015,8 @@ type appSources struct {
 }
 
 // sourceNames are the stored source names in words.
-var sourceNames = map[string]string{"feed": "data package", "github": "GitHub", "nvd": "NVD", "osv": "osv.dev", "local": "local catalog"}
+var sourceNames = map[string]string{"feed": "data package", "github": "GitHub", "nvd": "NVD", "osv": "osv.dev", "local": "local catalog",
+	"distro": "distribution data (osv.dev)", "vulndb": "vulnerability datasets"}
 
 func (a *app) appSources(ctx context.Context) ([]appSources, int, int, error) {
 	s, err := a.load(ctx, false)

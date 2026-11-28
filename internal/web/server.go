@@ -71,6 +71,12 @@ type Deps struct {
 	// analysis does without a data package channel.
 	Advisories func(app *catalog.App, recs []store.AdvisoryRecord) []match.Advisory
 
+	// PackagesCovered reports whether the packages of an ecosystem
+	// ("Debian:12", "Go") are compared with security data right now: the
+	// vulnerability datasets are in use and downloaded, or osv.dev is
+	// asked. Nil counts none as covered.
+	PackagesCovered func(ecosystem string) bool
+
 	AllowDirectSocket bool
 	CookieNever       bool
 	BehindTLS         bool
@@ -154,6 +160,7 @@ func New(d Deps) (http.Handler, error) {
 	mux.Handle("POST /systems/apps/manual", a.user(a.addManual))
 	mux.Handle("POST /systems/apps/{id}/delete", a.user(a.removeManual))
 	mux.Handle("GET /apps/{id}", a.user(a.appPage))
+	mux.Handle("GET /apps/{id}/report.csv", a.user(a.reportCSV))
 	mux.Handle("POST /apps/{id}/snooze-upstream", a.user(a.snoozeUpstream))
 	mux.Handle("GET /systems/gaps", a.user(a.coverage))
 	mux.Handle("GET /systems/gaps/unrecognised.txt", a.user(a.unrecognised))

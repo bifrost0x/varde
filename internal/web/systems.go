@@ -79,8 +79,7 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 		a.renderError(w, r, cur, http.StatusNotFound, "System not found", "It may have been removed, or merged with another one.")
 		return
 	}
-	v := systemView{Machine: *m, Query: strings.TrimSpace(r.URL.Query().Get("q")), AppNames: map[string]string{}, Updates: map[string]int{}, Unfixed: map[string]int{},
-		Checked: a.d.Settings.Get().DirectOSV}
+	v := systemView{Machine: *m, Query: strings.TrimSpace(r.URL.Query().Get("q")), AppNames: map[string]string{}, Updates: map[string]int{}, Unfixed: map[string]int{}}
 	for _, c := range s.machines {
 		if c.ParentID == m.ID {
 			v.Children = append(v.Children, c)
@@ -90,6 +89,15 @@ func (a *app) system(w http.ResponseWriter, r *http.Request, cur *auth.Current) 
 	for _, h := range m.HostIDs {
 		hosts[h] = true
 	}
+	// Checked only when security data covers the release of this
+	// system's packages.
+	var own []inventory.Workload
+	for _, wl := range s.system {
+		if hosts[wl.HostID] {
+			own = append(own, wl)
+		}
+	}
+	v.Checked = a.systemPackagesCovered(own) > 0
 	eol, err := a.d.Store.EOL(ctx)
 	if err != nil {
 		a.fail(w, r, cur, err)

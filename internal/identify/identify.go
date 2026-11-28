@@ -79,6 +79,21 @@ type Result struct {
 	// Unfixed counts the distribution's open issues of a system package
 	// that no update fixes yet (ADR 0032); they are not findings.
 	Unfixed int `json:"unfixed,omitempty"`
+	// Packages says which packages inside a container's image Varde read
+	// to check them against security data (ADR 0033, ADR 0047); nil when
+	// it has read none.
+	Packages *PackageCheck `json:"packages,omitempty"`
+}
+
+// PackageCheck is what Varde read of the packages inside a container's
+// image.
+type PackageCheck struct {
+	// Count is the number of packages compared with security data, by the
+	// ecosystems they belong to ("Debian:12", "Go").
+	Count      int            `json:"count"`
+	Ecosystems map[string]int `json:"ecosystems,omitempty"`
+	// Note says why nothing or not everything was read.
+	Note string `json:"note,omitempty"`
 }
 
 // Trust is how far a version can be relied on.

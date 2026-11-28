@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bifrost0x/varde/internal/advisory"
 	"github.com/bifrost0x/varde/internal/catalog"
@@ -107,6 +108,11 @@ type Evidence struct {
 	// CompletedBy names the record that gave the range its fixed version,
 	// when the deciding record names none (see complete).
 	CompletedBy string `json:"completed_by,omitempty"`
+	// RatedBy names the dataset the severity was taken from, when the
+	// deciding record rates nothing itself; RecordDate is the date of the
+	// deciding record (for datasets without dates, the file's).
+	RatedBy    string    `json:"rated_by,omitempty"`
+	RecordDate time.Time `json:"record_date,omitzero"`
 }
 
 // sourceRank prefers project-published data over aggregated CVE data.
@@ -643,6 +649,7 @@ func finding(in Input, group []Advisory, best *evaluation, enr Enrichment) Findi
 		Evidence: Evidence{
 			Source: best.adv.Source, Origin: best.adv.Vuln.Origin(), RecordID: best.adv.Vuln.ID, Package: best.pkg, Range: best.rng,
 			Version: in.Version, VersionSource: in.VersionSource, Reason: best.reason, CompletedBy: best.completedBy,
+			RatedBy: best.adv.Vuln.RatedBy(), RecordDate: best.adv.Vuln.Modified,
 		},
 	}
 	ids := map[string]bool{}

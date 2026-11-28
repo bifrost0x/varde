@@ -54,6 +54,11 @@ Varde answers that question and nothing louder:
 - **Apps, not CVE lists.** Each app that needs something gets one card: the version to install,
   why it matters, and for Compose services the line to change. The version is a release that
   exists, not just a number from an advisory.
+- **Every package, not only the apps.** The packages inside every image and on every host are
+  checked against the complete security data of their distribution or ecosystem, downloaded
+  whole like an image scanner's database, so nobody learns what you run. Each app's page turns
+  them into a security report: package, installed version, the version that fixes it, severity,
+  and where each record comes from.
 - **Precision before recall.** Every version carries its evidence and a trust level. A version
   Varde is not sure about never alerts; an advisory it cannot compare is shown as "check
   yourself", never as "affected". Patched distribution packages with backported fixes count as
@@ -138,8 +143,11 @@ flowchart LR
    with a version, from labels, tags, the registry, the image's package databases and the app's
    own manifest or version endpoint. Floating tags such as `latest` are resolved through the
    registry; they never give a version on their own.
-3. **Matching.** App advisories are matched with exact version ranges. Distribution packages are
-   compared against their distribution's own security data in that distribution's version order.
+3. **Matching.** App advisories are matched with exact version ranges. Distribution and language
+   packages are compared against complete datasets of their distribution or ecosystem (Debian
+   security tracker, Ubuntu OVAL, Alpine, Wolfi and Chainguard secdb, osv.dev's exports for Go,
+   Python, Java, Rust, Ruby, PHP, .NET and the RPM distributions), downloaded whole and matched
+   locally in the package manager's version order, so backported fixes count.
 4. **Assessment.** Exposure (public, LAN, internal) comes from reverse proxy routes, published
    ports and the network scan. Attack paths separate the flaw an attacker can reach from
    background noise behind it.
@@ -153,8 +161,10 @@ flowchart LR
 | P3 | **Next update** | weekly digest |
 | unverified | **Check yourself**: not comparable, never counted as affected | not notified |
 
-Every app has a page with numbered steps (the Compose line, the commands), why it is urgent, where
-the version came from, and the flaws behind it with their evidence. Findings keep their identity
+Every app has a page with numbered steps (the Compose line, the commands; for an image built on
+the host, the rebuild), why it is urgent, where the version came from, and a security report:
+its flaws by severity, grouped by the package that has them, each with the fixed version and
+its evidence, downloadable as CSV. Findings keep their identity
 across `docker compose up -d`, so the history shows what an update actually fixed.
 
 <table>
@@ -205,7 +215,10 @@ Varde reads the package databases of container images and of hosts and checks th
 distribution's security data: Debian, Ubuntu, Alpine, AlmaLinux, Rocky Linux, openSUSE Leap and
 Tumbleweed, RHEL/UBI, Wolfi and Chainguard. App dependencies are read from Go build information,
 npm lock files, Python, PHP Composer, Ruby gem, .NET and Maven metadata, and Rust programs built
-with cargo-auditable.
+with cargo-auditable, and checked against osv.dev's data of their ecosystem. The data comes as
+complete files from the publishers, at most once a day and only for what you run
+([package vulnerability data](docs/configuration.md#package-vulnerability-data)); npm packages
+are checked only with osv.dev queries switched on.
 
 ### Recognition
 
@@ -222,6 +235,7 @@ host names or private registries. Your own entries go into `VARDE_CATALOG_DIR`
 | **Data package** (default) | One signed package a day: project advisories, osv.dev and NVD records, CISA KEV, EPSS, release tags, catalog and index | The mirror sees that an installation fetches the package, not which apps it runs |
 | **Direct** (`VARDE_MODE=direct`) | Varde asks GitHub, CISA and FIRST itself; osv.dev, NVD and endoflife.date are opt-in | GitHub learns which apps you run; each opt-in source says what it reveals |
 | **Air-gapped** | The same package from a mounted directory or `.tar` (`file://`) | Nothing |
+| **Package vulnerability data** (default, all modes) | Complete security data of the distributions and ecosystems in use: Debian tracker, Ubuntu OVAL, Alpine, Wolfi and Chainguard secdb, osv.dev exports | Each publisher sees that a release or ecosystem is in use, as your package manager tells it anyway; never a package or version |
 
 Every package is verified against the embedded trust root, with rollback and freeze protection.
 If a package cannot be fetched, the last verified one stays in use and a notice appears; Varde never
@@ -261,7 +275,8 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 ## Privacy
 
 Your inventory never leaves your network. Varde downloads the same public data every installation
-downloads and matches locally. There is no telemetry, no account and no phone-home. Outbound
+downloads and matches locally; the package vulnerability data is fetched as whole files, so a
+request names no package. There is no telemetry, no account and no phone-home. Outbound
 requests carry a fixed User-Agent without installation data. The Gaps export is a file for you to
 attach, not something Varde sends.
 
@@ -277,6 +292,7 @@ variables, so their secrets never pass through the UI
 
 - **REST API** with scoped tokens: [OpenAPI 3.1](docs/api/openapi.yaml).
 - **OpenVEX** export of all findings: `GET /api/v1/vex`.
+- **CSV** security report per app, from its page (`/apps/<id>/report.csv`).
 - **Prometheus metrics** at `/metrics` (authenticated), health at `/healthz` and `/readyz`.
 
 ## What Varde does not do

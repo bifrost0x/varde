@@ -153,6 +153,17 @@ func kernelSource(ecosystem, binary, source string) (string, bool) {
 	return "", false
 }
 
+// Kernel reports whether a checked package is the kernel source of a
+// Debian or Ubuntu system ("linux", "linux-hwe-6.8"), the name Checked gives
+// the running kernel.
+func Kernel(ecosystem, name string) bool {
+	switch family(ecosystem) {
+	case "Debian", "Ubuntu":
+		return (name == "linux" || strings.HasPrefix(name, "linux-")) && debianKernelSource(name)
+	}
+	return false
+}
+
 // debianKernelSource reports whether a Debian or Ubuntu source package is a
 // kernel rather than firmware, a helper or a library of the same prefix.
 func debianKernelSource(source string) bool {

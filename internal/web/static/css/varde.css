@@ -552,6 +552,53 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .flaw a:hover { text-decoration: underline; }
 .flaw .cell-sub { grid-column: 2; margin: 0; }
 
+/* Severity: a word in a frame, never colour alone. Ember stays reserved
+   for what is urgent or exploited; severities use amber and info. */
+.sev { display: inline-block; min-width: 4.5em; text-align: center; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.02em; padding: 0 6px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text-muted); background: transparent; white-space: nowrap; }
+.sev--critical { background: var(--amber); color: var(--on-amber); border-color: var(--amber); }
+.sev--high { color: var(--amber); border-color: var(--amber); }
+.sev--medium { color: var(--info); border-color: var(--info); }
+.sev--negligible, .sev--unrated { border-style: dashed; }
+
+.app__sev { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0 0 8px; }
+.app__sev .sev { min-width: 0; }
+
+/* The security report of an app: flaws by package. */
+.report__lead { margin-bottom: 8px; }
+.report__kev { color: var(--ember); }
+.sevbar { display: block; width: 100%; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); margin: 4px 0 8px; }
+.sevbar__critical { fill: var(--amber); }
+.sevbar__high { fill: color-mix(in srgb, var(--amber) 55%, var(--surface-1)); }
+.sevbar__medium { fill: var(--info); }
+.sevbar__low { fill: color-mix(in srgb, var(--info) 45%, var(--surface-1)); }
+.sevbar__negligible { fill: var(--border-strong); }
+.sevbar__unrated { fill: var(--surface-3); }
+.sevcounts { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 16px; padding: 0; font-size: var(--fs-sm); }
+.report__table { border-top: 1px solid var(--border); margin-bottom: 8px; }
+.report__row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) minmax(0, 1.5fr) 13em; gap: 4px 16px; align-items: baseline; padding: 10px 4px; font-size: var(--fs-sm); }
+.report__row--head { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+.report__pkg { border-bottom: 1px solid var(--border); }
+.report__pkg > summary { cursor: pointer; list-style: none; }
+.report__pkg > summary::-webkit-details-marker { display: none; }
+.report__pkg > summary:hover { background: var(--surface-2); }
+.report__name strong::before { content: "›"; display: inline-block; width: 1em; color: var(--text-muted); transition: transform .15s; }
+.report__pkg[open] .report__name strong::before { transform: rotate(90deg); }
+.report__name .cell-sub { margin-left: 1em; }
+.report__ver { overflow-wrap: anywhere; }
+.report__count { text-align: right; white-space: nowrap; }
+.report__pkg .flaws { padding: 0 4px 8px 1.25em; }
+.report__pkg .flaw { grid-template-columns: 4.5em minmax(0, 1fr); font-size: var(--fs-sm); }
+.report__pkg .flaw a { overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .report__name strong::before { transition: none; } }
+@media (max-width: 720px) {
+  .report__row { grid-template-columns: minmax(0, 1fr) auto; }
+  .report__row--head { display: none; }
+  .report__row .report__ver { grid-column: 1 / -1; font-size: var(--fs-xs); }
+  .report__row .report__ver:nth-child(2)::before { content: "installed "; color: var(--text-muted); font-family: var(--font); }
+  .report__row .report__ver:nth-child(3)::before { content: "fixed in "; color: var(--text-muted); font-family: var(--font); }
+  .report__count { grid-row: 1; grid-column: 2; }
+}
+
 @media (max-width: 720px) {
   .apps { grid-template-columns: 1fr; }
   .hero { grid-template-columns: 1fr; padding: 18px; }

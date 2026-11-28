@@ -6,7 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Every package of hosts and container images is checked against complete public vulnerability
+  data by default (ADR 0047): the Debian security tracker, Canonical's OVAL data for Ubuntu, the
+  secdb files of Alpine, Wolfi and Chainguard, and osv.dev's exports for Go, PyPI, Maven,
+  crates.io, RubyGems, Packagist, NuGet, AlmaLinux, Rocky Linux, openSUSE and RHEL. The files are
+  downloaded whole, at most once a day and only for the releases and ecosystems present, so no
+  request names a package or a version; matching stays local. Records without a severity of their
+  own take the NVD score from Canonical's CVE data. `VARDE_VULNDB` (Settings › Package
+  vulnerability data) switches it off; the settings list each dataset with its state.
+- A security report on every app's page: the flaws by severity, grouped by the package that has
+  them, with the installed version, the version that fixes all of a package's flaws, the CVE, the
+  CVSS score, the dataset of each record and since when it is open. It downloads as CSV.
+- A flaw's page names the CVE instead of a distribution's record ID, the dataset and the date of
+  its data, and where its score comes from when the record rates nothing itself.
+
 ### Fixed
+
+- A container whose app is not in the catalog counted as "not checked" although the packages of
+  its image were read; the front page could say "All clear" while most containers were never
+  compared. Cards and the overview now say how many packages were checked and why some were not.
+- An image built on the host got "wait for the next release". The card and the pages now say to
+  rebuild it with the newest base image, with the Compose command when it is a service.
+- A card whose flaws are serious but unreachable no longer calls them "minor flaws"; cards show
+  their flaws by severity, and containers of one image that need the same update share one card.
 
 - A container with flawed packages in its image no longer gets "Pull a newer image" when no
   newer image exists (ADR 0045). Varde decides for each such container whether a newer image

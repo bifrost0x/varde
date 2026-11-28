@@ -174,7 +174,7 @@ func (a *app) setupSteps(s *snapshot, rows []systemRow) []step {
 			})
 		}
 	}
-	if !a.d.Settings.Get().DirectOSV {
+	if !a.d.Settings.Get().PackagesChecked() {
 		pkgs := identify.DistroPackages(a.d.Catalog.Current(), s.workloads)
 		n := 0
 		for _, ps := range pkgs {
@@ -184,7 +184,7 @@ func (a *app) setupSteps(s *snapshot, rows []systemRow) []step {
 			steps = append(steps, step{
 				Title: fmt.Sprintf("Check %d distribution packages against their distribution's security data", n),
 				Gain:  "Debian, Ubuntu and Alpine state which package versions carry the fix; backported fixes count, upstream version ranges do not.", Impact: 40 * n,
-				Grant: "Queries to osv.dev with the package names and releases.",
+				Grant: "Downloads of the distributions' complete security data, which name none of your packages.",
 				Link:  "/settings#sources",
 			})
 		}

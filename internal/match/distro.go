@@ -12,8 +12,17 @@ import (
 	"github.com/bifrost0x/varde/internal/version"
 )
 
-// SourceDistro is the source name of distribution security records.
-const SourceDistro = "distro"
+// SourceDistro is the source name of distribution security records read
+// through osv.dev; SourceVulnDB that of the records Varde selects from the
+// complete datasets it downloads (ADR 0047). Both are matched alike.
+const (
+	SourceDistro = "distro"
+	SourceVulnDB = "vulndb"
+)
+
+// isDistroRecord reports whether a stored advisory is a distribution's (or a
+// package ecosystem's) own record, matched in the package manager's order.
+func isDistroRecord(a *Advisory) bool { return a.Source == SourceDistro || a.Source == SourceVulnDB }
 
 // matchDistro matches a distribution package. Distributions backport fixes
 // without changing the upstream version, so upstream ranges cannot decide:
@@ -26,7 +35,7 @@ func matchDistro(in Input, advs []Advisory, enr Enrichment) []Finding {
 		var best *evaluation
 		for i := range group {
 			a := &group[i]
-			if a.Source != SourceDistro {
+			if !isDistroRecord(a) {
 				continue
 			}
 			e := evaluateDistro(in.Distro, a)
@@ -44,7 +53,7 @@ func matchDistro(in Input, advs []Advisory, enr Enrichment) []Finding {
 			// version.
 			for i := range group {
 				a := &group[i]
-				if a.Source == SourceDistro {
+				if isDistroRecord(a) {
 					continue
 				}
 				e := evaluate(in, a, version.Version{}, "distribution package: "+in.Distro.Ecosystem+" has no record of this advisory for "+in.Distro.Name+", and upstream ranges do not apply to backported packages")
@@ -88,7 +97,7 @@ func preferDistro(e, best *evaluation) bool {
 func expandNotices(advs []Advisory) []Advisory {
 	out := make([]Advisory, 0, len(advs))
 	for _, a := range advs {
-		if a.Source != SourceDistro || distro.PerCVE(a.Vuln.ID) || len(a.Vuln.Upstream) == 0 {
+		if !isDistroRecord(&a) || distro.PerCVE(a.Vuln.ID) || len(a.Vuln.Upstream) == 0 {
 			out = append(out, a)
 			continue
 		}

@@ -122,6 +122,17 @@ func (v Vulnerability) URL() string {
 // for. Installations released before it ignore the key.
 const OriginKey = "varde_origin"
 
+// RatedByKey is the database_specific key under which a record names the
+// dataset its CVSS score was taken from, when the record's own source
+// rates nothing (ADR 0047).
+const RatedByKey = "varde_rated_by"
+
+// RatedBy returns what rated the record, "" when it rates itself.
+func (v Vulnerability) RatedBy() string {
+	s, _ := v.DatabaseSpecific[RatedByKey].(string)
+	return s
+}
+
 // OriginRelease is the origin of a record the package builder made from a
 // security fix named in a project's release notes (ADR 0044). Its range
 // is inferred: it never makes a version affected.

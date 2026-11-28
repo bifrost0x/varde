@@ -161,3 +161,20 @@ func TestMatchDistroFollowUpNotice(t *testing.T) {
 		t.Fatalf("findings: %+v", fs)
 	}
 }
+
+// Records selected from the downloaded datasets (ADR 0047) are matched
+// like those read through osv.dev.
+func TestMatchDistroVulnDBRecords(t *testing.T) {
+	app := &catalog.App{ID: "nginx", Version: catalog.VersionSpec{Scheme: "semver"}}
+	rec := distroRecord("DEBIAN-CVE-2026-1", "CVE-2026-1", "Debian:12", "nginx", advisory.Event{Introduced: "0"}, advisory.Event{Fixed: "1.22.1-9+deb12u8"})
+	rec.Source = SourceVulnDB
+	in := Input{App: app, Version: "1.22.1", Distro: &distro.Package{Ecosystem: "Debian:12", Name: "nginx", Version: "1.22.1-9+deb12u7"}}
+	fs := Match(in, []Advisory{rec}, Enrichment{})
+	if len(fs) != 1 || fs[0].State != Affected || fs[0].FixedIn != "1.22.1-9+deb12u8" {
+		t.Fatalf("findings %+v", fs)
+	}
+	in.Distro.Version = "1.22.1-9+deb12u8"
+	if fs := Match(in, []Advisory{rec}, Enrichment{}); len(fs) != 0 {
+		t.Fatalf("a fixed package is not affected: %+v", fs)
+	}
+}

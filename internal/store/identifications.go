@@ -22,8 +22,8 @@ func (s *Store) ReplaceIdentifications(ctx context.Context, rs []identify.Result
 		}
 		stmt, err := tx.PrepareContext(ctx, `
 			INSERT INTO identifications (workload_id, app_id, confidence, rule, version, version_raw, version_source, note,
-				trust, evidence_json, purl, unfixed, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+				trust, evidence_json, purl, unfixed, packages_json, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
 			return fmt.Errorf("prepare identification insert: %w", err)
 		}
@@ -37,8 +37,16 @@ func (s *Store) ReplaceIdentifications(ctx context.Context, rs []identify.Result
 			if err != nil {
 				return fmt.Errorf("encode evidence of %s: %w", r.WorkloadID, err)
 			}
+			pkgJSON := ""
+			if r.Packages != nil {
+				b, err := json.Marshal(r.Packages)
+				if err != nil {
+					return fmt.Errorf("encode packages of %s: %w", r.WorkloadID, err)
+				}
+				pkgJSON = string(b)
+			}
 			if _, err := stmt.ExecContext(ctx, r.WorkloadID, r.AppID, string(r.Confidence), r.Rule,
-				r.Version, r.VersionRaw, r.VersionSource, r.Note, string(r.Trust), string(evJSON), r.PURL, r.Unfixed, millis(now)); err != nil {
+				r.Version, r.VersionRaw, r.VersionSource, r.Note, string(r.Trust), string(evJSON), r.PURL, r.Unfixed, pkgJSON, millis(now)); err != nil {
 				return fmt.Errorf("insert identification for %s: %w", r.WorkloadID, err)
 			}
 		}
@@ -49,7 +57,7 @@ func (s *Store) ReplaceIdentifications(ctx context.Context, rs []identify.Result
 // Identifications returns all stored identifications keyed by workload ID.
 func (s *Store) Identifications(ctx context.Context) (map[string]identify.Result, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT workload_id, app_id, confidence, rule, version, version_raw, version_source, note, trust, evidence_json, purl, unfixed FROM identifications`)
+		SELECT workload_id, app_id, confidence, rule, version, version_raw, version_source, note, trust, evidence_json, purl, unfixed, packages_json FROM identifications`)
 	if err != nil {
 		return nil, fmt.Errorf("query identifications: %w", err)
 	}
@@ -57,12 +65,18 @@ func (s *Store) Identifications(ctx context.Context) (map[string]identify.Result
 	out := map[string]identify.Result{}
 	for rows.Next() {
 		var r identify.Result
-		var conf, trust, ev string
-		if err := rows.Scan(&r.WorkloadID, &r.AppID, &conf, &r.Rule, &r.Version, &r.VersionRaw, &r.VersionSource, &r.Note, &trust, &ev, &r.PURL, &r.Unfixed); err != nil {
+		var conf, trust, ev, pkgs string
+		if err := rows.Scan(&r.WorkloadID, &r.AppID, &conf, &r.Rule, &r.Version, &r.VersionRaw, &r.VersionSource, &r.Note, &trust, &ev, &r.PURL, &r.Unfixed, &pkgs); err != nil {
 			return nil, fmt.Errorf("scan identification: %w", err)
 		}
 		if err := json.Unmarshal([]byte(ev), &r.Evidence); err != nil {
 			return nil, fmt.Errorf("decode evidence of %s: %w", r.WorkloadID, err)
+		}
+		if pkgs != "" {
+			r.Packages = &identify.PackageCheck{}
+			if err := json.Unmarshal([]byte(pkgs), r.Packages); err != nil {
+				return nil, fmt.Errorf("decode packages of %s: %w", r.WorkloadID, err)
+			}
 		}
 		r.Confidence, r.Trust = identify.Confidence(conf), identify.Trust(trust)
 		out[r.WorkloadID] = r

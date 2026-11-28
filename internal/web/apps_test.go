@@ -78,7 +78,7 @@ func TestAppsFrontPage(t *testing.T) {
 	for _, want := range []string{
 		"What to do", "Update to 1.121.1", "change the line of the service immich-server to:",
 		"image: ghcr.io/immich-app/immich-server:v1.121.1", "docker compose pull 'immich-server' && docker compose up -d 'immich-server'",
-		"The flaws behind it (3)", "Flaw GHSA-a", "fixed in 1.120.1", "no fix yet",
+		"Security report", "in 1 package", "Download as CSV", "Flaw GHSA-a", "fixed in 1.120.1", "no fix yet",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("app page lacks %q", want)

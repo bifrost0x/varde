@@ -86,6 +86,13 @@ type appCard struct {
 	Introduced string
 	// Mitigation is what to do while no update fixes the findings.
 	Mitigation *mitigation
+	// Sev counts the card's confirmed flaws by severity, the three worst
+	// severities present; Exploited those known to be exploited.
+	Sev       []sevCount
+	Exploited int
+	// Others are further containers of the same image on the front page,
+	// which the same update fixes; the card stands for all of them.
+	Others []string
 	// Release says which flaws in the image's packages the newest release
 	// of the app fixes, Groups are the app and package versions behind
 	// the card; both are set on the list of updates only.
@@ -211,6 +218,7 @@ func (a *app) updateCards(s *snapshot, groups []todoGroup, fs []store.Finding) [
 		}
 		c.Label = appLabels[c.State]
 		c.Why = why(c, g, workloadOf(s, c.Key), byWorkload[c.Key])
+		c.Sev, c.Exploited = cardSeverities(byWorkload[c.Key])
 		out = append(out, c)
 	}
 	return out
@@ -469,6 +477,15 @@ func why(c appCard, g todoGroup, wl *inventory.Workload, fs []store.Finding) str
 		case appSoon:
 			return "serious flaws, but not directly reachable"
 		case appLater:
+			// The priority is low because nothing reaches the flaws, not
+			// always because they are mild: the card must not call a
+			// critical flaw minor.
+			if r := buildReport(fs, ""); len(r.Counts) > 0 && severityRank(r.Counts[0].Severity) >= severityRank("high") {
+				if imageOnly {
+					return "serious flaws in packages of the image, but no known attack path uses them"
+				}
+				return "serious flaws, but no known attack path reaches them"
+			}
 			return "minor flaws"
 		case appCheck:
 			return "Varde cannot tell whether these apply to the version running"
@@ -581,6 +598,49 @@ type appSection struct {
 	Compact bool
 }
 
+// Count is the number of apps the section's cards stand for: a card of
+// several containers of one image counts each, as the chips above do.
+func (s appSection) Count() int {
+	n := 0
+	for _, c := range s.Cards {
+		n += 1 + len(c.Others)
+	}
+	return n
+}
+
+// mergeSameImage folds the cards of containers that run the same image and
+// need the same update into one card: one image, one thing to do. Commands
+// name a Compose service; a merged card keeps them only when all agree.
+func mergeSameImage(cards []appCard, s *snapshot) []appCard {
+	out := make([]appCard, 0, len(cards))
+	first := map[string]int{}
+	for _, c := range cards {
+		wl, ok := s.byID[c.Key]
+		if !ok || wl.Container == nil || wl.Container.ImageID == "" || c.Count == 0 {
+			out = append(out, c)
+			continue
+		}
+		key := wl.HostID + "\x00" + wl.Container.ImageID + "\x00" + c.State + "\x00" + c.Action + "\x00" + strconv.Itoa(c.Count)
+		i, seen := first[key]
+		if !seen {
+			first[key] = len(out)
+			out = append(out, c)
+			continue
+		}
+		m := &out[i]
+		m.Others = append(m.Others, wl.Name)
+		if m.Command != c.Command {
+			m.Command = ""
+		}
+		if m.Mitigation != nil && c.Mitigation != nil && m.Mitigation.Rebuild != c.Mitigation.Rebuild {
+			mit := *m.Mitigation
+			mit.Rebuild = ""
+			m.Mitigation = &mit
+		}
+	}
+	return out
+}
+
 // appSections groups the cards for the front page: what needs doing, each
 // under what it asks for, then the rest as a quiet list.
 func appSections(cards []appCard) []appSection {
@@ -643,56 +703,20 @@ func (a *app) appPage(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 	d := struct {
 		Card    appCard
 		Groups  []findingGroup
-		Flaws   []appFlaw
-		Hidden  int
+		Report  report
 		Version string
 		Source  string
 		Doubt   string
 		Basis   string
 		Machine string
-	}{Card: *card, Groups: a.groupFindings(s, fs), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
+	}{Card: *card, Groups: a.groupFindings(s, fs), Report: buildReport(fs, card.Name), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
 	if app, ok := a.d.Catalog.Current().App(ident.AppID); ok && app.Origin != catalog.OriginBuiltin && app.Origin != catalog.OriginFeed {
 		d.Basis = "recognised automatically"
 	}
 	if m := s.hostOf[wl.HostID]; m != nil {
 		d.Machine = m.ID
 	}
-	d.Flaws, d.Hidden = appFlaws(fs, 25)
 	a.page(w, r, cur, http.StatusOK, "app", view{Title: card.Name, Nav: "apps", Data: d})
-}
-
-// appFlaw is one finding on an app's page, in plain words.
-type appFlaw struct {
-	ID, Advisory, Summary, Fixed string
-	State                        string
-	Severity                     string
-	Exploited                    bool
-}
-
-// appFlaws lists the findings of an app, most pressing first, at most max;
-// hidden counts the rest.
-func appFlaws(fs []store.Finding, max int) (flaws []appFlaw, hidden int) {
-	sort.SliceStable(fs, func(i, j int) bool {
-		if priorityRank[fs[i].Priority] != priorityRank[fs[j].Priority] {
-			return priorityRank[fs[i].Priority] < priorityRank[fs[j].Priority]
-		}
-		return fs[i].AdvisoryID < fs[j].AdvisoryID
-	})
-	for _, f := range fs {
-		if len(flaws) >= max {
-			hidden++
-			continue
-		}
-		var m match.Finding
-		_ = json.Unmarshal(f.Detail, &m)
-		state := stateOfPriority(f.Priority)
-		if f.MatchState != string(match.Affected) {
-			state = appCheck
-		}
-		flaws = append(flaws, appFlaw{ID: f.ID, Advisory: f.AdvisoryID, Summary: m.Summary, Fixed: f.FixedIn,
-			State: state, Severity: m.SeverityLabel, Exploited: m.KEV})
-	}
-	return flaws, hidden
 }
 
 // appHref is the page of the app a workload is; "" for a system package,
@@ -702,4 +726,15 @@ func appHref(wl inventory.Workload) string {
 		return ""
 	}
 	return "/apps/" + wl.ID
+}
+
+// cardSeverities counts the confirmed open flaws of a card by severity,
+// the three worst severities present, and those known to be exploited.
+func cardSeverities(fs []store.Finding) ([]sevCount, int) {
+	r := buildReport(fs, "")
+	out := r.Counts
+	if len(out) > 3 {
+		out = out[:3]
+	}
+	return out, r.Exploited
 }

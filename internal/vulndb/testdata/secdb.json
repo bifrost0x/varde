@@ -1,0 +1,6 @@
+{"apkurl":"{{urlprefix}}/{{distroversion}}/{{reponame}}/{{arch}}/{{pkg.name}}-{{pkg.ver}}.apk","archs":["x86_64"],"reponame":"main","urlprefix":"https://dl-cdn.alpinelinux.org/alpine","distroversion":"v3.22","packages":[
+ {"pkg":{"name":"openssl","secfixes":{"3.5.1-r0":["CVE-2025-0001","CVE-2025-0002 (fixed upstream)"],"3.5.2-r0":["CVE-2025-0003 CVE-2025-0004"],"0":["CVE-2025-0009"],"3.5.3-r0":["CVE-2025-0009"]}}},
+ {"pkg":{"name":"busybox","secfixes":{"1.37.0-r5":["GHSA-xxxx-xxxx-xxxx","GHSA-2wp2-chmh-r934"]}}},
+ {"pkg":{"name":"../etc","secfixes":{"1.0-r0":["CVE-2025-0005"]}}},
+ {"pkg":{"name":"nofix"}}
+]}

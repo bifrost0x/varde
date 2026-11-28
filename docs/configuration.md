@@ -33,6 +33,7 @@ from the table below.
 | `VARDE_GITHUB_TOKEN` / `VARDE_GITHUB_TOKEN_FILE` | unset | Optional GitHub token (no scopes needed) for 5000 instead of 60 API requests per hour. |
 | `VARDE_PACKAGE_URLS` | `https://raw.githubusercontent.com/bifrost0x/varde/data/feed` | Mirrors of the data package in order, comma-separated: `https://` URLs, or `file:///path` for a directory or a `.tar` file in a mounted volume (installations without internet access; same verification). Set it to an empty value to switch the data package off. The package is only used once a trust root exists (built in, or `VARDE_FEED_ROOT_FILE`) and `VARDE_MODE` is unset. See [The data package](#the-data-package). |
 | `VARDE_DIRECT_QUERIES` | `false` | With the data package in use: also ask api.github.com about apps the package does not cover, which shows GitHub which of those you run. osv.dev, NVD and endoflife.date have switches of their own. Without a data package Varde always asks GitHub. |
+| `VARDE_VULNDB` | `true` | Check every package Varde reads, of hosts and of container images, against complete public vulnerability datasets: the Debian security tracker, Canonical's OVAL data for Ubuntu, the secdb files of Alpine, Wolfi and Chainguard, and osv.dev's bulk exports for Go, PyPI, Maven, crates.io, RubyGems, Packagist, NuGet, AlmaLinux, Rocky Linux, openSUSE and RHEL. Each file is downloaded whole, once a day at most, and only for the releases and ecosystems present; the requests name no package and no version. See [Package vulnerability data](#package-vulnerability-data). |
 | `VARDE_DIRECT_OSV` | `false` | Query osv.dev for catalog `osv_packages`, and check distribution packages (Debian, Ubuntu, Alpine, AlmaLinux, Rocky Linux, openSUSE Leap) against their distribution's security data (ADR 0028). Reveals the package names of the apps you run, and the releases of those distribution packages, to osv.dev. |
 | `VARDE_DIRECT_NVD` | `false` | Query the NVD CVE API by catalog CPEs (ADR 0017). Reveals which products you run to NIST. |
 | `VARDE_NVD_API_KEY` / `VARDE_NVD_API_KEY_FILE` | unset | Optional NVD API key for higher rate limits. |
@@ -40,7 +41,7 @@ from the table below.
 | `VARDE_SNMP_USER` | unset | SNMP v3 user instead of a community, with SHA-256 authentication. |
 | `VARDE_SNMP_AUTH` / `_FILE` | unset | SNMP v3 authentication passphrase; required with `VARDE_SNMP_USER`. |
 | `VARDE_SNMP_PRIVACY` / `_FILE` | unset | SNMP v3 privacy passphrase (AES); without it v3 runs authenticated but unencrypted. |
-| `VARDE_EGRESS_ALLOWLIST` | unset | Comma-separated host names; when set, every outbound request to another host is refused. Direct mode needs `api.github.com`, `www.cisa.gov`, `api.first.org`, plus `api.osv.dev` / `services.nvd.nist.gov` / `endoflife.date` when enabled, and `discord.com` / `api.telegram.org` for those channels. Add the hosts of your ntfy, Gotify, webhook and SMTP endpoints, and with registry versions on the registries your images come from (`registry-1.docker.io`, `auth.docker.io`, `ghcr.io`, `lscr.io`, `quay.io`, ...). |
+| `VARDE_EGRESS_ALLOWLIST` | unset | Comma-separated host names; when set, every outbound request to another host is refused. Direct mode needs `api.github.com`, `www.cisa.gov`, `api.first.org`, plus `api.osv.dev` / `services.nvd.nist.gov` / `endoflife.date` when enabled, the hosts of the package vulnerability data (`security-tracker.debian.org`, `security-metadata.canonical.com`, `secdb.alpinelinux.org`, `packages.wolfi.dev`, `packages.cgr.dev`, `osv-vulnerabilities.storage.googleapis.com`) unless `VARDE_VULNDB=false`, and `discord.com` / `api.telegram.org` for those channels. Add the hosts of your ntfy, Gotify, webhook and SMTP endpoints, and with registry versions on the registries your images come from (`registry-1.docker.io`, `auth.docker.io`, `ghcr.io`, `lscr.io`, `quay.io`, ...). |
 | `VARDE_CA_BUNDLE_FILE` | unset | PEM file with additional CA certificates (TLS-inspecting proxies, private mirrors). Used by every outbound client: advisory sources, notification channels and registries. |
 | `VARDE_HOST_ADDRESS` | unset | Comma-separated IP addresses of the machine Varde runs on, in your network. In a container Varde only sees its bridge address; with this set, "this host" and the device the network scan finds for it are one machine, and agent installs default to this address. |
 | `VARDE_PUBLIC_DOMAINS` | unset | Comma-separated domain suffixes reachable from the internet. A Traefik router serving such a host marks the container `public`. |
@@ -412,6 +413,38 @@ advisories of the project's GitHub repository.
 - **What always wins.** A reviewed catalog entry and the image's own source label.
 
 The inventory marks such apps "recognised automatically" and says what the recognition rests on.
+
+## Package vulnerability data
+
+Varde checks every package it reads, of hosts and of container images, against the complete
+security data of its distribution or ecosystem (ADR 0047). With `VARDE_VULNDB` on (the default)
+it downloads, for the releases and ecosystems present:
+
+| Packages | Dataset | Host |
+|---|---|---|
+| Debian 12, 13, 14 | Debian security tracker, all releases in one file | `security-tracker.debian.org` |
+| Ubuntu | Canonical's package OVAL of the release | `security-metadata.canonical.com` |
+| Alpine | secdb of the release, `main` and `community` | `secdb.alpinelinux.org` |
+| Wolfi, Chainguard | their secdb files | `packages.wolfi.dev`, `packages.cgr.dev` |
+| Go, PyPI, Maven, crates.io, RubyGems, Packagist, NuGet, AlmaLinux, Rocky Linux, openSUSE, RHEL | osv.dev's export of the ecosystem | `osv-vulnerabilities.storage.googleapis.com` |
+| Severity for records without one | Canonical's CVE data of the newest LTS release (NVD scores) | `security-metadata.canonical.com` |
+
+- **What a request reveals.** Every installation downloads the same whole files. A host learns
+  that some system uses a release or an ecosystem, as the package manager of that system tells
+  its mirror anyway; no request names a package or a version.
+- **How often.** Each file is checked once a day with a conditional request and converted into
+  a compact cache under `<VARDE_DATA_DIR>/vulndb` (20 to 60 MB for a typical host). When the
+  inventory changes, Varde selects the records of the new packages from the cache without a
+  request. The cache is not part of a backup; it is downloaded again when missing.
+- **What is not covered.** npm packages (osv.dev's export is too large to fetch daily) and
+  Ubuntu kernels; with `VARDE_DIRECT_OSV` on they are asked from osv.dev. Debian releases past
+  their long-term support are no longer in the tracker. Ubuntu's data names fixed issues only.
+- **When a download fails.** The records of that dataset stay as they were, and Settings ›
+  Package vulnerability data shows the error and the next attempt.
+- **Switching it off.** `VARDE_VULNDB=false` or the switch in Settings. Packages are then
+  checked only with `VARDE_DIRECT_OSV` on. With `VARDE_EGRESS_ALLOWLIST` set, add the hosts above.
+- **Trust.** The files come over TLS from their publishers; they are not signed by the project.
+  See the [threat model](threat-model.md).
 
 ## The data package
 

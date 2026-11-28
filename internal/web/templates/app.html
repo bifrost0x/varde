@@ -30,7 +30,17 @@
   {{else if $c.Command}}
   <div class="secret"><pre id="app-cmd" class="mono install">{{$c.Command}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
   {{end}}
-  {{with $c.Mitigation}}
+  {{with $c.Mitigation}}{{if .Local}}
+  <p class="small">The image was built on this host from a Dockerfile, not pulled from a registry: no maker publishes a fixed one. A rebuild with the newest base image and current packages fixes what the distribution has fixed.</p>
+  <ol class="howto">
+    {{if .Rebuild}}<li>Run{{with $c.Compose}}{{if .Dir}} in <span class="mono">{{.Dir}}</span>{{end}}{{end}}:
+      <div class="secret"><pre id="app-rebuild" class="mono install">{{.Rebuild}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-rebuild"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
+      <span class="cell-sub"><code>--pull</code> fetches the newest base image, <code>--no-cache</code> runs the package installs of the Dockerfile again.</span></li>
+    {{else}}<li>Build the image again with <code>docker build --pull --no-cache</code> from its Dockerfile and recreate the container.</li>{{end}}
+    {{if .Dockerfile}}<li>If the Dockerfile pins old package versions or an old base image, raise them first{{if .Distro}}; or add <code>RUN</code> with the {{.Distro}} upgrade to it:<span class="cell-sub mono">{{.Dockerfile}}</span>{{end}}.</li>{{end}}
+    <li>{{.Recheck}}</li>
+  </ol>
+  {{else}}
   <p class="small">Pulling the image again changes nothing until a fixed image is published. Until then:</p>
   <ol class="howto">
     {{if .Exposed}}<li><strong>Limit who can reach it.</strong> Remove the published port, or put the container behind your reverse proxy's authentication or a VPN.</li>{{end}}
@@ -42,7 +52,7 @@
       <span class="cell-sub">The flaws stop notifying and come back by themselves once an image fixes them, or after 180 days.</span></li>{{end}}
   </ol>
   <p class="small muted">{{.Recheck}}</p>
-  {{end}}
+  {{end}}{{end}}
   {{else}}
   <p class="lead"><strong>Nothing.</strong></p>
   <p class="small">{{if eq $c.State "ok"}}Varde compared this version with the advisories of the project and found none that applies.{{else}}{{$c.Note}}.{{end}}</p>
@@ -65,14 +75,33 @@
 </section>
 </div>
 
-{{if $d.Flaws}}
-<section class="panel" aria-labelledby="flaws-title">
-  <div class="panel__head"><h2 id="flaws-title">The flaws behind it <span class="muted">({{$c.Count}})</span></h2><a class="small" href="/findings?workload={{$c.Key}}">All with filters</a></div>
-  <p class="small muted">You do not need to read these to update. Each opens with its evidence: the advisory, the affected versions and where Varde knows your version from.</p>
-  <ul class="flaws">{{range $d.Flaws}}
-    <li class="flaw flaw--{{.State}}"><span class="app__dot app__dot--{{.State}}" aria-hidden="true"></span><a href="/findings/{{.ID}}">{{if .Summary}}{{truncate .Summary 110}}{{else}}{{.Advisory}}{{end}}</a><span class="cell-sub"><span class="mono">{{.Advisory}}</span>{{if .Severity}} · {{.Severity}}{{end}}{{if .Exploited}} · known to be exploited{{end}}{{if .Fixed}} · fixed in <span class="mono">{{.Fixed}}</span>{{else if eq .State "check"}} · Varde cannot confirm it{{else}} · no fix yet{{end}}</span></li>
-  {{end}}</ul>
-  {{if $d.Hidden}}<p class="small"><a href="/findings?workload={{$c.Key}}">{{$d.Hidden}} more</a></p>{{end}}
+{{with $d.Report}}{{if .Packages}}{{$r := .}}
+<section class="panel report" aria-labelledby="report-title">
+  <div class="panel__head"><h2 id="report-title">Security report</h2>
+    <p class="small actions"><a href="/apps/{{$c.Key}}/report.csv" download>Download as CSV</a><a href="/findings?workload={{$c.Key}}">All with filters</a></p></div>
+  {{if .Total}}
+  <p class="report__lead"><strong>{{plural .Total "flaw"}}</strong> in {{plural (len .Packages) "package"}}{{if .Exploited}}, <strong class="report__kev">{{.Exploited}} known to be exploited</strong>{{end}}. {{if eq .Fixable .Total}}A fixed version exists for every one.{{else if .Fixable}}A fixed version exists for {{.Fixable}} of them; the rest have no fix yet.{{else}}None has a fixed version yet.{{end}}</p>
+  <svg class="sevbar" viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label="Flaws by severity">{{range .Counts}}<rect class="sevbar__{{.Severity}}" x="{{.Offset}}" width="{{.Width}}" height="6"></rect>{{end}}</svg>
+  <ul class="sevcounts">{{range .Counts}}<li><span class="sev sev--{{.Severity}}">{{.Severity}}</span> <strong>{{.N}}</strong></li>{{end}}</ul>
+  {{end}}
+  {{if .Unconfirmed}}<p class="small muted">{{plural .Unconfirmed "more advisory"}} Varde cannot confirm for the version running {{if eq .Unconfirmed 1}}is{{else}}are{{end}} listed with {{if eq .Unconfirmed 1}}its package{{else}}their packages{{end}}, marked "check yourself".</p>{{end}}
+  <div class="report__table" role="table" aria-label="Packages with flaws">
+    <div class="report__row report__row--head" role="row"><span role="columnheader">Package</span><span role="columnheader">Installed</span><span role="columnheader">Fixed in</span><span role="columnheader">Flaws</span></div>
+    {{range .Packages}}
+    <details class="report__pkg">
+      <summary class="report__row" role="row">
+        <span class="report__name" role="cell"><strong>{{.Name}}</strong><span class="cell-sub">{{.Kind}}</span></span>
+        <span class="mono report__ver" role="cell">{{if .Installed}}{{.Installed}}{{else}}<span class="muted">unknown</span>{{end}}</span>
+        <span class="mono report__ver" role="cell">{{if .FixedIn}}{{.FixedIn}}{{else}}<span class="muted">no fix yet</span>{{end}}{{if and .FixedIn .Unfixed}}<span class="cell-sub">{{.Unfixed}} without a fix</span>{{end}}</span>
+        <span class="report__count" role="cell">{{if .KEV}}<span class="badge badge--kev">exploited</span> {{end}}<span class="sev sev--{{.Worst}}">{{.Worst}}</span> {{len .Flaws}}</span>
+      </summary>
+      <ul class="flaws">{{range .Flaws}}
+        <li class="flaw"><span class="sev sev--{{.Severity}}">{{if eq .State "unverified"}}check{{else}}{{.Severity}}{{end}}</span><a href="/findings/{{.FindingID}}"><span class="mono">{{.ID}}</span>{{if .Summary}} · {{truncate .Summary 140}}{{end}}</a><span class="cell-sub">{{if .CVSS}}CVSS {{printf "%.1f" .CVSS}} · {{end}}{{if .KEV}}known to be exploited · {{end}}{{if .Fixed}}fixed in <span class="mono">{{.Fixed}}</span>{{else if eq .State "unverified"}}Varde cannot confirm it{{else}}no fix yet{{end}}{{with dataset .Record}} · {{.}}{{end}} · since {{date .FirstSeen}}</span></li>
+      {{end}}</ul>
+    </details>
+    {{end}}
+  </div>
+  <p class="small muted">A package's line opens its flaws; each flaw opens its evidence: the record, the affected versions and where Varde read your version.</p>
 </section>
-{{end}}
+{{end}}{{end}}
 {{end}}

@@ -9,6 +9,8 @@ package pipeline
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -237,6 +239,10 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 		}
 	}
 	sum.ImagePackages = len(images)
+	checks := packageChecks(ws, images, pkgs)
+	for i := range results {
+		results[i].Packages = checks[results[i].WorkloadID]
+	}
 	all := make(map[string]*catalog.App, len(appSet)+len(systemApps))
 	for id, a := range appSet {
 		all[id] = a
@@ -276,7 +282,7 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 		return Summary{}, err
 	}
 
-	p.updateApps(appSet)
+	p.updateApps(appSet, systemApps)
 	if p.Covered != nil {
 		p.Covered(ctx, ws, results)
 	}
@@ -627,16 +633,23 @@ func seenVersions(results []identify.Result, images []imageTarget, read map[stri
 	return seen
 }
 
-func (p *Pipeline) updateApps(set map[string]*catalog.App) {
-	ids := make([]string, 0, len(set))
+// updateApps keeps the catalog apps of the run, and reports a changed set of
+// apps or of checked packages: either needs advisory data fetched, the
+// packages' records selected from the vulnerability datasets (ADR 0047).
+func (p *Pipeline) updateApps(set, packages map[string]*catalog.App) {
+	ids := make([]string, 0, len(set)+len(packages))
 	apps := make([]*catalog.App, 0, len(set))
 	for id, a := range set {
 		ids = append(ids, id)
 		apps = append(apps, a)
 	}
+	for id := range packages {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
 	sort.Slice(apps, func(i, j int) bool { return apps[i].ID < apps[j].ID })
-	key := strings.Join(ids, ",")
+	sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
+	key := hex.EncodeToString(sum[:])
 	changed := key != p.lastApps
 	p.lastApps, p.apps = key, apps
 	if changed && p.AppsChanged != nil {
@@ -672,11 +685,11 @@ func (p *Pipeline) RunLogged(ctx context.Context) {
 // Catalog returns the live catalog holder shared with the UI.
 func (p *Pipeline) Catalog() *catalog.Live { return p.cat }
 
-// feedAlone is the default of Pipeline.Superseded: an app whose catalog
+// FeedAlone is the default of Pipeline.Superseded: an app whose catalog
 // entry comes from the feed is judged by the feed alone. The direct sources
 // stop refreshing it (hybrid mode), so their earlier records would go stale
 // and keep findings open.
-func feedAlone(app *catalog.App, source string) bool {
+func FeedAlone(app *catalog.App, source string) bool {
 	return app != nil && app.Origin == catalog.OriginFeed && source != store.FeedSource
 }
 
@@ -715,7 +728,7 @@ func (p *Pipeline) Advisories(app *catalog.App, recs []store.AdvisoryRecord) []m
 // The records stay stored and count again when that changes.
 func AdvisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded func(*catalog.App, string) bool) []match.Advisory {
 	if superseded == nil {
-		superseded = feedAlone
+		superseded = FeedAlone
 	}
 	out := make([]match.Advisory, 0, len(recs))
 	for _, r := range recs {
@@ -723,6 +736,47 @@ func AdvisoriesFor(app *catalog.App, recs []store.AdvisoryRecord, superseded fun
 			continue
 		}
 		out = append(out, match.Advisory{Source: r.Source, Vuln: r.Vuln, CVSS: r.CVSS, SeverityLabel: r.SeverityLabel})
+	}
+	return out
+}
+
+// packageChecks says per container what of its image's packages was read
+// and is compared with security data, and why nothing was read.
+func packageChecks(ws []inventory.Workload, images []imageTarget, pkgs map[store.ImageRef]inventory.ImagePackages) map[string]*identify.PackageCheck {
+	out := map[string]*identify.PackageCheck{}
+	for _, t := range images {
+		pc := out[t.workloadID]
+		if pc == nil {
+			pc = &identify.PackageCheck{Ecosystems: map[string]int{}}
+			out[t.workloadID] = pc
+		}
+		pc.Count++
+		pc.Ecosystems[t.pkg.Ecosystem]++
+	}
+	for _, w := range ws {
+		c := w.Container
+		if c == nil || w.RemovedAt != nil {
+			continue
+		}
+		ip, ok := pkgs[store.ImageRef{ImageID: c.ImageID, HostID: w.HostID}]
+		note := ""
+		switch {
+		case !ok:
+			note = "the packages of its image have not been read yet"
+		case ip.Error != "":
+			note = ip.Error
+		case ip.Partial:
+			note = "the package lists of its image were read only in part"
+		case ip.Distro == "" && out[w.ID] == nil:
+			note = "its image has no package database Varde reads"
+		}
+		if note == "" {
+			continue
+		}
+		if out[w.ID] == nil {
+			out[w.ID] = &identify.PackageCheck{}
+		}
+		out[w.ID].Note = note
 	}
 	return out
 }
