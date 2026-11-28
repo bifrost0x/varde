@@ -470,3 +470,37 @@ func TestUse(t *testing.T) {
 		}
 	}
 }
+
+// An error of the engine for one container (rootless Docker cannot export
+// from a container with a read-only root file system and a read-only bind
+// mount) is that image's alone: the other images are still read.
+func TestPackageReaderOneContainerFails(t *testing.T) {
+	f, srv := newFakeEngine(t)
+	col := newTestCollector(t, srv.URL)
+	ok := files(t, map[string]string{idB + "/lib/apk/db/installed": "P:busybox\nV:1.37.0-r18\n"})
+	f.archive = func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, idA) {
+			http.Error(w, `{"message":"remount-ro ...: operation not permitted"}`, http.StatusInternalServerError)
+			return
+		}
+		ok(w, r)
+	}
+	f.extra = func(w http.ResponseWriter, r *http.Request) bool {
+		if strings.HasSuffix(r.URL.Path, "/changes") {
+			_, _ = w.Write([]byte(`[]`))
+			return true
+		}
+		return false
+	}
+	st := &memPackages{m: map[string]inventory.ImagePackages{}}
+	col.Packages = &PackageReader{Store: st, Now: time.Now}
+	if _, err := col.List(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if a := st.m[imgA]; a.Error == "" {
+		t.Errorf("image a: the failure is not recorded: %+v", a)
+	}
+	if b := st.m[imgB]; b.Error != "" || len(b.Packages) != 1 {
+		t.Errorf("image b not read after image a failed: %+v", b)
+	}
+}
