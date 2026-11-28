@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path"
 	"slices"
 	"sort"
@@ -125,9 +126,10 @@ func (r *PackageReader) Read(ctx context.Context, client *Client, summaries []Co
 			r.log().Warn("image packages not recorded", "err", err)
 			return
 		}
-		if p.Error != "" && !errors.Is(err, errChangedEverywhere) && !errors.Is(err, ErrNoPackageDatabase) {
-			// A refusal (a socket proxy without archive access) applies to
-			// every container; the next sync tries again.
+		if p.Error != "" && refusedForAll(err) {
+			// A refusal (a socket proxy without archive access) or an
+			// engine Varde cannot reach applies to every container; the
+			// next sync tries again.
 			break
 		}
 		if p.Error != "" {
@@ -409,4 +411,24 @@ func due(k inventory.ImagePackages, now time.Time) bool {
 		wait = packagesRetry
 	}
 	return now.Sub(k.Read) >= wait
+}
+
+// refusedForAll reports whether a failed read would fail for every
+// container alike: the engine or its proxy refused the archive endpoint,
+// or did not answer. Any other answer (an error of the engine for one
+// container, such as a read-only root file system rootless Docker cannot
+// export from) concerns that image alone, and the round goes on.
+func refusedForAll(err error) bool {
+	if err == nil || errors.Is(err, errChangedEverywhere) || errors.Is(err, ErrNoPackageDatabase) {
+		return false
+	}
+	var se *StatusError
+	if errors.As(err, &se) {
+		switch se.Status {
+		case http.StatusUnauthorized, http.StatusForbidden, http.StatusMethodNotAllowed:
+			return true
+		}
+		return false
+	}
+	return true
 }
