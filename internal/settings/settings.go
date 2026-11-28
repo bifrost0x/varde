@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -369,10 +368,4 @@ func (e Effective) PackagesChecked() bool { return e.VulnDB || e.DirectOSV }
 // WebSSHURL checks the address of a WebSSH installation: an absolute http
 // or https URL without credentials, a query or a fragment, which the pages
 // put into a link.
-func WebSSHURL(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(raw) > 512 {
-		return errors.New("webssh_url must be an http(s) address such as https://webssh.example.lan, without credentials")
-	}
-	return nil
-}
+func WebSSHURL(raw string) error { return config.WebSSHURL(raw) }

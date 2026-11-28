@@ -361,7 +361,9 @@ func Load(lookup LookupFunc) (Config, error) {
 	}
 	l.str("WEBSSH_URL", &cfg.WebSSHURL)
 	if cfg.WebSSHURL != "" {
-		l.httpURL("WEBSSH_URL", cfg.WebSSHURL)
+		if err := WebSSHURL(cfg.WebSSHURL); err != nil {
+			l.fail("WEBSSH_URL", err)
+		}
 	}
 	l.notify(&cfg.Notify)
 
@@ -511,6 +513,17 @@ func (l *loader) domains(name string) []string {
 		out = append(out, d)
 	}
 	return out
+}
+
+// WebSSHURL checks the address of a WebSSH installation: http(s), with a
+// host and without credentials, query or fragment, since Varde opens it as
+// it is next to a command.
+func WebSSHURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(raw) > 512 {
+		return errors.New("webssh_url must be an http(s) address such as https://webssh.example.lan, without credentials")
+	}
+	return nil
 }
 
 // httpURL validates an absolute http(s) URL without credentials.

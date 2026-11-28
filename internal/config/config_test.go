@@ -320,3 +320,15 @@ func TestPackageURLs(t *testing.T) {
 		t.Fatal("http mirror accepted")
 	}
 }
+
+func TestWebSSHURL(t *testing.T) {
+	for _, bad := range []string{"javascript:alert(1)", "https://u:p@webssh.lan", "https://webssh.lan/?a=1", "https://webssh.lan/#x", "webssh.lan"} {
+		if _, err := Load(lookupFrom(map[string]string{"VARDE_WEBSSH_URL": bad})); err == nil {
+			t.Errorf("VARDE_WEBSSH_URL=%q accepted", bad)
+		}
+	}
+	cfg, err := Load(lookupFrom(map[string]string{"VARDE_WEBSSH_URL": "https://webssh.lan/ssh"}))
+	if err != nil || cfg.WebSSHURL != "https://webssh.lan/ssh" {
+		t.Errorf("valid address: %v %q", err, cfg.WebSSHURL)
+	}
+}

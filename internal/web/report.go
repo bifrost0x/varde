@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/distro"
@@ -350,11 +351,25 @@ func (a *app) reportCSV(w http.ResponseWriter, r *http.Request, cur *auth.Curren
 // text and package names come from upstream and must not execute.
 func csvRow(cells ...string) []string {
 	for i, c := range cells {
-		if c != "" && strings.ContainsRune("=+-@\t\r", rune(c[0])) {
+		if formulaLike(c) {
 			cells[i] = "'" + c
 		}
 	}
 	return cells
+}
+
+// formulaLike reports whether a spreadsheet could read s as a formula:
+// it starts with a control character, or with a formula character (also
+// in full width) after any spaces, which some importers drop.
+func formulaLike(s string) bool {
+	if s == "" {
+		return false
+	}
+	if strings.ContainsRune("\t\r\n", rune(s[0])) {
+		return true
+	}
+	r, _ := utf8.DecodeRuneInString(strings.TrimLeft(s, " "))
+	return strings.ContainsRune("=+-@\uff1d\uff0b\uff0d\uff20", r)
 }
 
 // safeFilename keeps the characters a download name may hold.

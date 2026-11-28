@@ -368,14 +368,17 @@ func compose(labels map[string]string) *Compose {
 	return c
 }
 
-// plainPath accepts an absolute Unix or Windows path without control or
-// shell characters.
+// plainPath accepts an absolute Unix or Windows path of printable ASCII
+// without shell characters. Anything beyond ASCII is refused: PowerShell
+// also ends a quoted string at the typographic quotes (U+2018 to U+201B),
+// and bidirectional controls would make the command read differently
+// from what runs.
 func plainPath(p string) bool {
 	if p == "" || len(p) > 512 || (!strings.HasPrefix(p, "/") && !windowsPath.MatchString(p)) {
 		return false
 	}
 	for _, r := range p {
-		if r < 0x20 || r == 0x7f || strings.ContainsRune("`$;&|<>\"'*?!\n", r) && r != '\\' {
+		if r < 0x20 || r >= 0x7f || strings.ContainsRune("`$;&|<>\"'*?!\n", r) && r != '\\' {
 			return false
 		}
 	}

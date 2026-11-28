@@ -359,3 +359,16 @@ func TestSnoozedFlawsLeaveTheUpdates(t *testing.T) {
 		}
 	}
 }
+
+func TestDerivedImageRefusesHostileConfig(t *testing.T) {
+	if _, df := derivedImage("nginx:1.27", "Debian:12", "1000\nCOPY . /ctx"); df != "" {
+		t.Errorf("a user with a line break reached the Dockerfile:\n%s", df)
+	}
+	if _, df := derivedImage("nginx:1.27\nCOPY . /ctx", "Debian:12", ""); df != "" {
+		t.Errorf("a reference with a line break reached the Dockerfile:\n%s", df)
+	}
+	_, df := derivedImage("ghcr.io/acme/app:1.2", "Debian:12", "app:app")
+	if !strings.Contains(df, "FROM ghcr.io/acme/app:1.2\n") || !strings.HasSuffix(df, "USER app:app\n") {
+		t.Errorf("valid image refused or changed:\n%s", df)
+	}
+}
