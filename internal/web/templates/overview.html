@@ -60,7 +60,7 @@
 
 {{range $d.Sections}}
 <section class="appsection" id="{{.State}}" aria-labelledby="sec-{{.State}}">
-  <div class="appsection__head"><h2 id="sec-{{.State}}">{{.Title}} <span class="muted">({{len .Cards}})</span></h2>{{if .Text}}<p class="small muted">{{.Text}}</p>{{end}}</div>
+  <div class="appsection__head"><h2 id="sec-{{.State}}">{{.Title}} <span class="muted">({{.Count}})</span></h2>{{if .Text}}<p class="small muted">{{.Text}}</p>{{end}}</div>
   {{if .Compact}}<ul class="approws">{{range .Cards}}{{template "approw" .}}{{end}}</ul>
   {{else}}<div class="apps">{{range .Cards}}{{template "appcard" .}}{{end}}</div>{{end}}
 </section>

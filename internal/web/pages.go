@@ -390,7 +390,7 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request, cur *auth.Current
 	d.SetupHidden = a.setupHidden(ctx)
 	// Notifications and HTTPS are steps of the guide here, not banners.
 	cards := a.appCards(s)
-	d.Apps, d.Sections = countApps(cards), appSections(cards)
+	d.Apps, d.Sections = countApps(cards), appSections(mergeSameImage(cards, s))
 	v := view{Title: "Apps", Nav: "overview", Tabs: tabs("systems", "/"), Data: d, OwnSecurityNote: true}
 	a.page(w, r, cur, http.StatusOK, "overview", v)
 }

@@ -90,6 +90,9 @@ type appCard struct {
 	// severities present; Exploited those known to be exploited.
 	Sev       []sevCount
 	Exploited int
+	// Others are further containers of the same image on the front page,
+	// which the same update fixes; the card stands for all of them.
+	Others []string
 	// Release says which flaws in the image's packages the newest release
 	// of the app fixes, Groups are the app and package versions behind
 	// the card; both are set on the list of updates only.
@@ -593,6 +596,49 @@ type appSection struct {
 	Cards              []appCard
 	// Compact lists the cards as rows without an action.
 	Compact bool
+}
+
+// Count is the number of apps the section's cards stand for: a card of
+// several containers of one image counts each, as the chips above do.
+func (s appSection) Count() int {
+	n := 0
+	for _, c := range s.Cards {
+		n += 1 + len(c.Others)
+	}
+	return n
+}
+
+// mergeSameImage folds the cards of containers that run the same image and
+// need the same update into one card: one image, one thing to do. Commands
+// name a Compose service; a merged card keeps them only when all agree.
+func mergeSameImage(cards []appCard, s *snapshot) []appCard {
+	out := make([]appCard, 0, len(cards))
+	first := map[string]int{}
+	for _, c := range cards {
+		wl, ok := s.byID[c.Key]
+		if !ok || wl.Container == nil || wl.Container.ImageID == "" || c.Count == 0 {
+			out = append(out, c)
+			continue
+		}
+		key := wl.HostID + "\x00" + wl.Container.ImageID + "\x00" + c.State + "\x00" + c.Action + "\x00" + strconv.Itoa(c.Count)
+		i, seen := first[key]
+		if !seen {
+			first[key] = len(out)
+			out = append(out, c)
+			continue
+		}
+		m := &out[i]
+		m.Others = append(m.Others, wl.Name)
+		if m.Command != c.Command {
+			m.Command = ""
+		}
+		if m.Mitigation != nil && c.Mitigation != nil && m.Mitigation.Rebuild != c.Mitigation.Rebuild {
+			mit := *m.Mitigation
+			mit.Rebuild = ""
+			m.Mitigation = &mit
+		}
+	}
+	return out
 }
 
 // appSections groups the cards for the front page: what needs doing, each

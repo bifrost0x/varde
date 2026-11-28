@@ -135,6 +135,7 @@
     <div class="app__title"><a href="{{.Href}}"><strong>{{.Name}}</strong></a>{{if .Version}} <span class="mono">{{.Version}}</span>{{end}}<span class="app__sub">{{.Sub}}</span></div>
     <span class="app__state">{{.Label}}</span>
   </header>
+  {{if .Others}}<p class="small muted">The same image runs {{plural (len .Others) "more container"}}: {{join .Others ", "}}. One update fixes all of them.</p>{{end}}
   {{if .Why}}<p class="app__why">{{.Why}}</p>{{end}}
   <p class="app__action"><strong>{{.Action}}</strong>{{if .Fixes}} <span class="muted">· {{.Fixes}}</span>{{end}}</p>
   {{if .Introduced}}<p class="small">It {{.Introduced}}.</p>{{end}}

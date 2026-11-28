@@ -145,3 +145,27 @@ func TestReportCSV(t *testing.T) {
 		t.Errorf("formula not neutralised: %q", rows[1][14])
 	}
 }
+
+// Containers of one image that need the same update are one card on the
+// front page; a different image or another update keeps its own.
+func TestMergeSameImage(t *testing.T) {
+	wl := func(id, name, image string) inventory.Workload {
+		return inventory.Workload{ID: id, Name: name, HostID: "h", Container: &inventory.Container{ImageID: image}}
+	}
+	s := &snapshot{byID: map[string]inventory.Workload{
+		"a": wl("a", "ssh-bastion", "sha256:1"), "b": wl("b", "ssh-inner", "sha256:1"), "c": wl("c", "ldap", "sha256:2"), "d": wl("d", "ts", "sha256:1"),
+	}}
+	cards := []appCard{
+		{Key: "a", State: appLater, Action: "Rebuild the image", Count: 6, Command: "docker compose build 'ssh-bastion'"},
+		{Key: "b", State: appLater, Action: "Rebuild the image", Count: 6, Command: "docker compose build 'ssh-inner'"},
+		{Key: "c", State: appLater, Action: "Rebuild the image", Count: 6},
+		{Key: "d", State: appSoon, Action: "Rebuild the image", Count: 6},
+	}
+	got := mergeSameImage(cards, s)
+	if len(got) != 3 || got[0].Key != "a" || strings.Join(got[0].Others, ",") != "ssh-inner" {
+		t.Fatalf("merged %+v", got)
+	}
+	if got[0].Command != "" {
+		t.Error("a command naming one service must not stand for another")
+	}
+}
