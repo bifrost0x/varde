@@ -813,7 +813,8 @@ func platformOf(c *inventory.Container) string {
 }
 
 // imageRefPattern accepts the image references a command may name.
-var imageRefPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._/:@-]{0,255}$`)
+// The reference must also parse (imageref): tags may hold upper case.
+var imageRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,255}$`)
 
 // fitCommand makes the card's command fit what deployed the container: a
 // Portainer stack and Unraid are updated in their own interface, with no
@@ -834,7 +835,7 @@ func (c *appCard) fitCommand() {
 			ref = c.Image
 		}
 		c.Command = ""
-		if ref != "" && imageRefPattern.MatchString(ref) {
+		if _, err := imageref.Parse(ref); err == nil && imageRefPattern.MatchString(ref) {
 			c.Command = "docker pull " + ref
 		}
 	}

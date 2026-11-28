@@ -189,8 +189,13 @@ func buildReport(fs []store.Finding, appName string) report {
 		}
 		p.Flaws = append(p.Flaws, fl)
 		if f.State == store.StateSnoozed {
+			// Put aside, not counted; the package still says what fixes
+			// every flaw it lists.
 			r.Snoozed++
 			p.Snoozed++
+			if f.MatchState == string(match.Affected) {
+				p.addFix(eco, f.FixedIn)
+			}
 			continue
 		}
 		if f.MatchState != string(match.Affected) {
@@ -206,14 +211,10 @@ func buildReport(fs []store.Finding, appName string) report {
 		if severityRank(sev) > severityRank(p.Worst) {
 			p.Worst = sev
 		}
-		if f.FixedIn == "" {
-			p.Unfixed++
-			continue
+		if f.FixedIn != "" {
+			r.Fixable++
 		}
-		r.Fixable++
-		if p.FixedIn == "" || newer(eco, f.FixedIn, p.FixedIn) {
-			p.FixedIn = f.FixedIn
-		}
+		p.addFix(eco, f.FixedIn)
 	}
 	for _, k := range order {
 		p := byKey[k]
@@ -391,4 +392,16 @@ func machineOf(s *snapshot, hostID string) (name, address string) {
 		address = m.Addresses[0]
 	}
 	return m.Name, address
+}
+
+// addFix takes a flaw's fixed version into the package's: the highest
+// fixed version, or one more flaw without a fix.
+func (p *reportPackage) addFix(ecosystem, fixed string) {
+	if fixed == "" {
+		p.Unfixed++
+		return
+	}
+	if p.FixedIn == "" || newer(ecosystem, fixed, p.FixedIn) {
+		p.FixedIn = fixed
+	}
 }

@@ -252,8 +252,12 @@ type hostFix struct {
 	Host, Address, WebSSH string
 }
 
-// lxcGuestID reads the VMID of a Proxmox guest record ("pve-3-105").
-var lxcGuestID = regexp.MustCompile(`^pve-[^-]+-(\d{1,9})$`)
+// Proxmox guest records: the API's ("pve-3-105", with its node as parent)
+// and the node inventory's, which holds the package list ("pvelxc-3-105").
+var (
+	apiGuestID  = regexp.MustCompile(`^pve-.+-(\d{1,9})$`)
+	nodeGuestID = regexp.MustCompile(`^pvelxc-.+-(\d{1,9})$`)
+)
 
 // hostFix builds the command that installs exactly the updates the flaws
 // of the system packages on hosts need: the installed packages built from
@@ -305,12 +309,14 @@ func (a *app) hostFix(ctx context.Context, s *snapshot, m coverage.Machine) (*ho
 				f.Packages = append(f.Packages, p.Name)
 			}
 		}
-		if host, err := a.d.Store.Host(ctx, h); err == nil && host.Kind == inventory.HostProxmoxGuest && strings.Contains(strings.ToLower(host.OS), "lxc") {
-			if mm := lxcGuestID.FindStringSubmatch(host.ID); mm != nil {
-				guest, _ = strconv.Atoi(mm[1])
-				if node, err := a.d.Store.Host(ctx, host.ParentID); err == nil {
-					f.Node = node.Name
-				}
+	}
+	// The guest and its node come from whichever records of the machine
+	// know them, not only from the one with the package list.
+	for _, h := range m.HostIDs {
+		if vmid, node := a.lxcGuest(ctx, s, h); vmid > 0 {
+			guest = vmid
+			if node != "" {
+				f.Node = node
 			}
 		}
 	}
@@ -334,4 +340,32 @@ func (a *app) hostFix(ctx context.Context, s *snapshot, m coverage.Machine) (*ho
 func kernelImage(name string) bool {
 	rest, ok := strings.CutPrefix(name, "linux-image-")
 	return ok && rest != ""
+}
+
+// lxcGuest reads the VMID of an LXC container from a host record of it and
+// names its Proxmox node where the record tells: the API's record has the
+// node as parent; the node inventory's names the node by the address its
+// integration connects to.
+func (a *app) lxcGuest(ctx context.Context, s *snapshot, hostID string) (vmid int, node string) {
+	host, err := a.d.Store.Host(ctx, hostID)
+	if err != nil || host.Kind != inventory.HostProxmoxGuest {
+		return 0, ""
+	}
+	if mm := nodeGuestID.FindStringSubmatch(host.ID); mm != nil {
+		vmid, _ = strconv.Atoi(mm[1])
+		for _, in := range s.integrations {
+			if in.ID == host.IntegrationID {
+				node = in.Address
+			}
+		}
+		return vmid, node
+	}
+	if mm := apiGuestID.FindStringSubmatch(host.ID); mm != nil && strings.Contains(strings.ToLower(host.OS), "lxc") {
+		vmid, _ = strconv.Atoi(mm[1])
+		if n, err := a.d.Store.Host(ctx, host.ParentID); err == nil {
+			node = n.Name
+		}
+		return vmid, node
+	}
+	return 0, ""
 }

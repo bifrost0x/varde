@@ -13,6 +13,7 @@ import (
 
 	"github.com/bifrost0x/varde/internal/catalog"
 	"github.com/bifrost0x/varde/internal/inventory"
+	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/pipeline"
 	"github.com/bifrost0x/varde/internal/remedy"
 	"github.com/bifrost0x/varde/internal/settings"
@@ -192,4 +193,91 @@ func TestFixForDistributionPackage(t *testing.T) {
 	}
 	_, text := appPageText(t, h, inventory.WorkloadID("ssh-web", inventory.KindPackage, "dpkg:nginx"))
 	mustContain(t, "app page", text, "sudo sh -c 'apt-get update && apt-get install --only-upgrade nginx'", "Run it on web")
+}
+
+// A container read through the node's key: its package list is on the
+// node inventory's record ("pvelxc-…"), which names no parent; the node is
+// the address its integration connects to.
+func TestHostFixNodeInventoryLXC(t *testing.T) {
+	h := newHarness(t)
+	h.signIn(t)
+	ctx, now := t.Context(), time.Now()
+	if err := h.store.CreateIntegration(ctx, store.Integration{ID: "k1", Kind: "proxmox-lxc", Name: "pve", Address: "192.168.1.2", Enabled: true, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.UpsertHost(ctx, inventory.Host{ID: "pvelxc-k1-107", Name: "db", Kind: inventory.HostProxmoxGuest, Source: inventory.SourceNodeInventory,
+		OS: "Debian GNU/Linux 12", IntegrationID: "k1", LastContact: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.ApplySnapshot(ctx, "pvelxc-k1-107", inventory.KindPackage, []inventory.Workload{{Kind: inventory.KindPackage, RuntimeID: "os:dpkg:openssl", Name: "openssl",
+		Package: &inventory.Package{Manager: "dpkg", Name: "openssl", Version: "1", Distro: "debian-12", Source: "openssl", System: true}}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.SetHostPackages(ctx, store.HostPackages{HostID: "pvelxc-k1-107", Distro: "debian-12", Read: now, Packages: []inventory.Package{
+		{Manager: "dpkg", Name: "libssl3", Version: "1", Source: "openssl"}}}); err != nil {
+		t.Fatal(err)
+	}
+	wid := inventory.WorkloadID("pvelxc-k1-107", inventory.KindPackage, "os:dpkg:openssl")
+	if _, err := h.store.SyncFindings(ctx, []store.FindingInput{{WorkloadID: wid, AppID: "os:Debian:12/openssl", AdvisoryID: "DEBIAN-CVE-2026-1", MatchState: "affected", FixedIn: "2"}}, now); err != nil {
+		t.Fatal(err)
+	}
+	_, body := h.do(t, "GET", "/systems", nil, nil)
+	m := regexp.MustCompile(`href="(/systems/[^"#]+)">db</a>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("system db not linked")
+	}
+	_, body = h.do(t, "GET", m[1], nil, nil)
+	mustContain(t, "system page", stripTags(html.UnescapeString(body)), "pct exec 107 -- sh -c 'apt-get update && apt-get install --only-upgrade libssl3'", "Proxmox node 192.168.1.2")
+}
+
+// Without an update that fixes something, a Portainer or Unraid container
+// is not sent to redeploy: the page gives the mitigation.
+func TestNoRedeployWithoutFix(t *testing.T) {
+	for _, labels := range []map[string]string{
+		{"com.docker.compose.project": "chef", "com.docker.compose.service": "cyber-chef", "com.docker.compose.project.working_dir": "/data/compose/3"},
+		{"net.unraid.docker.managed": "dockerman"},
+	} {
+		h := newHarness(t)
+		h.signIn(t)
+		chefLab(t, h, "mpepping/cyberchef:latest", "openssl", &store.UpstreamCheck{HeadDigest: runDigest})
+		ctx := t.Context()
+		ws, err := h.store.Workloads(ctx, store.WorkloadFilter{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := *ws[0].Container
+		c.Labels = labels
+		if _, err := h.store.ApplySnapshot(ctx, "docker", inventory.KindContainer, []inventory.Workload{{Kind: inventory.KindContainer, RuntimeID: "c1", Name: ws[0].Name, Container: &c}}, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		_, text := appPageText(t, h, inventory.WorkloadID("docker", inventory.KindContainer, "c1"))
+		mustContain(t, "app page", text, "No fixed image upstream yet", "Limit who can reach it")
+		mustNotContain(t, "app page", text, "Update the stack", "Force update")
+	}
+}
+
+// Upper case is valid in a tag: the pull command stays.
+func TestFitCommandUpperCaseTag(t *testing.T) {
+	c := appCard{Platform: "run", Line: "image: registry.example/app:V1.2.3", Action: "Update to V1.2.3"}
+	c.fitCommand()
+	if c.Command != "docker pull registry.example/app:V1.2.3" {
+		t.Errorf("command %q", c.Command)
+	}
+	c = appCard{Platform: "run", Line: "image: app:1; rm -rf /"}
+	c.fitCommand()
+	if c.Command != "" {
+		t.Errorf("an invalid reference reached a command: %q", c.Command)
+	}
+}
+
+// A package whose flaws are all snoozed still says what fixes them.
+func TestReportSnoozedKeepsFixedVersion(t *testing.T) {
+	ev := match.Evidence{Package: "Debian:12/vim", Version: "2:9.0-1"}
+	a := reportFinding(t, "os:Debian:12/vim", "DEBIAN-CVE-2026-1", "2:9.0-1+deb12u2", match.Finding{Evidence: ev})
+	b := reportFinding(t, "os:Debian:12/vim", "DEBIAN-CVE-2026-2", "2:9.0-1+deb12u10", match.Finding{Evidence: ev})
+	a.State, b.State = store.StateSnoozed, store.StateSnoozed
+	r := buildReport([]store.Finding{a, b}, "app")
+	if r.Total != 0 || r.Snoozed != 2 || len(r.Packages) != 1 || r.Packages[0].FixedIn != "2:9.0-1+deb12u10" || r.Packages[0].Unfixed != 0 {
+		t.Fatalf("report %+v", r)
+	}
 }

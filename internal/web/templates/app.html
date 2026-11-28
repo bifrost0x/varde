@@ -18,7 +18,7 @@
   <p class="lead"><strong>{{$c.Action}}</strong>{{if $c.Fixes}}<span class="muted"> · {{$c.Fixes}}</span>{{end}}</p>
   {{if $c.Rest}}<p class="small">{{$c.Rest}}.</p>{{end}}
   {{if $c.Introduced}}<p class="small">The new image {{$c.Introduced}}; they are listed once it runs.</p>{{end}}
-  {{if eq $c.Platform "portainer"}}{{with $c.Compose}}
+  {{if and (eq $c.Platform "portainer") (not $c.Mitigation)}}{{with $c.Compose}}
   <ol class="howto">
     <li>In Portainer, open <strong>Stacks › {{.Project}}</strong> and its <strong>Editor</strong>.<span class="cell-sub">Portainer deployed this container as the service <strong>{{.Service}}</strong> of that stack (stack {{.Portainer}}) and keeps its file; a command on the host would not reach it.</span></li>
     {{if $c.Line}}<li>Change the line of the service <strong>{{.Service}}</strong> to:
@@ -27,7 +27,7 @@
     <li>Click <strong>Update the stack</strong> with <strong>Re-pull image and redeploy</strong> switched on.</li>
     <li>Varde sees the new version at the next report and clears what it fixes by itself.</li>
   </ol>{{end}}
-  {{else if eq $c.Platform "unraid"}}
+  {{else if and (eq $c.Platform "unraid") (not $c.Mitigation)}}
   <ol class="howto">
     <li>On Unraid's <strong>Docker</strong> page, click the container's icon.</li>
     {{if $c.Line}}<li>Choose <strong>Edit</strong>, set <strong>Repository</strong> to the line below without <code>image: </code>, and click <strong>Apply</strong>:
