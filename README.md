@@ -34,8 +34,9 @@
 </p>
 
 > [!NOTE]
-> **Pre-release.** The first release is in preparation. The image `ghcr.io/bifrost0x/varde:latest`
-> follows the branch `main` until then; see the [roadmap](docs/roadmap.md) for what is still open.
+> `ghcr.io/bifrost0x/varde:latest` is the newest [release](https://github.com/bifrost0x/varde/releases)
+> (see the [changelog](CHANGELOG.md)); `:edge` follows the branch `main`. The
+> [roadmap](docs/roadmap.md) lists what is still open.
 
 ## Why Varde
 

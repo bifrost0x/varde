@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-28
+
 ### Added
 
 - The exact way to apply each update, in the terms of what deployed it (ADR 0048): a Compose
@@ -16,7 +18,6 @@ All notable changes to this project are documented here. The format follows
   Varde shows these and runs nothing.
 - `VARDE_WEBSSH_URL` (Settings › WebSSH): every command offers **Copy and open WebSSH**, which
   copies it and opens your WebSSH in a new tab to paste it on the host.
-
 - Every package of hosts and container images is checked against complete public vulnerability
   data by default (ADR 0047): the Debian security tracker, Canonical's OVAL data for Ubuntu, the
   secdb files of Alpine, Wolfi and Chainguard, and osv.dev's exports for Go, PyPI, Maven,
@@ -30,62 +31,9 @@ All notable changes to this project are documented here. The format follows
   CVSS score, the dataset of each record and since when it is open. It downloads as CSV.
 - A flaw's page names the CVE instead of a distribution's record ID, the dataset and the date of
   its data, and where its score comes from when the record rates nothing itself.
-
-### Fixed
-
-- A container whose app is not in the catalog counted as "not checked" although the packages of
-  its image were read; the front page could say "All clear" while most containers were never
-  compared. Cards and the overview now say how many packages were checked and why some were not.
-- An image built on the host got "wait for the next release". The card and the pages now say to
-  rebuild it with the newest base image, with the Compose command when it is a service.
-- Snoozing had no effect on the pages: snoozed flaws kept their app among the updates, with their
-  priority and severity. They now leave the front page's updates, the list of updates and the
-  counts; an app whose flaws are all snoozed waits under **Snoozed** with what brings it back, its
-  page lists the flaws marked "snoozed", and **Wake them now** takes the snooze back. The API and
-  the notifications are unchanged.
-- A card whose flaws are serious but unreachable no longer calls them "minor flaws"; cards show
-  their flaws by severity, and containers of one image that need the same update share one card.
-
-- A container with flawed packages in its image no longer gets "Pull a newer image" when no
-  newer image exists (ADR 0045). Varde decides for each such container whether a newer image
-  exists and what it fixes, from the data package and, with registry versions on, from the
-  registry (a `HEAD` request for the running tag, the newest tag of the same variant and major
-  version). It suggests an image only when that image fixes at least one flaw and says how many
-  it fixes and introduces; otherwise the card says "No fixed image upstream yet" or why Varde
-  cannot tell.
-- "Update now" needs an update that fixes an urgent flaw. Urgent flaws without one are under the
-  new state "Mitigate now", still notified at once, with steps to limit the risk: restrict who can
-  reach the container, a Dockerfile that builds the image with the distribution's package
-  updates, or a snooze until a fixed image appears.
-- A flaw known to be exploited in a package of an image is urgent only when the package serves
-  what the container exposes (the program it runs or a library such a program loads). Any other
-  package is "in the image" and at most "update soon"; the card names the package.
-- Notifications about image packages say what Varde knows of a newer image instead of asking to
-  pull one.
-
-### Added
-
 - Settings › Versions: **Read newer images from the registry before suggesting them** (off by
   default) and **Also suggest a new major version of a pinned tag**. `VARDE_UPSTREAM_TTL` sets how
   long a registry answer stands (default `6h`).
-
-### Changed
-
-- The interface starts from apps instead of findings (ADR 0043). The front page lists what
-  runs, each app under what it needs: a card with the one version to install, why, and the
-  image line to copy, or a quiet row that says what "nothing" rests on. Each app has a page
-  with the steps to update it and, below, the flaws behind it. The areas are Apps, Updates and
-  Setup; every earlier page keeps its address. Priorities read "Update now", "Update soon",
-  "Next update" and "Check yourself" on the pages; P1 to P3 stay the names in notifications,
-  the policy and the API.
-- The list of updates, a flaw's page, the machine pages and the settings follow the same
-  design: cards with one update each, evidence in plain words with the long parts folded,
-  settings ordered by what people come for with the rest under "Advanced".
-- The reminder that the connection is not encrypted appears in the Setup area and among the
-  setup steps, no longer above every page. An untrusted TLS proxy is still named everywhere.
-
-### Added
-
 - The network scan keeps what a device states about itself (ADR 0046): manufacturer, model,
   firmware and serial number from the UPnP description, mDNS TXT records and SNMP ENTITY-MIB,
   the certificate, the page title and a favicon hash, the SSH host key (without logging in) and
@@ -115,118 +63,6 @@ All notable changes to this project are documented here. The format follows
   suggestions name a tag the registry lists without registry versions switched on, and the
   version to update to is a release that exists: a fixed version an advisory names that was
   never published gives way to the next release that was.
-
-### Fixed
-
-- A flaw behind the way in of an attack path is no longer urgent because of the path. Only the
-  flaw a path starts with was meant: fixing it cuts the path. Containers that share a Docker
-  network with a public one all became P1; a flaw behind the way in is now at least P2 on a
-  path from the internet and keeps its priority on one from the LAN.
-- A workload without open findings says what that means: "none found" only where it was
-  compared with complete advisory data, "none known" with the reason where the project's data
-  is incomplete, and "not checked" where nothing could be compared.
-- An advisory that only says from which version a flaw exists no longer keeps every later
-  version affected without an update to name. Another record of the same flaw gives it its
-  end: patched versions are cleared, the others get the fixed version, and the finding says
-  which record it came from (ADR 0042).
-- A finding names one version to update to. Its page said "update to" the advisory's own fixed
-  version, a second version that fixes most advisories, and put a third into the image line.
-  The analysis now chooses one (the fix on the running release line when that line fixes the
-  finding, else the newer line), and the page, its image line and the notification name it;
-  the advisory's fixed version and what only a newer major version fixes are said beside it.
-- An advisory that names only a package of another project (a runner beside the server, a
-  library the report blames, a sibling image of the same author) no longer counts as affected
-  for apps without a reviewed package list: it is shown as "needs a check" with the package it
-  names, is not prioritised and does not notify, and its versions are no update target of the
-  app. Beside a package of the app itself, the other project's entry is left out.
-- Existing findings stay active when an image's package inventory is incomplete or unavailable;
-  only sufficient evidence resolves them, preserving acknowledgements and notification history.
-- Update targets no longer count advisories with incomparable or missing alias version data as
-  confirmed fixed, including apps with package filters.
-- Weekly digests obey their configured hour as well as weekday, including after downtime.
-- Grouped advisories keep the highest urgency across workloads and remain new while any copy
-  is open; the advisory link points to a real finding awaiting acknowledgement.
-- Agents retain pending image-package reads when the server requests a full snapshot, so a
-  restored server database receives the packages with the recovered container inventory.
-- A page failed with "internal error" when the database was too busy to record the visit, for
-  example while a large inventory was being stored. The visit is recorded by a later request.
-- New catalog entries reached installations only with the next daily data package, since an
-  installation uses the package's catalog in place of its built-in one. A package is now built
-  whenever the catalog or the index changes on `main`.
-- The Gaps page shows the share of recognised apps as a number and counts each section; the
-  supporting containers name their machine.
-- Installing the agent on a host that had an agent of another Varde server, or one revoked
-  here, reported it as updated while it never connected. The installer now replaces an
-  enrollment this server does not know, so installing again repairs it.
-- The address offered for the agent port was the name the browser used, which behind a reverse
-  proxy is the proxy's; the configured `VARDE_HOST_ADDRESS` comes first.
-- A finding in a package of a container's image named the container with the package's fixed
-  version as if it were the app's ("Update cyberchef to 1.2.1-r0"). The page now says that the
-  image is affected, that the version is the package's, and what an update does.
-- Every page says so while advisory data is still being fetched; early results looked like all
-  there is, and the Gaps page asked for a version label while the registry was still being asked.
-- Tables with long image references or versions left their panel.
-- The Compose examples start on hosts without IPv6: the socket proxy binds IPv4 only
-  (`DISABLE_IPV6`). It exited in a loop where the kernel has IPv6 switched off.
-- The network scan no longer shows more than 100 percent: probes that are tried again count
-  towards the total.
-- Opened over plain http while cookies are HTTPS-only (`VARDE_BEHIND_TLS_PROXY`,
-  `VARDE_COOKIE_SECURE=always`), the sign-in says so and names the two ways out, instead of
-  "Request blocked. Reload the page and try again."
-- The builder's store is published compressed on the branch `data`. It holds the text of public
-  advisories, whose proofs of concept quote credentials; as plain text it raised a
-  secret-scanning alert on the repository with every build.
-- The agent installer runs its connectivity diagnostic from a temporary root-owned copy instead
-  of the agent-writable installed binary, preserving the privilege boundary on reinstall and
-  supporting upload directories mounted with `noexec`. A diagnostic that cannot be staged is
-  skipped and no longer fails an installation that already succeeded.
-- Rejected JAR entries consume their decompression allowance, including CRC errors and false
-  size declarations, so malformed archives cannot bypass the shared package-reader budgets.
-- A failed digest is retried after a minute, then at doubling intervals up to an hour; only
-  completed work advances the daily success time. A digest that was delivered but could not be
-  recorded is not sent again. Unsent findings follow a priority downgrade into the appropriate
-  digest.
-- App and image-package findings use the same identity when counting overlapping advisories.
-- Registry token realms respect registrable domains, including multi-label and private public
-  suffixes: a registry and a token service that are separate names directly under such a suffix
-  (two hosts under `duckdns.org`, for example) no longer count as one domain, and the image check
-  names the refused realm. The roadmap now describes the language metadata readers already implemented.
-
-### Changed
-
-- The overview counts updates, not findings: one container or system to bring up to date is
-  one, whatever number of advisories it fixes. A small homelab showed over 1,000 findings for a
-  few dozen updates. The findings stay complete under Findings and in the API; the digests and
-  the urgent message name the updates too ("2 updates (8 findings)").
-- A known exploited flaw is never background noise: Varde cannot see firewalls, port forwards or
-  every service, so "no way in" is a guess. It is listed as unclear and keeps its priority. Only
-  a flaw that needs physical access stays in the noise.
-- A flaw in a package of a container's image that nothing says is exploited (not in CISA KEV,
-  EPSS below 0.10) and that no attack path uses is P3: it goes into the weekly digest and is fixed
-  with the image's next regular update. On a container reachable from the internet the priority
-  stays as before.
-- Attack paths: a flaw in a library of an image or of a service opens a path only when it is
-  known or likely to be exploited (CISA KEV, or EPSS from 0.10) and its attack vector is known.
-  Before, any such flaw with a remote or unknown vector did, which put a path on nearly every
-  container. The others are listed as unclear, with the reason. Paths are named by what they end
-  on, and paths with one way in and one fix share a card.
-- PostgreSQL, Redis, Valkey, MariaDB, MySQL, MongoDB and Memcached in their official images, and
-  CyberChef, are catalog entries: they are compared with their own advisories. Before, the
-  databases were helpers and only the packages of their images were checked. The entries are
-  written from known facts and say so; they await a review against the live sources.
-- The overview shows the setup guide in full only while Varde knows nothing. After that it is
-  one line under the numbers that opens on a click and can be hidden.
-- The Gaps page says what is checked for supporting containers, for apps with partial or limited
-  advisory data and for versions Varde is still finding out; the Advisory data page lists per
-  app what it is compared with and how many advisories are known; the Systems page says what a
-  network scan can tell and how a machine gets listed; a connected Proxmox names the step that
-  reads its guests.
-- `deploy/compose.yaml` starts without any edit and publishes the web interface on port 8080 for
-  the local network (before: `127.0.0.1` only). The reverse-proxy settings are one marked block.
-  On a machine that is reachable from the internet, bind the port to `127.0.0.1`.
-
-### Added
-
 - Generated catalog entries (ADR 0040): the daily data build writes entries for index images
   without a reviewed one, ships those that pass six checks (blob `generated`, ranked below
   reviewed entries, coverage at most partial) and publishes the readable list as
@@ -255,7 +91,6 @@ All notable changes to this project are documented here. The format follows
   projects that publish them is built into the binary, so apps without a catalog entry are
   recognised and checked against their project's advisories without any download. The uplink
   switch under Settings changes between the free data and a subscription at runtime.
-
 - Wider detection (ADR 0036):
   - Python, PHP, Ruby, .NET and Java packages in images, and Rust programs built with
     cargo-auditable, are checked against their OSV ecosystems, each in its own version order (image
@@ -269,7 +104,6 @@ All notable changes to this project are documented here. The format follows
     description of switches, UPS, printers and NAS.
   - Docker Engine and containerd from Docker's own repositories are checked against their
     advisories; FRITZ!OS and the firmware of each UniFi device are recorded per system.
-
 - History (ADR 0035): every finding records when it was opened, reopened and resolved, and why it
   ended: an update (with the version before and after), the package removed, the container or
   system gone, or the advisory no longer applying (migration 0027; existing findings start with
@@ -280,12 +114,10 @@ All notable changes to this project are documented here. The format follows
   it), per system's packages (install the updates, with the command) or per app, most urgent
   first. Grouping by package and one row per advisory remain. The overview leads with the number
   of urgent updates to do and shows them right below the counters; "KEV" reads "exploited".
-
 - Installing the agent tests right away whether the host reaches the server's agent port
   (`varde check-server`) and names the reason when it does not, instead of a silent "not
   connected". The guide keeps offering the hosts whose agent did not get through, also after
   another host's agent connected. The removal commands for the agent say that they run as root.
-
 - `varde backup <file>` writes a consistent backup of the database, the agent CA and the keys
   while the server runs; `varde restore <file>` unpacks one into an empty data directory.
 - `VARDE_HOST_ADDRESS` names the machine Varde runs on in the network: it ties "this host" to its
@@ -298,7 +130,6 @@ All notable changes to this project are documented here. The format follows
   records for LTS releases past standard support, notices where a release has no per-CVE records
   (Debian 11), and Raspberry Pi OS as Debian. Distroless images are read from `status.d`; images
   whose package database Varde cannot read (rpm before 4.16) say so instead of looking clean.
-
 - Attack paths (ADR 0034): every analysis builds the ways an attacker gets in, from the internet
   (proxy routes under public domains) or the LAN (scanned and listening services, published
   ports), through a flaw in a reachable service or a library it uses, out of a container
@@ -324,7 +155,6 @@ All notable changes to this project are documented here. The format follows
   labelled ones; a guessed repository that does not exist is no failing source.
 - UniFi devices with a newer firmware on offer are listed as a notice, with model, address and
   version.
-
 - Varde tells when a host's updates wait for a restart: a newer kernel is installed than the one
   running (also Proxmox kernels), or Debian's or Ubuntu's restart note is set. The systems list,
   the system's page and the overview show it (inventory command version 3, migration 0020).
@@ -398,12 +228,162 @@ All notable changes to this project are documented here. The format follows
   Engine API over SSH with a key restricted to `docker system dial-stdio`. Each can be switched on
   and off; agents remain optional.
 
+### Changed
+
+- Lower memory use: Debian's security tracker is read an issue at a time, which removes a spike of
+  almost 300 MiB on the first refresh, and freed memory is returned after each refresh.
+- The interface starts from apps instead of findings (ADR 0043). The front page lists what
+  runs, each app under what it needs: a card with the one version to install, why, and the
+  image line to copy, or a quiet row that says what "nothing" rests on. Each app has a page
+  with the steps to update it and, below, the flaws behind it. The areas are Apps, Updates and
+  Setup; every earlier page keeps its address. Priorities read "Update now", "Update soon",
+  "Next update" and "Check yourself" on the pages; P1 to P3 stay the names in notifications,
+  the policy and the API.
+- The list of updates, a flaw's page, the machine pages and the settings follow the same
+  design: cards with one update each, evidence in plain words with the long parts folded,
+  settings ordered by what people come for with the rest under "Advanced".
+- The reminder that the connection is not encrypted appears in the Setup area and among the
+  setup steps, no longer above every page. An untrusted TLS proxy is still named everywhere.
+- The overview counts updates, not findings: one container or system to bring up to date is
+  one, whatever number of advisories it fixes. A small homelab showed over 1,000 findings for a
+  few dozen updates. The findings stay complete under Findings and in the API; the digests and
+  the urgent message name the updates too ("2 updates (8 findings)").
+- A known exploited flaw is never background noise: Varde cannot see firewalls, port forwards or
+  every service, so "no way in" is a guess. It is listed as unclear and keeps its priority. Only
+  a flaw that needs physical access stays in the noise.
+- A flaw in a package of a container's image that nothing says is exploited (not in CISA KEV,
+  EPSS below 0.10) and that no attack path uses is P3: it goes into the weekly digest and is fixed
+  with the image's next regular update. On a container reachable from the internet the priority
+  stays as before.
+- Attack paths: a flaw in a library of an image or of a service opens a path only when it is
+  known or likely to be exploited (CISA KEV, or EPSS from 0.10) and its attack vector is known.
+  Before, any such flaw with a remote or unknown vector did, which put a path on nearly every
+  container. The others are listed as unclear, with the reason. Paths are named by what they end
+  on, and paths with one way in and one fix share a card.
+- PostgreSQL, Redis, Valkey, MariaDB, MySQL, MongoDB and Memcached in their official images, and
+  CyberChef, are catalog entries: they are compared with their own advisories. Before, the
+  databases were helpers and only the packages of their images were checked. The entries are
+  written from known facts and say so; they await a review against the live sources.
+- The overview shows the setup guide in full only while Varde knows nothing. After that it is
+  one line under the numbers that opens on a click and can be hidden.
+- The Gaps page says what is checked for supporting containers, for apps with partial or limited
+  advisory data and for versions Varde is still finding out; the Advisory data page lists per
+  app what it is compared with and how many advisories are known; the Systems page says what a
+  network scan can tell and how a machine gets listed; a connected Proxmox names the step that
+  reads its guests.
+- `deploy/compose.yaml` starts without any edit and publishes the web interface on port 8080 for
+  the local network (before: `127.0.0.1` only). The reverse-proxy settings are one marked block.
+  On a machine that is reachable from the internet, bind the port to `127.0.0.1`.
+
 ### Fixed
 
+- With the shipped Compose file on rootless Docker no image package was read: one container whose
+  files the engine refused (the read-only socket proxy) stopped the reading of every image. Only a
+  refusal for all containers stops it now.
+- A container whose app is not in the catalog counted as "not checked" although the packages of
+  its image were read; the front page could say "All clear" while most containers were never
+  compared. Cards and the overview now say how many packages were checked and why some were not.
+- An image built on the host got "wait for the next release". The card and the pages now say to
+  rebuild it with the newest base image, with the Compose command when it is a service.
+- Snoozing had no effect on the pages: snoozed flaws kept their app among the updates, with their
+  priority and severity. They now leave the front page's updates, the list of updates and the
+  counts; an app whose flaws are all snoozed waits under **Snoozed** with what brings it back, its
+  page lists the flaws marked "snoozed", and **Wake them now** takes the snooze back. The API and
+  the notifications are unchanged.
+- A card whose flaws are serious but unreachable no longer calls them "minor flaws"; cards show
+  their flaws by severity, and containers of one image that need the same update share one card.
+- A container with flawed packages in its image no longer gets "Pull a newer image" when no
+  newer image exists (ADR 0045). Varde decides for each such container whether a newer image
+  exists and what it fixes, from the data package and, with registry versions on, from the
+  registry (a `HEAD` request for the running tag, the newest tag of the same variant and major
+  version). It suggests an image only when that image fixes at least one flaw and says how many
+  it fixes and introduces; otherwise the card says "No fixed image upstream yet" or why Varde
+  cannot tell.
+- "Update now" needs an update that fixes an urgent flaw. Urgent flaws without one are under the
+  new state "Mitigate now", still notified at once, with steps to limit the risk: restrict who can
+  reach the container, a Dockerfile that builds the image with the distribution's package
+  updates, or a snooze until a fixed image appears.
+- A flaw known to be exploited in a package of an image is urgent only when the package serves
+  what the container exposes (the program it runs or a library such a program loads). Any other
+  package is "in the image" and at most "update soon"; the card names the package.
+- Notifications about image packages say what Varde knows of a newer image instead of asking to
+  pull one.
+- A flaw behind the way in of an attack path is no longer urgent because of the path. Only the
+  flaw a path starts with was meant: fixing it cuts the path. Containers that share a Docker
+  network with a public one all became P1; a flaw behind the way in is now at least P2 on a
+  path from the internet and keeps its priority on one from the LAN.
+- A workload without open findings says what that means: "none found" only where it was
+  compared with complete advisory data, "none known" with the reason where the project's data
+  is incomplete, and "not checked" where nothing could be compared.
+- An advisory that only says from which version a flaw exists no longer keeps every later
+  version affected without an update to name. Another record of the same flaw gives it its
+  end: patched versions are cleared, the others get the fixed version, and the finding says
+  which record it came from (ADR 0042).
+- A finding names one version to update to. Its page said "update to" the advisory's own fixed
+  version, a second version that fixes most advisories, and put a third into the image line.
+  The analysis now chooses one (the fix on the running release line when that line fixes the
+  finding, else the newer line), and the page, its image line and the notification name it;
+  the advisory's fixed version and what only a newer major version fixes are said beside it.
+- An advisory that names only a package of another project (a runner beside the server, a
+  library the report blames, a sibling image of the same author) no longer counts as affected
+  for apps without a reviewed package list: it is shown as "needs a check" with the package it
+  names, is not prioritised and does not notify, and its versions are no update target of the
+  app. Beside a package of the app itself, the other project's entry is left out.
+- Existing findings stay active when an image's package inventory is incomplete or unavailable;
+  only sufficient evidence resolves them, preserving acknowledgements and notification history.
+- Update targets no longer count advisories with incomparable or missing alias version data as
+  confirmed fixed, including apps with package filters.
+- Weekly digests obey their configured hour as well as weekday, including after downtime.
+- Grouped advisories keep the highest urgency across workloads and remain new while any copy
+  is open; the advisory link points to a real finding awaiting acknowledgement.
+- Agents retain pending image-package reads when the server requests a full snapshot, so a
+  restored server database receives the packages with the recovered container inventory.
+- A page failed with "internal error" when the database was too busy to record the visit, for
+  example while a large inventory was being stored. The visit is recorded by a later request.
+- New catalog entries reached installations only with the next daily data package, since an
+  installation uses the package's catalog in place of its built-in one. A package is now built
+  whenever the catalog or the index changes on `main`.
+- The Gaps page shows the share of recognised apps as a number and counts each section; the
+  supporting containers name their machine.
+- Installing the agent on a host that had an agent of another Varde server, or one revoked
+  here, reported it as updated while it never connected. The installer now replaces an
+  enrollment this server does not know, so installing again repairs it.
+- The address offered for the agent port was the name the browser used, which behind a reverse
+  proxy is the proxy's; the configured `VARDE_HOST_ADDRESS` comes first.
+- A finding in a package of a container's image named the container with the package's fixed
+  version as if it were the app's ("Update cyberchef to 1.2.1-r0"). The page now says that the
+  image is affected, that the version is the package's, and what an update does.
+- Every page says so while advisory data is still being fetched; early results looked like all
+  there is, and the Gaps page asked for a version label while the registry was still being asked.
+- Tables with long image references or versions left their panel.
+- The Compose examples start on hosts without IPv6: the socket proxy binds IPv4 only
+  (`DISABLE_IPV6`). It exited in a loop where the kernel has IPv6 switched off.
+- The network scan no longer shows more than 100 percent: probes that are tried again count
+  towards the total.
+- Opened over plain http while cookies are HTTPS-only (`VARDE_BEHIND_TLS_PROXY`,
+  `VARDE_COOKIE_SECURE=always`), the sign-in says so and names the two ways out, instead of
+  "Request blocked. Reload the page and try again."
+- The builder's store is published compressed on the branch `data`. It holds the text of public
+  advisories, whose proofs of concept quote credentials; as plain text it raised a
+  secret-scanning alert on the repository with every build.
+- The agent installer runs its connectivity diagnostic from a temporary root-owned copy instead
+  of the agent-writable installed binary, preserving the privilege boundary on reinstall and
+  supporting upload directories mounted with `noexec`. A diagnostic that cannot be staged is
+  skipped and no longer fails an installation that already succeeded.
+- Rejected JAR entries consume their decompression allowance, including CRC errors and false
+  size declarations, so malformed archives cannot bypass the shared package-reader budgets.
+- A failed digest is retried after a minute, then at doubling intervals up to an hour; only
+  completed work advances the daily success time. A digest that was delivered but could not be
+  recorded is not sent again. Unsent findings follow a priority downgrade into the appropriate
+  digest.
+- App and image-package findings use the same identity when counting overlapping advisories.
+- Registry token realms respect registrable domains, including multi-label and private public
+  suffixes: a registry and a token service that are separate names directly under such a suffix
+  (two hosts under `duckdns.org`, for example) no longer count as one domain, and the image check
+  names the refused realm. The roadmap now describes the language metadata readers already implemented.
 - A container recreated under the same name (`docker compose up -d` after a pull) keeps its
   findings: they were all resolved and opened again, so the update's fixes could not be told
   apart, acknowledgements were lost and urgent findings notified again.
-
 - A network scan no longer loses hosts from one run to the next: attempts that got no answer are
   tried again, slower and with a longer timeout, and the default rate is lower (100 attempts per
   second, 32 at a time), which a UniFi router and Docker Desktop over WLAN dropped at 300. A device
@@ -432,7 +412,6 @@ All notable changes to this project are documented here. The format follows
 ### Security
 
 - Built with Go 1.27.4, which fixes GO-2026-6859 in `net/http`.
-
 - Login, setup, password change and agent enrollment reserve throttle attempts atomically; waiting
   for password hashing is bounded.
 - Stricter validation of the return path after login; the return path works again.
