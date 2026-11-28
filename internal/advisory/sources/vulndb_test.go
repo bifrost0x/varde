@@ -126,7 +126,7 @@ func TestVulnDBRefresh(t *testing.T) {
 	}
 	musl := records(t, s, "os:Alpine:v3.22/musl")
 	if len(musl) != 1 || musl[0].Vuln.ID != "ALPINE-CVE-2025-3000" || musl[0].CVSS != 9.8 || musl[0].SeverityLabel != "critical" ||
-		musl[0].Vuln.DatabaseSpecific[vulndb.RatedBy] == nil {
+		musl[0].Vuln.RatedBy() == "" {
 		t.Fatalf("musl records %+v", musl)
 	}
 

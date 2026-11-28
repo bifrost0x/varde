@@ -70,6 +70,8 @@ func TestTokenContrast(t *testing.T) {
 		{"link", "bg"}, {"link", "surface-1"},
 		{"ember", "bg"}, {"ember", "surface-1"},
 		{"on-ember", "ember"}, {"on-amber", "amber"}, {"on-info", "info"}, {"on-ok", "ok"},
+		// Severity words drawn in amber and info on panels.
+		{"amber", "surface-1"}, {"info", "surface-1"}, {"amber", "surface-2"}, {"info", "surface-2"},
 	}
 	ui := [][2]string{{"focus", "bg"}, {"focus", "surface-1"}}
 	for _, scheme := range []string{"tokens:dark", "tokens:light"} {

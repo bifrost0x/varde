@@ -643,56 +643,20 @@ func (a *app) appPage(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 	d := struct {
 		Card    appCard
 		Groups  []findingGroup
-		Flaws   []appFlaw
-		Hidden  int
+		Report  report
 		Version string
 		Source  string
 		Doubt   string
 		Basis   string
 		Machine string
-	}{Card: *card, Groups: a.groupFindings(s, fs), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
+	}{Card: *card, Groups: a.groupFindings(s, fs), Report: buildReport(fs, card.Name), Version: ident.Version, Source: ident.VersionSource, Doubt: ident.Doubt()}
 	if app, ok := a.d.Catalog.Current().App(ident.AppID); ok && app.Origin != catalog.OriginBuiltin && app.Origin != catalog.OriginFeed {
 		d.Basis = "recognised automatically"
 	}
 	if m := s.hostOf[wl.HostID]; m != nil {
 		d.Machine = m.ID
 	}
-	d.Flaws, d.Hidden = appFlaws(fs, 25)
 	a.page(w, r, cur, http.StatusOK, "app", view{Title: card.Name, Nav: "apps", Data: d})
-}
-
-// appFlaw is one finding on an app's page, in plain words.
-type appFlaw struct {
-	ID, Advisory, Summary, Fixed string
-	State                        string
-	Severity                     string
-	Exploited                    bool
-}
-
-// appFlaws lists the findings of an app, most pressing first, at most max;
-// hidden counts the rest.
-func appFlaws(fs []store.Finding, max int) (flaws []appFlaw, hidden int) {
-	sort.SliceStable(fs, func(i, j int) bool {
-		if priorityRank[fs[i].Priority] != priorityRank[fs[j].Priority] {
-			return priorityRank[fs[i].Priority] < priorityRank[fs[j].Priority]
-		}
-		return fs[i].AdvisoryID < fs[j].AdvisoryID
-	})
-	for _, f := range fs {
-		if len(flaws) >= max {
-			hidden++
-			continue
-		}
-		var m match.Finding
-		_ = json.Unmarshal(f.Detail, &m)
-		state := stateOfPriority(f.Priority)
-		if f.MatchState != string(match.Affected) {
-			state = appCheck
-		}
-		flaws = append(flaws, appFlaw{ID: f.ID, Advisory: f.AdvisoryID, Summary: m.Summary, Fixed: f.FixedIn,
-			State: state, Severity: m.SeverityLabel, Exploited: m.KEV})
-	}
-	return flaws, hidden
 }
 
 // appHref is the page of the app a workload is; "" for a system package,

@@ -221,11 +221,20 @@ func selectFor(rec Record, h wantedPkg) (Selected, bool) {
 	return s, true
 }
 
-// Sort orders the selected records of each package by ID, so that equal
-// data compares equal.
-func Sort(sel map[string][]Selected) {
-	for _, rs := range sel {
-		sort.Slice(rs, func(i, j int) bool { return rs[i].Vuln.ID < rs[j].Vuln.ID })
+// Tidy orders the selected records of each package by ID, so that equal
+// data compares equal, and keeps one of each ID: osv.dev exports a record
+// that names packages of several ecosystems in each of them.
+func Tidy(sel map[string][]Selected) {
+	for app, rs := range sel {
+		sort.SliceStable(rs, func(i, j int) bool { return rs[i].Vuln.ID < rs[j].Vuln.ID })
+		out := rs[:0]
+		for i, r := range rs {
+			if i > 0 && r.Vuln.ID == rs[i-1].Vuln.ID {
+				continue
+			}
+			out = append(out, r)
+		}
+		sel[app] = out
 	}
 }
 
@@ -275,10 +284,6 @@ func LoadRatings(path string) (Ratings, error) {
 	return out, nil
 }
 
-// RatedBy marks a record whose CVSS score Varde took from the CVE
-// dataset, naming it, so the page can say where the rating comes from.
-const RatedBy = "varde_rated_by"
-
 // Rate gives a selected record without a score of its own the rating of its
 // CVE: the CVSS score and vector, a label from the score where the record
 // has none, and the description where it has none.
@@ -308,7 +313,7 @@ func (r Ratings) Rate(s *Selected) {
 		for k, v := range s.Vuln.DatabaseSpecific {
 			spec[k] = v
 		}
-		spec[RatedBy] = "NVD score as the Ubuntu CVE tracker states it"
+		spec[advisory.RatedByKey] = "NVD score as the Ubuntu CVE tracker states it"
 		s.Vuln.DatabaseSpecific = spec
 	}
 	if s.Vuln.Summary == "" && c.Vuln.Summary != "" {

@@ -272,7 +272,7 @@ func (v *VulnDB) store(ctx context.Context, want *vulndb.Wanted, keys []string, 
 			ratings.Rate(&rs[i])
 		}
 	}
-	vulndb.Sort(sel)
+	vulndb.Tidy(sel)
 	changed := 0
 	for app := range want.Apps() {
 		eco, _, ok := distro.ParseSystemAppID(app)

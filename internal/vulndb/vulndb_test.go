@@ -355,7 +355,7 @@ func TestNormalizeAndSelect(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	Sort(sel)
+	Tidy(sel)
 	var ids []string
 	for _, s := range sel["os:Debian:12/openssl"] {
 		ids = append(ids, s.Vuln.ID)
@@ -481,7 +481,7 @@ func TestRatings(t *testing.T) {
 	// from it; Debian's own urgency stays where Debian gave one.
 	s := Selected{Vuln: advisory.Vulnerability{ID: "DEBIAN-CVE-2025-3000", Upstream: []string{"CVE-2025-3000"}}}
 	r.Rate(&s)
-	if s.CVSS != 9.8 || s.Severity != "critical" || s.Vuln.DatabaseSpecific[RatedBy] == nil || s.Vuln.Summary == "" {
+	if s.CVSS != 9.8 || s.Severity != "critical" || s.Vuln.DatabaseSpecific[advisory.RatedByKey] == nil || s.Vuln.Summary == "" {
 		t.Errorf("rated %+v", s)
 	}
 	s = Selected{Vuln: advisory.Vulnerability{ID: "DEBIAN-CVE-2025-3000", Upstream: []string{"CVE-2025-3000"}, Summary: "own"}, Severity: "low"}
@@ -494,5 +494,34 @@ func TestRatings(t *testing.T) {
 	r.Rate(&s)
 	if s.CVSS != 5 {
 		t.Errorf("own score replaced: %+v", s)
+	}
+}
+
+// A record naming packages of two ecosystems is in both exports; the
+// package gets it once.
+func TestTidyDropsRecordsOfTwoExports(t *testing.T) {
+	rec := `{"id":"GHSA-qppj-fm5r-hxr3","modified":"2026-01-02T03:04:05Z","affected":[` +
+		`{"package":{"ecosystem":"Go","name":"golang.org/x/net"},"ranges":[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"0.17.0"}]}]},` +
+		`{"package":{"ecosystem":"Maven","name":"org.apache.tomcat:tomcat-coyote"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"9.0.81"}]}]}]}`
+	dir := t.TempDir()
+	var paths []string
+	for _, eco := range []string{"Go", "Maven"} {
+		d := Datasets(eco)[0]
+		raw := writeZip(t, map[string]string{"GHSA-qppj-fm5r-hxr3.json": rec})
+		if _, err := Normalize(d, raw, CachePath(dir, d), stamp); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, CachePath(dir, d))
+	}
+	w := Want([]distro.Package{{Ecosystem: "Go", Name: "golang.org/x/net", Version: "0.10.0"}}, stamp)
+	sel := map[string][]Selected{}
+	for _, p := range paths {
+		if err := Select(p, w, sel); err != nil {
+			t.Fatal(err)
+		}
+	}
+	Tidy(sel)
+	if got := sel["os:Go/golang.org/x/net"]; len(got) != 1 {
+		t.Fatalf("records %d, want 1", len(got))
 	}
 }
