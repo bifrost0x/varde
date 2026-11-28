@@ -56,8 +56,8 @@ func parseDebian(r io.Reader, modified time.Time, emit func(Record) error) error
 		if !ok {
 			return errors.New("debian: package name expected")
 		}
-		var issues map[string]debianIssue
-		if err := dec.Decode(&issues); err != nil {
+		issues, err := decodeIssues(dec)
+		if err != nil {
 			return fmt.Errorf("debian: package %q: %w", truncate(pkg, 64), err)
 		}
 		if !validPackageName(pkg) {
@@ -82,6 +82,35 @@ func parseDebian(r io.Reader, modified time.Time, emit func(Record) error) error
 		return err
 	}
 	return nil
+}
+
+// decodeIssues reads one package's issues an issue at a time. Decoding the
+// package as one value would make the decoder buffer all of it, and the
+// kernel's entry alone holds tens of megabytes.
+func decodeIssues(dec *json.Decoder) (map[string]debianIssue, error) {
+	if err := expectDelim(dec, '{'); err != nil {
+		return nil, err
+	}
+	issues := map[string]debianIssue{}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		id, ok := tok.(string)
+		if !ok {
+			return nil, errors.New("issue name expected")
+		}
+		var is debianIssue
+		if err := dec.Decode(&is); err != nil {
+			return nil, fmt.Errorf("issue %q: %w", truncate(id, 64), err)
+		}
+		issues[id] = is
+	}
+	if err := expectDelim(dec, '}'); err != nil {
+		return nil, err
+	}
+	return issues, nil
 }
 
 func debianRecord(pkg, id string, is debianIssue, modified time.Time) (Record, bool) {

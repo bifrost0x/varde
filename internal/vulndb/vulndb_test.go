@@ -165,7 +165,7 @@ func TestParseDebian(t *testing.T) {
 }
 
 func TestParseDebianMalformed(t *testing.T) {
-	for _, in := range []string{``, `[]`, `{"a": 1}`, `{"a": {"CVE-1": {"releases": []}}}`, `{"a": {}`} {
+	for _, in := range []string{``, `[]`, `{"a": 1}`, `{"a": {"CVE-1": {"releases": []}}}`, `{"a": {}`, `{"a": {"CVE-1": "x"}}`, `{"a": {"CVE-1": {}`} {
 		err := parseDebian(strings.NewReader(in), stamp, func(Record) error { return nil })
 		if err == nil {
 			t.Errorf("parseDebian(%q) accepted", in)

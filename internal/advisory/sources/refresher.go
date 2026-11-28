@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"math/rand/v2"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -118,6 +119,11 @@ func (r *Refresher) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		// A refresh parses feeds and datasets of tens of megabytes; the
+		// heap shrinks back to a few megabytes afterwards. Returning the
+		// freed memory now keeps the idle footprint small on hosts where
+		// Varde shares little RAM with other services.
+		debug.FreeOSMemory()
 		if !timer.Stop() {
 			select {
 			case <-timer.C:

@@ -32,6 +32,23 @@ process, without page cache), sampled repeatedly.
 | Direct mode network | bounded by apps present | One conditional request per repository and refresh interval (6 h); 304 responses carry no body |
 | SQLite size after a year | < 50 MB | Estimate: 3.1 MB after a day on a real installation (25 workloads, about 600 advisories). Growth is bounded by retention (notification log 30 days, resolved findings 90 days, removed workloads 90 days, finding history two years); advisories scale with the apps present, not with time. The audit log grows by a few hundred bytes per action. |
 
+## Package vulnerability data
+
+The complete datasets (ADR 0047) are refreshed once a day and normalised one record at a time;
+no dataset is held in memory as a whole. Measured on a Linux host with rootless Docker (21
+containers, Debian, Ubuntu, Alpine, Wolfi, Go, Maven and PyPI datasets, data package with
+about 14,700 advisories), resident memory of the process:
+
+| Phase | Measured |
+|---|---|
+| First start, data package install and inventory read running together | peak about 225 MiB |
+| Dataset normalisation | below that peak; the largest single record set (Debian's kernel entry) is read an issue at a time |
+| Idle after the first refresh | about 77 MiB (heap in use about 19 MiB; the rest is the binary and SQLite) |
+
+The peak comes from parsing the data package's advisories in one piece while image packages are
+read. It exceeds the budget above, which was measured with a much smaller feed; streaming the
+feed install is the open item to bring it back under 150 MB.
+
 ## Benchmarks
 
 ```sh
