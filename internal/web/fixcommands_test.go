@@ -281,3 +281,18 @@ func TestReportSnoozedKeepsFixedVersion(t *testing.T) {
 		t.Fatalf("report %+v", r)
 	}
 }
+
+// When the only flaw a newer image fixes is snoozed, the card no longer
+// sends the user to that image for the flaws left open.
+func TestUpdateOnlyForOpenFlaws(t *testing.T) {
+	h := newHarness(t)
+	csrf := h.signIn(t)
+	id := labWithLabels(t, h, map[string]string{"com.docker.compose.project": "chef", "com.docker.compose.service": "cyber-chef"})
+	mustContain(t, "card before", overviewCard(t, h), "Update to v10.20.0")
+	if resp, _ := h.do(t, "POST", "/findings/"+store.FindingID(id, "DEBIAN-CVE-2099-2")+"/snooze", url.Values{"csrf": {csrf}, "days": {"7"}}, nil); resp.StatusCode != 303 {
+		t.Fatalf("snooze: %d", resp.StatusCode)
+	}
+	card := overviewCard(t, h)
+	mustContain(t, "card", card, "No fixed image for the open flaws yet")
+	mustNotContain(t, "card", card, "Update to v10.20.0")
+}

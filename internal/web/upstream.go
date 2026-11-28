@@ -67,9 +67,16 @@ func (a *app) imagePlan(c *appCard, wl inventory.Workload, fs []store.Finding, s
 	c.Compose = remedy.ComposeOf(wl.Container)
 	defer c.fitCommand()
 	inImage := plural(image, "flaw") + " in packages inside the image"
+	// What the newer image fixes of the flaws the card lists: the status
+	// also judged snoozed ones, which the card leaves out.
+	fixed := fixedOpen(st, fs)
 	switch {
+	case st != nil && st.Actionable() && fixed == 0:
+		c.Action = "No fixed image for the open flaws yet"
+		c.Fixes = "the newer image " + st.TargetTag + " fixes none of the " + inImage + " that are not snoozed"
+		c.Mitigation = mitigationOf(c, wl, fs, st)
 	case st != nil && st.Actionable():
-		c.Fixes = "fixes " + strconv.Itoa(len(st.Fixed)) + " of " + plural(st.Total(), "flaw") + " in packages inside the image"
+		c.Fixes = "fixes " + strconv.Itoa(fixed) + " of " + plural(image, "flaw") + " in packages inside the image"
 		switch {
 		case pinned(wl.Container.ImageRef) && st.TargetDigest != "":
 			// A digest pin keeps the old image however often it is
@@ -88,7 +95,7 @@ func (a *app) imagePlan(c *appCard, wl inventory.Workload, fs []store.Finding, s
 		if n := len(st.Introduced); n > 0 {
 			c.Introduced = "introduces " + plural(n, "flaw") + " the running image does not have"
 		}
-		if rest := len(st.Remaining) + len(st.Unclear); rest > 0 {
+		if rest := image - fixed; rest > 0 {
 			c.Rest = plural(rest, "flaw") + " stay until a later image fixes them"
 		}
 		if c.Compose != nil {
@@ -332,4 +339,26 @@ func (a *app) wakeApp(w http.ResponseWriter, r *http.Request, cur *auth.Current)
 	a.audit(r, cur, "finding.wake", id, strconv.Itoa(n)+" findings")
 	a.d.Analyze(ctx)
 	http.Redirect(w, r, "/apps/"+url.PathEscape(id)+"?ok=woken", http.StatusSeeOther) //nolint:gosec // local path only
+}
+
+// fixedOpen counts the card's open, confirmed image flaws the upstream
+// status names as fixed by the newer image.
+func fixedOpen(st *upstream.Status, fs []store.Finding) int {
+	if st == nil {
+		return 0
+	}
+	n := 0
+	for _, f := range fs {
+		if !actionable(f.State) || f.MatchState != string(match.Affected) {
+			continue
+		}
+		var m match.Finding
+		if json.Unmarshal(f.Detail, &m) != nil || !m.Image {
+			continue
+		}
+		if st.Fixes(m.AdvisoryID, m.Evidence.Package) {
+			n++
+		}
+	}
+	return n
 }

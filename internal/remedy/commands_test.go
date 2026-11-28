@@ -53,6 +53,13 @@ func TestComposeCommands(t *testing.T) {
 			pull: "cd '/srv/app' && docker compose -f 'compose.yml' pull 'web' && docker compose -f 'compose.yml' up -d 'web'",
 		},
 		{
+			name: "a first file outside the project directory keeps that directory",
+			labels: map[string]string{labelProject: "app", labelService: "web",
+				labelWorkingDir: "/srv/app", labelConfigFiles: "/srv/app/config/compose.yaml"},
+			pull: "cd '/srv/app' && docker compose -f 'config/compose.yaml' --project-directory '/srv/app' pull 'web' && " +
+				"docker compose -f 'config/compose.yaml' --project-directory '/srv/app' up -d 'web'",
+		},
+		{
 			name: "a file outside the directory keeps its path",
 			labels: map[string]string{labelProject: "media", labelService: "jellyfin",
 				labelWorkingDir: "/opt/Media", labelConfigFiles: "/opt/Media/stack.yaml,/etc/compose/override.yaml"},

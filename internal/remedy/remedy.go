@@ -93,8 +93,15 @@ func (c *Compose) command(verb string) string {
 		// The files exactly as recorded, also a single default one:
 		// without -f Compose would add an override file the project may
 		// have been started without.
-		for _, f := range c.relative(c.Files) {
+		files := c.relative(c.Files)
+		for _, f := range files {
 			b.WriteString(" -f " + shellQuote(f))
+		}
+		// Compose resolves relative paths from the first file's directory
+		// unless told otherwise: a project started with another project
+		// directory keeps it.
+		if len(files) > 0 && strings.ContainsAny(files[0], "/\\") {
+			b.WriteString(" --project-directory " + shellQuote(c.Dir))
 		}
 		// Variables from another file than .env would be missing, and
 		// the service recreated with other values.
