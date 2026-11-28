@@ -95,8 +95,8 @@ func TestFlawIDAndDataset(t *testing.T) {
 }
 
 func TestCSVRowNeutralisesFormulas(t *testing.T) {
-	got := csvRow("=HYPERLINK(\"x\")", "+1", "-2", "@SUM(A1)", "\tx", "plain", "")
-	want := []string{"'=HYPERLINK(\"x\")", "'+1", "'-2", "'@SUM(A1)", "'\tx", "plain", ""}
+	got := csvRow("=HYPERLINK(\"x\")", "+1", "-2", "@SUM(A1)", "\tx", "plain", "", "\n=1", "  =1", "\uff1dSUM(A1)", "a b")
+	want := []string{"'=HYPERLINK(\"x\")", "'+1", "'-2", "'@SUM(A1)", "'\tx", "plain", "", "'\n=1", "'  =1", "'\uff1dSUM(A1)", "a b"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("cell %d = %q, want %q", i, got[i], want[i])

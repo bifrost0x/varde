@@ -3,6 +3,7 @@
 package remedy
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bifrost0x/varde/internal/inventory"
@@ -134,5 +135,48 @@ func TestPackageCommand(t *testing.T) {
 	}
 	if got := InLXC(105, cmd); got != "pct exec 105 -- sh -c 'apt-get update && apt-get install --only-upgrade curl'" {
 		t.Errorf("InLXC = %s", got)
+	}
+}
+
+func TestPlainPathRefusesBeyondASCII(t *testing.T) {
+	for _, p := range []string{
+		`C:\x` + "\u2019" + ` (Start-Process calc) ` + "\u2019" + `y`,
+		"/srv/app\u202e/x",
+		"/srv/caf\u00e9",
+		"/srv/a\u0085b",
+	} {
+		if plainPath(p) {
+			t.Errorf("plainPath(%q) accepted", p)
+		}
+	}
+	for _, p := range []string{"/srv/my app", `C:\stacks\web`} {
+		if !plainPath(p) {
+			t.Errorf("plainPath(%q) refused", p)
+		}
+	}
+	c := composeOf(map[string]string{
+		"com.docker.compose.project":             "web",
+		"com.docker.compose.service":             "app",
+		"com.docker.compose.project.working_dir": `C:\x` + "\u2019" + ` (Start-Process calc) ` + "\u2019" + `y`,
+	})
+	if c != nil && strings.Contains(c.Pull(), "Start-Process") {
+		t.Errorf("Pull() names the hostile directory: %q", c.Pull())
+	}
+}
+
+func TestComposeWithRefusedPathHasNoCommand(t *testing.T) {
+	for _, labels := range []map[string]string{
+		{"com.docker.compose.project.environment_file": "/srv/app/生产.env"},
+		{"com.docker.compose.project.config_files": "/srv/app/compose.yaml,/srv/app/$(x).yaml"},
+		{"com.docker.compose.project.working_dir": "/srv/café"},
+	} {
+		labels["com.docker.compose.project"], labels["com.docker.compose.service"] = "app", "web"
+		if labels["com.docker.compose.project.working_dir"] == "" {
+			labels["com.docker.compose.project.working_dir"] = "/srv/app"
+		}
+		c := composeOf(labels)
+		if c == nil || c.Pull() != "" || c.Rebuild() != "" {
+			t.Errorf("%v: commands %q / %q", labels, c.Pull(), c.Rebuild())
+		}
 	}
 }

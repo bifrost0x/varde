@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/bifrost0x/varde/internal/auth"
 	"github.com/bifrost0x/varde/internal/identify"
+	"github.com/bifrost0x/varde/internal/imageref"
 	"github.com/bifrost0x/varde/internal/inventory"
 	"github.com/bifrost0x/varde/internal/match"
 	"github.com/bifrost0x/varde/internal/remedy"
@@ -242,11 +244,22 @@ func mitigationOf(c *appCard, wl inventory.Workload, fs []store.Finding, st *ups
 	return m
 }
 
+// containerUser is a user, or user:group, by name or number.
+var containerUser = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,31})?$`)
+
 // derivedImage is a Dockerfile that builds the running image again with
 // its distribution's package updates, for the distributions whose upgrade
 // command Varde knows. user is the user the container runs as; the image
 // switches back to it after the upgrade.
+// The image's own configuration names ref and user, so both must keep to
+// their grammar: a line break would add instructions to the Dockerfile.
 func derivedImage(ref, ecosystem, user string) (distro, dockerfile string) {
+	if _, err := imageref.Parse(ref); err != nil || !imageRefPattern.MatchString(ref) {
+		return "", ""
+	}
+	if user != "" && !containerUser.MatchString(user) {
+		return "", ""
+	}
 	name, _, _ := strings.Cut(ecosystem, ":")
 	var run string
 	switch strings.ToLower(name) {

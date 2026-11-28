@@ -51,7 +51,7 @@
     {{if $c.Command}}<li>Then run:
       <div class="secret"><pre id="app-cmd" class="mono install">{{$c.Command}}</pre><button class="btn btn--ghost" type="button" data-copy="#app-cmd"><svg class="icon" aria-hidden="true"><use href="/static/icons.svg#copy"></use></svg><span data-copy-label>Copy</span></button></div>
       {{if $c.Compose}}{{template "composenote"}}{{end}}
-      {{template "runon" (runon "app-cmd" $c.RunHost $c.RunAddr $d.WebSSH)}}</li>{{end}}
+      {{template "runon" (runon "app-cmd" $c.RunHost $c.RunAddr $d.WebSSH)}}</li>{{else if and $c.Compose (not $c.Compose.Portainer)}}<li>Then run <code>docker compose pull</code> and <code>docker compose up -d</code> the way you started the project. Varde shows no command: a path the project was started with holds characters it does not copy into one.</li>{{end}}
     <li>Varde sees the new version at the next report and clears what it fixes by itself.</li>
   </ol>
   {{else if and $c.Command (not $c.Mitigation)}}

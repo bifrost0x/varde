@@ -249,7 +249,7 @@ func (a *app) historyCSV(w http.ResponseWriter, r *http.Request, cur *auth.Curre
 // csvSafe keeps a spreadsheet from reading a cell as a formula: names come
 // from containers and images, which anyone on a host can choose.
 func csvSafe(s string) string {
-	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+	if formulaLike(s) {
 		return "'" + s
 	}
 	return s

@@ -53,6 +53,10 @@ type Compose struct {
 	// in its own volume, so the stack is updated in Portainer, not with a
 	// command on the host.
 	Portainer string
+	// partial is set when a recorded path was refused (plainPath): a
+	// command without it could start the service differently, so there is
+	// none.
+	partial bool
 }
 
 // Pull is the command that fetches the new image and recreates the
@@ -63,6 +67,9 @@ type Compose struct {
 // quoted besides, since the labels come from the image and users paste
 // this.
 func (c *Compose) Pull() string {
+	if c.partial {
+		return ""
+	}
 	return c.inDir(c.command("pull") + " && " + c.command("up -d"))
 }
 
@@ -70,6 +77,9 @@ func (c *Compose) Pull() string {
 // newest base image, and recreates the service: the fix for an image built
 // from a local Dockerfile.
 func (c *Compose) Rebuild() string {
+	if c.partial {
+		return ""
+	}
 	return c.inDir(c.command("build --pull --no-cache") + " && " + c.command("up -d"))
 }
 
@@ -349,8 +359,10 @@ func compose(labels map[string]string) *Compose {
 		return nil
 	}
 	c := &Compose{Project: project, Service: service}
-	if plainPath(labels[labelWorkingDir]) {
-		c.Dir = labels[labelWorkingDir]
+	if d := labels[labelWorkingDir]; plainPath(d) {
+		c.Dir = d
+	} else if d != "" {
+		c.partial = true
 	}
 	if m := portainerDir.FindStringSubmatch(c.Dir); m != nil {
 		c.Portainer = m[1]
@@ -358,24 +370,31 @@ func compose(labels map[string]string) *Compose {
 	for _, f := range strings.Split(labels[labelConfigFiles], ",") {
 		if f = strings.TrimSpace(f); plainPath(f) {
 			c.Files = append(c.Files, f)
+		} else if f != "" {
+			c.partial = true
 		}
 	}
 	for _, f := range strings.Split(labels[labelEnvFiles], ",") {
 		if f = strings.TrimSpace(f); plainPath(f) {
 			c.EnvFiles = append(c.EnvFiles, f)
+		} else if f != "" {
+			c.partial = true
 		}
 	}
 	return c
 }
 
-// plainPath accepts an absolute Unix or Windows path without control or
-// shell characters.
+// plainPath accepts an absolute Unix or Windows path of printable ASCII
+// without shell characters. Anything beyond ASCII is refused: PowerShell
+// also ends a quoted string at the typographic quotes (U+2018 to U+201B),
+// and bidirectional controls would make the command read differently
+// from what runs.
 func plainPath(p string) bool {
 	if p == "" || len(p) > 512 || (!strings.HasPrefix(p, "/") && !windowsPath.MatchString(p)) {
 		return false
 	}
 	for _, r := range p {
-		if r < 0x20 || r == 0x7f || strings.ContainsRune("`$;&|<>\"'*?!\n", r) && r != '\\' {
+		if r < 0x20 || r >= 0x7f || strings.ContainsRune("`$;&|<>\"'*?!\n", r) && r != '\\' {
 			return false
 		}
 	}

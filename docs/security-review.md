@@ -81,3 +81,28 @@ registry is trusted for, notice expansion, the lxc-attach caveat (residual risks
 Checks run afterwards: `go vet`, `go test -race ./...`, golangci-lint v2.15.0 without findings,
 govulncheck v1.9.0 (no called vulnerabilities; GO-2026-5932 in `x/crypto/openpgp` not imported),
 license headers, image size budget and the hardened smoke test of CI.
+
+## Review of the vulnerability datasets and fix commands (2026-11-28)
+
+Scope: ADR 0047 and ADR 0048: the dataset downloads and their cache (`internal/vulndb`,
+`internal/advisory/sources/vulndb.go`), the copyable commands (`internal/remedy`, the fix steps in
+`internal/web`), the CSV report, the wake route and the WebSSH link. Independent review of the
+code, no external hosts contacted.
+
+| Severity | Finding | Fix |
+|---|---|---|
+| Medium | A Compose working directory set by an image could hold typographic quotes (U+2018 to U+201B), which PowerShell also reads as the end of a quoted string; pasted on a Windows Docker host, the rest of the path ran as an expression | Paths in commands are printable ASCII only, which also keeps bidirectional controls out (`TestPlainPathRefusesBeyondASCII`) |
+| Low | The Dockerfile suggested for a rebuild took the image's user and reference unchecked; a line break in the image's `User` added instructions | The user must be a name or number (with an optional group) and the reference must parse; otherwise no Dockerfile is offered (`TestDerivedImageRefusesHostileConfig`) |
+| Info | `VARDE_WEBSSH_URL` from the environment allowed a query and a fragment, unlike the setting | Both use the same check (`TestWebSSHURL`) |
+| Info | The CSV guard missed a leading line break, leading spaces and full-width formula characters | Covered (`TestCSVRowNeutralisesFormulas`) |
+
+Accepted for now: the Ubuntu OVAL and secdb parsers bound the input size but not the number of
+tests, states or packages they keep while parsing, and a single cached record over 16 MiB fails
+its dataset. Only the publishers of the data, or whoever breaks TLS to them, control that input;
+the downloads are size-capped and the parse runs once a day.
+
+Checked without findings: cache file names (fixed keys, no traversal), temporary files and their
+cleanup, the zip limits of osv.dev's exports, upstream text in the interface (escaped, no
+`javascript:` links), Compose project and service names, package names and LXC IDs in commands,
+`docker pull` references, the session, Origin and CSRF checks of the new routes, the CSV file
+name and the clipboard code.
