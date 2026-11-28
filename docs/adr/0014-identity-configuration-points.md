@@ -12,7 +12,7 @@ The product name and namespace must live in exactly one place per artefact type,
 | Name, env/label prefix, repo URL, User-Agent | `internal/buildinfo` constants |
 | Go module path | `go.mod` (see below) |
 | Local image name | `IMAGE` in `Makefile` |
-| CI and release image names | `IMAGE_NAME` / `DOCKERHUB_IMAGE` and `GHCR_IMAGE` in each workflow's `env` |
+| CI and release image names | `IMAGE_NAME` / `GHCR_IMAGE` in each workflow's `env` |
 | UI product name | `buildinfo.Product`, passed to templates |
 
 The Go module path is inherently repeated in every import. A namespace change is mechanical:

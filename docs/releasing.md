@@ -1,7 +1,7 @@
 # Releasing
 
 Releases are made by the maintainer. The only thing published from the default branch is the edge
-image (below); no release, no binaries and nothing on Docker Hub.
+image (below); no release and no binaries. Images are published on GHCR only.
 
 1. Move the `[Unreleased]` entries in `CHANGELOG.md` under a new `## [x.y.z] - YYYY-MM-DD` heading
    and commit.
@@ -18,23 +18,22 @@ image (below); no release, no binaries and nothing on Docker Hub.
      changelog section;
    - builds `linux/amd64` and `linux/arm64` images with `-trimpath`, fixed `-ldflags` and
      `SOURCE_DATE_EPOCH` from the tagged commit, with an SBOM and SLSA provenance (`mode=max`);
-   - pushes `bifrost0x/varde:X.Y.Z`, `X.Y` and `latest` to Docker Hub and GHCR (pre-releases get
+   - pushes `ghcr.io/bifrost0x/varde:X.Y.Z`, `X.Y` and `latest` (pre-releases get
      only the full version tag);
    - signs the image digest with cosign (keyless, GitHub OIDC);
    - creates the GitHub release with static binaries, `SHA256SUMS`, its cosign bundle
      (`SHA256SUMS.bundle`) and the changelog section.
 
-Required repository secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (Docker Hub access token with
-read/write scope). GHCR and the release use the workflow's `GITHUB_TOKEN`.
+No repository secret is needed: GHCR and the release use the workflow's `GITHUB_TOKEN`.
 
-Before the first release, once: create the repository `bifrost0x/varde` on Docker Hub. After the
-first push to GHCR, set the package `ghcr.io/bifrost0x/varde` to public (Package settings >
-Change visibility); GitHub creates new packages as private.
+The package `ghcr.io/bifrost0x/varde` already exists and is public (the edge image created it).
+A package under a new name would start private: set it to public under Package settings › Change
+visibility.
 
 Verify a published image:
 
 ```sh
-cosign verify docker.io/bifrost0x/varde:X.Y.Z \
+cosign verify ghcr.io/bifrost0x/varde:X.Y.Z \
   --certificate-identity-regexp 'https://github.com/bifrost0x/varde/\.github/workflows/release\.yml@refs/tags/v.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
