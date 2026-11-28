@@ -9,6 +9,8 @@ package pipeline
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -276,7 +278,7 @@ func (p *Pipeline) Run(ctx context.Context) (Summary, error) {
 		return Summary{}, err
 	}
 
-	p.updateApps(appSet)
+	p.updateApps(appSet, systemApps)
 	if p.Covered != nil {
 		p.Covered(ctx, ws, results)
 	}
@@ -627,16 +629,23 @@ func seenVersions(results []identify.Result, images []imageTarget, read map[stri
 	return seen
 }
 
-func (p *Pipeline) updateApps(set map[string]*catalog.App) {
-	ids := make([]string, 0, len(set))
+// updateApps keeps the catalog apps of the run, and reports a changed set of
+// apps or of checked packages: either needs advisory data fetched, the
+// packages' records selected from the vulnerability datasets (ADR 0047).
+func (p *Pipeline) updateApps(set, packages map[string]*catalog.App) {
+	ids := make([]string, 0, len(set)+len(packages))
 	apps := make([]*catalog.App, 0, len(set))
 	for id, a := range set {
 		ids = append(ids, id)
 		apps = append(apps, a)
 	}
+	for id := range packages {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
 	sort.Slice(apps, func(i, j int) bool { return apps[i].ID < apps[j].ID })
-	key := strings.Join(ids, ",")
+	sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
+	key := hex.EncodeToString(sum[:])
 	changed := key != p.lastApps
 	p.lastApps, p.apps = key, apps
 	if changed && p.AppsChanged != nil {

@@ -1,0 +1,28 @@
+<oval_definitions xmlns="http://oval.mitre.org/XMLSchema/oval-definitions-5">
+  <definitions>
+    <definition id="oval:com.ubuntu.noble:def:100" class="inventory" version="1">
+      <metadata><title>Check that Ubuntu 24.04 LTS (noble) is installed.</title><description /></metadata>
+    </definition>
+    <definition id="oval:com.ubuntu.noble:def:202530000000000" class="vulnerability" version="1">
+      <metadata>
+        <title>CVE-2025-3000 on Ubuntu 24.04 LTS (noble) - high</title>
+        <reference source="CVE" ref_id="CVE-2025-3000" ref_url="https://www.cve.org/CVERecord?id=CVE-2025-3000" />
+        <description>A heap overflow in libfoo allows remote attackers to execute code.</description>
+        <advisory from="security@ubuntu.com">
+          <severity>High</severity>
+          <public_date>2025-03-01T00:00:00Z</public_date>
+          <cve href="https://ubuntu.com/security/CVE-2025-3000" priority="high" public="20250301" cvss_score="9.8" cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" cvss_severity="critical">CVE-2025-3000</cve>
+        </advisory>
+      </metadata>
+      <criteria><criterion test_ref="oval:com.ubuntu.noble:tst:1" comment="libfoo source package in noble, is affected and has been fixed (note: '1.0-1ubuntu1')." /></criteria>
+    </definition>
+    <definition id="oval:com.ubuntu.noble:def:202530010000000" class="vulnerability" version="1">
+      <metadata>
+        <title>CVE-2025-3001 on Ubuntu 24.04 LTS (noble) - low</title>
+        <description></description>
+        <advisory><cve priority="low">CVE-2025-3001</cve></advisory>
+      </metadata>
+    </definition>
+  </definitions>
+  <tests><linux-def:dpkginfo_test xmlns:linux-def="http://oval.mitre.org/XMLSchema/oval-definitions-5#linux" id="oval:com.ubuntu.noble:tst:1" /></tests>
+</oval_definitions>

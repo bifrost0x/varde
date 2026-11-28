@@ -46,6 +46,7 @@ import (
 	"github.com/bifrost0x/varde/internal/store"
 	"github.com/bifrost0x/varde/internal/uplink"
 	"github.com/bifrost0x/varde/internal/upstream"
+	"github.com/bifrost0x/varde/internal/vulndb"
 	"github.com/bifrost0x/varde/internal/web"
 )
 
@@ -510,10 +511,17 @@ func newRefresher(ctx context.Context, cfg config.Config, st *store.Store, analy
 			}
 			return identify.DistroPackages(analysis.Catalog().Current(), ws), nil
 		}}, Enabled: func() bool { return set.Get().DirectOSV }},
-		// Every system package of every host, the same way (ADR 0032).
+		// Every package of every host and image against complete datasets
+		// downloaded whole (ADR 0047): no request names a package.
+		sources.Toggle{Source: &sources.VulnDB{Deps: deps, Dir: filepath.Join(cfg.DataDir, "vulndb"), Stored: st.SystemAdvisoryApps, Log: logger,
+			Packages: func(ctx context.Context) ([]distro.Package, error) { return checkedPackages(ctx, st) },
+		}, Enabled: func() bool { return set.Get().VulnDB }},
+		// Every system package of every host, the same way (ADR 0032),
+		// through osv.dev's queries: for the ecosystems the datasets above
+		// do not cover, or all of them when those are switched off.
 		sources.Toggle{Source: &sources.SystemPackages{Deps: deps, Stored: st.SystemAdvisoryApps, Packages: func(ctx context.Context) ([]distro.Package, error) {
 			return checkedPackages(ctx, st)
-		}}, Enabled: func() bool { return set.Get().DirectOSV }},
+		}, Skip: func(ecosystem string) bool { return set.Get().VulnDB && vulndb.Covered(ecosystem) }}, Enabled: func() bool { return set.Get().DirectOSV }},
 		sources.Toggle{Source: &sources.EOL{Deps: deps, EOLStore: st}, Enabled: func() bool { return set.Get().EOLData }},
 		sources.Toggle{Source: &sources.NVD{Deps: deps, APIKey: string(cfg.NVDAPIKey)}, Enabled: func() bool { return set.Get().DirectNVD }},
 	}

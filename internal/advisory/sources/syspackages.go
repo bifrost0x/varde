@@ -50,6 +50,9 @@ type SystemPackages struct {
 	// Stored returns the app IDs with stored system package records, so
 	// that packages no longer present lose theirs.
 	Stored func(ctx context.Context) ([]string, error)
+	// Skip, if set, names ecosystems another source covers: their
+	// packages are neither asked about nor have their records removed.
+	Skip func(ecosystem string) bool
 }
 
 // Name implements Source.
@@ -80,6 +83,15 @@ func (s *SystemPackages) Refresh(ctx context.Context, _ []*catalog.App) (Result,
 	base := s.BaseURL
 	if base == "" {
 		base = osvAPI
+	}
+	if s.Skip != nil {
+		kept := pkgs[:0:0]
+		for _, p := range pkgs {
+			if !s.Skip(p.Ecosystem) {
+				kept = append(kept, p)
+			}
+		}
+		pkgs = kept
 	}
 	keys := systemKeys(pkgs)
 	// IDs per app: the records of every version present of a package.
@@ -215,6 +227,9 @@ func (s *SystemPackages) Refresh(ctx context.Context, _ []*catalog.App) (Result,
 			return res, err
 		}
 		for _, app := range stored {
+			if eco, _, ok := distro.ParseSystemAppID(app); ok && s.Skip != nil && s.Skip(eco) {
+				continue
+			}
 			if _, ok := want[app]; !ok {
 				if err := s.Store.ReplaceAdvisories(ctx, app, match.SourceDistro, nil, now); err != nil {
 					return res, err

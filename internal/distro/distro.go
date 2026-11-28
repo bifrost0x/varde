@@ -252,10 +252,13 @@ func Foreign(ecosystem, version string) bool {
 
 var elRelease = regexp.MustCompile(`[._+]el\d+`)
 
-// RecordPrefixes are the OSV ID prefixes of per-CVE distribution records.
-// Notices (DSA, DLA, USN) list several CVEs and would merge their findings;
-// the per-CVE records carry the same fixed versions.
-var RecordPrefixes = []string{"DEBIAN-CVE-", "UBUNTU-CVE-", "ALPINE-CVE-"}
+// RecordPrefixes are the ID prefixes of per-CVE distribution records: those
+// of osv.dev and those Varde makes from complete datasets (ADR 0047), which
+// also name issues without a CVE yet (Debian's TEMP- issues, GitHub
+// advisories in Alpine's, Wolfi's and Chainguard's secdb). Notices (DSA,
+// DLA, USN) list several CVEs and would merge their findings; the per-CVE
+// records carry the same fixed versions.
+var RecordPrefixes = []string{"DEBIAN-CVE-", "DEBIAN-TEMP-", "UBUNTU-CVE-", "ALPINE-", "WOLFI-", "CHAINGUARD-"}
 
 // KeepRecords picks the records of one package to use from the IDs osv.dev
 // returned for it. Distributions with per-CVE records are read through
